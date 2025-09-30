@@ -18,8 +18,16 @@ void clear_mutex(t_server *server)
 		pthread_mutex_destroy(&server->stop_thread_lock);
 }
 
+void wake_up_worker(t_server *server) {
+	pthread_mutex_lock(&server->packet_queue.lock);
+	server->packet_queue.shutdown = 1;
+	pthread_mutex_unlock(&server->packet_queue.lock);
+	pthread_cond_broadcast(&server->packet_queue.cond);
+}
+
 void	clear_memory(t_server *server)
 {
-	clear_mutex(server);
+	wake_up_worker(server);
 	wait_and_clear_threads(server);
+	clear_mutex(server);
 }

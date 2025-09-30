@@ -2,7 +2,8 @@
 # define STRUCT_H
 
 # include <pthread.h>
-#include <netinet/in.h>
+# include <netinet/in.h>
+# include <sys/time.h>
 
 # define MAX_PLAYERS 1024
 # define BUFFER_SIZE 4096
@@ -42,6 +43,7 @@ typedef struct s_packet_queue
 	pthread_mutex_t	lock;
 	pthread_cond_t	cond;
 	char			init;
+	char			shutdown;
 }	t_packet_queue;
 
 typedef struct s_thread
