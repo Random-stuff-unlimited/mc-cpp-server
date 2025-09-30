@@ -17,7 +17,7 @@ int read_varint(int sock)
 		position += 7;
 		if (position >= 32) return -1;
 	}
-	return value;
+	return (value);
 }
 
 void write_varint(int sock, int value)
@@ -34,7 +34,8 @@ void write_varint(int sock, int value)
 	}
 }
 
-static int read_varint_from_buffer(char** buffer) {
+static int read_varint_from_buffer(char** buffer)
+{
 	int value = 0;
 	int position = 0;
 	unsigned char current_byte;
@@ -47,10 +48,11 @@ static int read_varint_from_buffer(char** buffer) {
 		position += 7;
 	}
 	*buffer = ptr;
-	return value;
+	return (value);
 }
 
-static void read_string_from_buffer(char** buffer, char* dest, int max_len) {
+static void read_string_from_buffer(char** buffer, char* dest, int max_len)
+{
 	int len = read_varint_from_buffer(buffer);
 	if (len > max_len - 1) len = max_len - 1;
 	memcpy(dest, *buffer, len);
@@ -64,7 +66,7 @@ static int varint_len(int value) {
 		len++;
 		value >>= 7;
 	} while (value != 0);
-	return len;
+	return (len);
 }
 
 int handle_handshake(int client_sock)

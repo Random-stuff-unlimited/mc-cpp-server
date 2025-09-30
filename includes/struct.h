@@ -51,6 +51,7 @@ typedef struct s_server
 	pthread_t			threads_worker[THREAD_POOL_SIZE];
 	pthread_t			thread_network_manager;
 	pthread_t			thread_tick;
+	_Atomic char		stop_server;
 }	t_server;
 
 #endif

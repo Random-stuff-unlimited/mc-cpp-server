@@ -42,5 +42,5 @@ t_packet dequeue(t_packet_queue* q)
 
     p = node->packet;
     free(node);
-    return p;
+    return (p);
 }

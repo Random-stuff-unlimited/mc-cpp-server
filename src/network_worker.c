@@ -7,7 +7,8 @@
 void    *network_worker(void *arg)
 {
     t_server	*server = (t_server *)arg;
-    while (1) {
+    while (server->stop_server == 0)
+    {
         t_packet p = dequeue(&server->packet_queue);
         if (!p.player || !p.player->connected) continue;
 
