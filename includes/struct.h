@@ -2,7 +2,8 @@
 # define STRUCT_H
 
 # include <pthread.h>
-#include <netinet/in.h>
+# include <netinet/in.h>
+# include <sys/time.h>
 
 # define MAX_PLAYERS 1024
 # define BUFFER_SIZE 4096

@@ -11,7 +11,8 @@ void	*network_thread(void* arg)
     t_server	*server = (t_server *)arg;
     fd_set read_fds;
     int max_fd;
-    struct timeval timeout;
+    struct timeval net_timeout;
+
     while (server->stop_server == 0)
 	{
         FD_ZERO(&read_fds);
@@ -30,9 +31,9 @@ void	*network_thread(void* arg)
         }
         pthread_mutex_unlock(&server->player_lock);
 
-        timeout.tv_sec = 0;
-        timeout.tv_usec = 1000; 
-        int select_result = select(max_fd+1, &read_fds, NULL, NULL, &timeout);
+        net_timeout.tv_sec = 0;
+        net_timeout.tv_usec = 1000; 
+        int select_result = select(max_fd+1, &read_fds, NULL, NULL, &net_timeout);
         if (select_result > 0) {
 			
             if (FD_ISSET(server->server_socket_fd, &read_fds)) {
