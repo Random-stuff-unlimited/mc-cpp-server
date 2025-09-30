@@ -1,6 +1,7 @@
 #include "server.h"
 #include "struct.h"
 #include <unistd.h>
+#include <stdio.h>
 
 void wait_and_clear_threads(t_server *server)
 {
