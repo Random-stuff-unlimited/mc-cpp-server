@@ -3,14 +3,14 @@
 
 # include <iostream>
 
-// class 
-// {
-// 	private:
-// 		std::
+class 
+{
+	private:
+		std::
 
-// 	public:
+	public:
 
 
-// };
+};
 
 #endif
