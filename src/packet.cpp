@@ -63,5 +63,54 @@ int Packet::varintLen(int value) {
 }
 
 int Packet::handleHandshake(int client_sock) {
+	std::cout << "Handshake process..." << std::endl;
+	char packetBuffer[2048];
+
+	int handshakeLen = readVarint(client_sock);
+
+	if (handshakeLen <= 0 || handshakeLen > (int)sizeof(packetBuffer)) {
+		std::cerr << "Error: Invalid handshake length or client disconnected (" << handshakeLen << " bytes)." << std::endl;
+		return -1;
+	}
+
+	int bytesRead = 0;
+	while (bytesRead < handshakeLen)
+	{
+		int result = read(client_sock, packetBuffer + bytesRead, handshakeLen - bytesRead);
+		if (result <= 0)
+		{
+			perror("read handshake data");
+			std::cerr << "Error: Unable to read handshake data." << std::endl;
+			return -1;
+		}
+		bytesRead += result;
+	}
+	std::cout << "Handshake received (length: " << handshakeLen << ")" << std::endl;
+
+	char *bufferPtr = packetBuffer;
+
+	int packetId = Packet::readVarintFromBuffer(&bufferPtr);
+	if (packetId != 0x00)
+	{
+		std::cerr << "Error: Unexpected handshake packet ID: 0x" << packetId << std::endl;
+		return -1;
+	}
+
+	int protocolVersion = readVarintFromBuffer(&bufferPtr);
+
+	char serverAddr[256];
+	Packet::readStringFromBuffer(&bufferPtr, serverAddr, sizeof(serverAddr));
+
+	bufferPtr += 2;
+
+	int nextState = readVarintFromBuffer(&bufferPtr);
+
+	std::cout << "Handshake analyzed: Protocol Version=" << protocolVersion << ", Address='" << serverAddr 
+				<< "', Requested State" << nextState << std::endl;
+
+	if (nextState == 1 || nextState == 2) 
+		return nextState;
 	
+	std::cerr << "Error: Unknown next state requested: " << nextState << std::endl;
+	return -1;
 }
