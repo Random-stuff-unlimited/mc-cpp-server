@@ -1,10 +1,10 @@
 #include "protocol.h"
+#include "struct.h"
+#include "libft.h"
+#include "queue.h"
+#include "libft.h"
 #include <stdio.h>
 #include <unistd.h>
-#include <string.h>
-#include <stdlib.h>
-#include "struct.h"
-#include "queue.h"
 
 int read_varint(int sock)
 {
@@ -55,7 +55,7 @@ static void read_string_from_buffer(char** buffer, char* dest, int max_len)
 {
 	int len = read_varint_from_buffer(buffer);
 	if (len > max_len - 1) len = max_len - 1;
-	memcpy(dest, *buffer, len);
+	ft_memcpy(dest, *buffer, len);
 	dest[len] = '\0';
 	*buffer += len;
 }
@@ -142,7 +142,7 @@ void handle_status_request(int client_sock)
         "\"description\":{\"text\":\"§aServeur Minecraft en C!\"}"
         "}";
     
-    int json_len = strlen(json_response);
+    int json_len = ft_strlen(json_response);
     int total_len = 1 + varint_len(json_len) + json_len;
     
     write_varint(client_sock, total_len);
@@ -191,7 +191,7 @@ void send_disconnect_message(int client_sock, const char *reason_text)
     char json_payload[1024];
     snprintf(json_payload, sizeof(json_payload), "{\"text\":\"%s\",\"color\":\"red\"}", reason_text);
     
-    int json_len = strlen(json_payload);
+    int json_len = ft_strlen(json_payload);
 	int reason_part_len = varint_len(json_len) + json_len;
     int total_packet_len = varint_len(0x00) + reason_part_len;
 
@@ -213,7 +213,7 @@ void add_player(t_server *server, int client_sock, const char* player_name)
             t_player *p = &server->players_lst[i];
             p->socket_fd = client_sock;
             p->connected = 1;
-            strncpy(p->username, player_name, sizeof(p->username) - 1);
+            ft_strncpy(p->username, player_name, sizeof(p->username) - 1);
             p->username[sizeof(p->username) - 1] = '\0'; 
             p->x = p->y = p->z = 0;
             p->health = 20;

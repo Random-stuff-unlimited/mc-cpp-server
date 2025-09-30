@@ -41,12 +41,25 @@ endif
 # Includes
 INCLUDES = -I includes/
 
+LIBFT_DIR = Libft
+LIBFT     = $(LIBFT_DIR)/libft.a
+INCLUDES += -I$(LIBFT_DIR)/include
+
 # Source files mandatory
 
 MAIN_DIR         = src/
-MAIN_FILE        = main.c protocol.c server.c queue.c command_manager.c network_worker.c
+MAIN_FILE        = server.c queue.c protocol.c main.c command_manager.c network_worker.c tick_manager.c network_manager.c
 
-M_FILE  =   $(addprefix $(MAIN_DIR), $(MAIN_FILE))
+INIT_DIR         = src/init/
+INIT_FILE        = init_mutex.c init_network.c init_server.c init_thread.c
+
+STOP_DIR         = src/stop_server/
+STOP_FILE        = clear_memory.c clear_thread.c stop_server.c
+
+
+M_FILE  =   $(addprefix $(MAIN_DIR), $(MAIN_FILE)) \
+			$(addprefix $(INIT_DIR), $(INIT_FILE)) \
+			$(addprefix $(STOP_DIR), $(STOP_FILE))
 
 # Object files directory
 OBJ_DIR   = .obj/
@@ -67,31 +80,25 @@ $(OBJ_DIR)%.o : %.c
 	@$(CC) $(CFLAGS) -o $@ -c $< $(INCLUDES)
 	@printf "\n$(GREEN)[Compiling] $(NC)$(shell echo $< | sed 's|^srcs/||')";
 
-all : $(NAME) nothing_to_be_done
-
-nothing_to_be_done:
-	@if [ $(COMPILED_FILES) -eq 0 ]; then \
-		echo "\n$(YELLOW)╔══════════════════════════════════════════════╗$(NC)";                          \
-		echo "$(YELLOW)║        Nothing to be done for $(YELLOW2)$(NAME)$(YELLOW).        ║$(NC)";           \
-		echo "$(YELLOW)╚══════════════════════════════════════════════╝$(NC)\n";                          \
-	fi
-
 $(NAME) : $(LIBFT) $(OBJ)
 	@if [ $(COMPILED_FILES) -eq 0 ]; then \
-		echo "\n$(YELLOW)╔══════════════════════════════════════════════╗$(NC)";                          \
-		echo "$(YELLOW)║        Starting $(YELLOW2)$(NAME)$(YELLOW) compilation...        ║$(NC)";           \
-		echo "$(YELLOW)╚══════════════════════════════════════════════╝$(NC)";                        \
+		echo "\n$(YELLOW)╔══════════════════════════════════════════════╗$(NC)"; \
+		echo "$(YELLOW)║        Starting $(YELLOW2)$(NAME)$(YELLOW) compilation...        ║$(NC)"; \
+		echo "$(YELLOW)╚══════════════════════════════════════════════╝$(NC)"; \
 	fi
 	@$(eval COMPILED_FILES := 1)
 	@echo "\n\n$(GREEN)[Compiling program] $(NC)$(NAME)"
 	@$(CC) $(CFLAGS) -o $(NAME) $(OBJ) $(LIBFT) $(MINILIBX) $(LDFLAGS) $(GPU_FLAGS)
-	@make --no-print-directory
+$(LIBFT):
+	@echo "\n$(YELLOW)[Compiling libft]$(NC)"
+	@make -C $(LIBFT_DIR)
 
 clean :
 	@echo "$(RED)[Removing] $(NC)object files"
 	@rm -rf $(OBJ_DIR)
 
 fclean : clean
+	@make --no-print-directory -C $(LIBFT_DIR) fclean
 	@if [ -f $(NAME) ]; then \
 		echo "$(RED)[Removing] $(NC)program $(NAME)"; \
 		rm -f $(NAME); \
@@ -100,6 +107,7 @@ fclean : clean
 fcleanp :
 	@echo "$(RED)[Removing] $(NC)object files"
 	@rm -rf $(OBJ_DIR)
+	@make --no-print-directory -C $(LIBFT_DIR) fclean
 	@if [ -f $(NAME) ]; then \
 		echo "$(RED)[Removing] $(NC)program $(NAME)"; \
 		rm -f $(NAME); \

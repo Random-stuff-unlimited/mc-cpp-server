@@ -1,4 +1,7 @@
 #include "server.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
 
 int init_network(t_server *server, int port)
 {
@@ -6,7 +9,6 @@ int init_network(t_server *server, int port)
 	if (server->server_socket_fd < 0)
 	{
 		perror("socket");
-		free(server->players_lst);
 		return (1);
 	}
 	server->server_addr.sin_family = AF_INET;
@@ -15,14 +17,12 @@ int init_network(t_server *server, int port)
 	if (bind(server->server_socket_fd, (struct sockaddr*)&server->server_addr, sizeof(server->server_addr)) < 0)
 	{
 		perror("bind");
-		free(server->players_lst);
 		close(server->server_socket_fd);
 		return (1);
 	}
 	if (listen(server->server_socket_fd, 10) < 0)
 	{
 		perror("listen");
-		free(server->players_lst);
 		close(server->server_socket_fd);
 		return (1);
 	}
