@@ -61,3 +61,7 @@ int Packet::varintLen(int value) {
 	} while (value != 0);
 	return len;
 }
+
+int Packet::handleHandshake(int client_sock) {
+	
+}
