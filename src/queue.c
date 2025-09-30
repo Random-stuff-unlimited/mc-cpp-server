@@ -9,6 +9,7 @@ int	init_queue(t_packet_queue* q)
 	int ret;
 
 	q->init = 1;
+	q->shutdown =0;
 	q->head = q->tail = NULL;
 	ret = pthread_mutex_init(&q->lock, NULL);
 	if (ret != 0)
@@ -49,8 +50,15 @@ t_packet dequeue(t_packet_queue* q)
 	t_packet p;
 
 	pthread_mutex_lock(&q->lock);
-	while (!q->head)
+	while (!q->head && !q->shutdown)
 		pthread_cond_wait(&q->cond, &q->lock);
+
+	if (q->shutdown) {
+		pthread_mutex_unlock(&q->lock);
+		p.player = NULL;
+		p.len = 0;
+		return (p);
+	}
 
 	node = q->head;
 	q->head = node->next;

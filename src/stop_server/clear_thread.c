@@ -6,7 +6,6 @@ void wait_and_clear_threads(t_server *server)
 {
 	char	finish;
 
-	server->stop_server = 1;
 	for (int i = 0; i < THREAD_POOL_SIZE; i++)
 	{
 		if (server->threads_worker_init[i])

@@ -42,6 +42,7 @@ typedef struct s_packet_queue
 	pthread_mutex_t	lock;
 	pthread_cond_t	cond;
 	char			init;
+	char			shutdown;
 }	t_packet_queue;
 
 typedef struct s_thread
