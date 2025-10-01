@@ -1,4 +1,5 @@
 #include "buffer.hpp"
+#include "UUID.hpp"
 
 Buffer::Buffer() : pos(0) {}
 Buffer::Buffer(const std::vector<uint8_t> &data) : data(data), pos(0) {}
@@ -15,7 +16,7 @@ int Buffer::readVarInt() {
 		if (position >= 32) throw std::runtime_error("VarInt too big");
 	} while (currentByte & 0x80);
 
-	return value;
+	return (value);
 }
 
 void Buffer::writeVarInt(int value) {
@@ -30,12 +31,17 @@ void Buffer::writeVarInt(int value) {
 	}
 }
 
-std::string Buffer::readString() {
+std::string Buffer::readString(int maxLength) {
 	int len = readVarInt();
-	if (pos + len > data.size()) throw std::runtime_error("Buffer underflow on string");
+	if (maxLength > 0 && len > maxLength) {
+		throw std::runtime_error("String length exceeds maximum allowed");
+	}
+	if (pos + len > data.size()) {
+		throw std::runtime_error("Buffer underflow on string");
+	}
 	std::string result(reinterpret_cast<char*>(&data[pos]), len);
 	pos += len;
-	return result;
+	return (result);
 }
 
 void Buffer::writeString(const std::string &str) {
@@ -52,17 +58,32 @@ size_t Buffer::remaining() const {
 }
 
 uint16_t Buffer::readUShort() {
-    if (pos + 2 > data.size()) throw std::runtime_error("Buffer underflow");
-    uint16_t val = (data[pos] << 8) | data[pos+1]; // big-endian
-    pos += 2;
-    return val;
+	uint16_t val = (readByte() << 8) | readByte();
+	return (val);
 }
 
 uint64_t Buffer::readUInt64() {
-    if (pos + 8 > data.size()) throw std::runtime_error("Buffer overflow");
-    uint64_t value = 0;
-    for (int i = 0; i < 8; ++i) {
-        value = (value << 8) | data[pos++];
-    }
-    return value;
+	uint64_t value = 0;
+	for (int i = 0; i < 8; ++i) {
+		value = (value << 8) | readByte();
+	}
+	return (value);
+}
+
+UUID Buffer::readUUID() {
+	uint64_t most = 0, least = 0;
+	for (int i = 0; i < 8; ++i) most = (most << 8) | readByte();
+	for (int i = 0; i < 8; ++i) least = (least << 8) | readByte();
+	return UUID{most, least};
+}
+
+uint8_t Buffer::readByte() {
+	if (pos >= data.size()) {
+		throw std::runtime_error("Buffer underflow on readByte");
+	}
+	return data[pos++];
+}
+
+void Buffer::writeByte(uint8_t b) {
+	data.push_back(b);
 }
