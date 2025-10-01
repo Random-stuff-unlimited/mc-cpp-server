@@ -22,6 +22,7 @@ class Player
 
 		std::string	getPlayerName(void);
 		void		setPlayerName(const std::string &name);
+		int			getSocketFd(void) const;
 };
 
 #endif

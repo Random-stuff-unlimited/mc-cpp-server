@@ -8,13 +8,18 @@
 # include <thread>
 # include <mutex>
 # include <atomic>
+# include <condition_variable>
+# include <chrono>
+# include <unordered_map>
+# include <memory>
 
 class NetworkManager {
 	private:
+		std::unordered_map<uint32_t, std::shared_ptr<Player>> _connections;
 		std::mutex _connectionsMutex;
 		
-		ThreadSafeQueue<Packet> _incomingPackets;
-		ThreadSafeQueue<Packet> _outgoingPackets;
+		ThreadSafeQueue<Packet*> _incomingPackets;
+		ThreadSafeQueue<Packet*> _outgoingPackets;
 
 		std::thread _receiverThread;
 		std::thread _senderThread;
@@ -33,7 +38,7 @@ class NetworkManager {
 		void addPlayerConnection(std::shared_ptr<Player> connection);
 		void removePlayerConnection(UUID id);
 
-		void enqueueOutgoingPacket(Packet p);
+		void enqueueOutgoingPacket(Packet* p);
 	private:
 		void receiverThreadLoop();
 		void senderThreadLoop();
@@ -41,6 +46,7 @@ class NetworkManager {
 
 		void setupEpoll();
 		void handleIncomingData(std::shared_ptr<Player> connection);
+		void handleIncomingData(int socket);
 };
 
 template<typename T>
@@ -48,7 +54,7 @@ class ThreadSafeQueue {
 	private:
 		std::queue<T> _queue;
 		mutable std::mutex _mutex;
-		std::conditional_variable _condition;
+		std::condition_variable _condition;
 
 	public:
 		void push(T item) {
@@ -69,7 +75,7 @@ class ThreadSafeQueue {
 		bool waitAndPopTimeout(T& item, const std::chrono::milliseconds& timeout) {
 			std::unique_lock<std::mutex> lock(_mutex);
 
-			if (_condition.waitFor(lock, timeout, [this] { return !_queue.empty(); })) {
+			if (_condition.wait_for(lock, timeout, [this] { return !_queue.empty(); })) {
 				item = std::move(_queue.front());
 				_queue.pop();
 				return true;
@@ -78,7 +84,7 @@ class ThreadSafeQueue {
 		}
 
 		void waitAndPop(T& item) {
-			std::unique_lock(std::mutex) lock(_mutex);
+			std::unique_lock<std::mutex> lock(_mutex);
 			_condition.wait(lock, [this] { return !_queue.empty(); });
 
 			item = std::move(_queue.front());

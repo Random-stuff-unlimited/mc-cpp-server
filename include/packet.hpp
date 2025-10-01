@@ -2,6 +2,7 @@
 # define PACKET_HPP
 
 # include "server.hpp"
+# include "buffer.hpp"
 
 class Packet {
 	private:
