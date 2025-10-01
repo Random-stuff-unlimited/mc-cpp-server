@@ -38,12 +38,21 @@ void Buffer::writeVarInt(int value) {
     }
 }
 
-std::string Buffer::readString() {
-	int len = readVarInt();
-	if (_pos + len > _data.size()) throw std::runtime_error("Buffer underflow on string");
-	std::string result(reinterpret_cast<char*>(&_data[_pos]), len);
-	_pos += len;
-	return result;
+std::string Buffer::readString(int maxLength) {
+    int len = readVarInt();
+
+    // Vérifie si la longueur dépasse la limite
+    if (maxLength > 0 && len > maxLength) {
+        throw std::runtime_error("String length exceeds maximum allowed");
+    }
+
+    if (_pos + len > _data.size()) {
+        throw std::runtime_error("Buffer underflow on string");
+    }
+
+    std::string result(reinterpret_cast<char*>(&_data[_pos]), len);
+    _pos += len;
+    return result;
 }
 
 void Buffer::writeString(const std::string &str) {
@@ -51,8 +60,8 @@ void Buffer::writeString(const std::string &str) {
 	_data.insert(_data.end(), str.begin(), str.end());
 }
 
-const std::vector<uint8_t>& Buffer::getData() const {
-	return _data;
+std::vector<uint8_t>& Buffer::getData() {
+    return _data;
 }
 
 size_t Buffer::remaining() const {

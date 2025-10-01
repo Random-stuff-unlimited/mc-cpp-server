@@ -53,6 +53,21 @@ void Server::addPlayer(Player *player) {
 	_playerLst.push_back(*player);
 }
 
+void Server::removePlayer(Player *player) {
+    auto it = std::remove_if(_playerLst.begin(), _playerLst.end(),
+        [player](const Player &p) {
+            return &p == player;
+        });
+
+    if (it != _playerLst.end()) {
+        _playerLst.erase(it, _playerLst.end());
+    }
+}
+
+Player& Server::getLastPlayer() {
+    return _playerLst.back();
+}
+
 void	Server::addPlayerToSample(const std::string &name)
 {
 	_playerSample.push_back(name);

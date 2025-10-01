@@ -7,7 +7,7 @@
 
 using json = nlohmann::json;
 
-Packet::Packet(Player *player) : _player(player), _socketFd(-1) {
+Packet::Packet(Player *player) : _player(player), _socketFd(-1), _returnPacket(0) {
 	_size = readVarint(_socketFd);
 	_id = readVarint(_socketFd);
 	if (player != NULL)
@@ -22,7 +22,7 @@ Packet::Packet(Player *player) : _player(player), _socketFd(-1) {
 	}
 }
 
-Packet::Packet(int socketFd, Server &server) : _player(NULL), _socketFd(socketFd) {
+Packet::Packet(int socketFd, Server &server) : _player(NULL), _socketFd(socketFd), _returnPacket(0) {
 	_size = readVarint(_socketFd);
 	_id = readVarint(_socketFd);
 	try {
@@ -32,10 +32,13 @@ Packet::Packet(int socketFd, Server &server) : _player(NULL), _socketFd(socketFd
 		try
 		{
 			server.addPlayer(_player);
+			delete _player;
+			_player = &server.getLastPlayer();  
 		}
 		catch(const std::exception& e)
 		{
 			delete _player;
+			_player = nullptr;
 			std::cerr << e.what() << '\n';
 		}
 	} catch(const std::exception& e) {
