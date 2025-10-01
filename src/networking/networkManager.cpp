@@ -1,4 +1,7 @@
 #include "networking.hpp"
+#include <sys/epoll.h>
+#include <unistd.h>
+#include <stdexcept>
 
 NetworkManager::NetworkManager(size_t workerCount)
 	: _shutdownFlag(false), _receiverThreadInit(0), _senderThreadInit(0)
@@ -6,6 +9,13 @@ NetworkManager::NetworkManager(size_t workerCount)
 	_workerThreads.reserve(workerCount);
 
 	setupEpoll();
+}
+
+void NetworkManager::setupEpoll() {
+	_epollFd = epoll_create(EPOLL_CLOEXEC);
+	if (_epollFd == -1) {
+		throw std::runtime_error("Failed to create epoll file descriptor");
+	}
 }
 
 void NetworkManager::startThreads() {
