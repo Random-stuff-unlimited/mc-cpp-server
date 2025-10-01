@@ -12,6 +12,7 @@ Server::~Server() {}
 
 int Server::start_server(int port) {
     try {
+		Server::loadConfig();
         Network net(port, *this); // création directe
         std::this_thread::sleep_for(std::chrono::seconds(20));
         std::cout << "stop server try\n";
