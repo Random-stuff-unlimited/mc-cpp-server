@@ -3,6 +3,7 @@
 
 # include "packet.hpp"
 # include "player.hpp"
+# include "server.hpp"
 # include "UUID.hpp"
 # include <queue>
 # include <thread>
@@ -16,21 +17,23 @@
 class NetworkManager {
 	private:
 		std::unordered_map<uint32_t, std::shared_ptr<Player>> _connections;
-		std::mutex _connectionsMutex;
+		std::mutex 	_connectionsMutex;
 		
-		ThreadSafeQueue<Packet*> _incomingPackets;
-		ThreadSafeQueue<Packet*> _outgoingPackets;
+		ThreadSafeQueue<Packet*>	_incomingPackets;
+		ThreadSafeQueue<Packet*>	_outgoingPackets;
 
-		std::thread _receiverThread;
-		char		_receiverThreadInit; 
-		std::thread _senderThread;
-		char		_senderThreadInit;
-		std::vector<std::thread> _workerThreads;
-		std::atomic<bool> _shutdownFlag;
+		std::vector<std::thread>	_workerThreads;
+		std::atomic<bool>			_shutdownFlag;
+		std::thread 				_receiverThread;
+		std::thread 				_senderThread;
+		char						_receiverThreadInit; 
+		char						_senderThreadInit;
+		Server& 					_server;
+		int 						_epollFd;
+		int							_serverSocket;
 
-		int _epollFd;
 	public:
-		NetworkManager(size_t worker_count); // Could use std::thread::hardware_concurrency() for the worker size;
+		NetworkManager(size_t worker_count, Server& s); // Could use std::thread::hardware_concurrency() for the worker size;
 		~NetworkManager() {
 			if (_epollFd != -1) {
             	close(_epollFd);
@@ -45,6 +48,8 @@ class NetworkManager {
 
 		void addPlayerConnection(std::shared_ptr<Player> connection);
 		void removePlayerConnection(UUID id);
+
+		Server& getServer() {return _server; }
 
 		void enqueueOutgoingPacket(Packet* p);
 	private:

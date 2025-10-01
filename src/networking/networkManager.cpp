@@ -1,14 +1,29 @@
-#include "networking.hpp"
-#include <sys/epoll.h>
-#include <unistd.h>
-#include <stdexcept>
+# include "networking.hpp"
+# include <sys/epoll.h>
+# include <sys/socket.h>
+# include <netinet/in.h>
+# include <arpa/inet.h>
+# include <unistd.h>
+# include <stdexcept>
+# include <fcntl.h>
 
-NetworkManager::NetworkManager(size_t workerCount)
-	: _shutdownFlag(false), _receiverThreadInit(0), _senderThreadInit(0)
+NetworkManager::NetworkManager(size_t workerCount, Server& s)
+	: _shutdownFlag(false),
+	  _receiverThreadInit(0),
+	  _senderThreadInit(0),
+	  _epollFd(-1),
+	  _serverSocket(-1),
+	  _receiverThread(),
+	  _senderThread(),
+	  _workerThreads(),
+	  _incomingPackets(),
+	  _outgoingPackets(),
+	  _server(s)
 {
 	_workerThreads.reserve(workerCount);
 
 	setupEpoll();
+	start();
 }
 
 void NetworkManager::setupEpoll() {
@@ -67,5 +82,65 @@ void NetworkManager::stopThreads() {
     if (_senderThread.joinable()) {
         _senderThread.join();
         _senderThreadInit = 0;
+    }
+}
+
+void NetworkManager::start() {
+	_serverSocket = socket(AF_INET, SOCK_STREAM, 0);
+	if (_serverSocket == -1) {
+		throw std::runtime_error("Failed to create server socket");
+	}
+
+	int flags = fcntl(_serverSocket, F_GETFL, 0);
+	fcntl(_serverSocket, F_SETFL, flags | O_NONBLOCK);
+
+		int opt = 1;
+    if (setsockopt(_serverSocket, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0) {
+        perror("setsockopt");
+        close(_serverSocket);
+        throw std::runtime_error("Failed to set socket options");
+    }
+
+	struct sockaddr_in serverAddr;
+	serverAddr.sin_family = AF_INET;
+	serverAddr.sin_port = htons(getServer().getServerPort());
+
+	if (getServer().getServerAddr() == "0.0.0.0") {
+		serverAddr.sin_addr.s_addr = INADDR_ANY;
+	} else {
+		if (inet_aton(getServer().getServerAddr(), &serverAddr.sin_addr) == 0) {
+			close(_serverSocket);
+			throw std::runtime_error("Invalid IP address");
+		}
+	}
+
+	if (bind(_serverSocket, (struct sockaddr*)&serverAddr, sizeof(serverAddr)) < 0) {
+		close(_serverSocket);
+		throw std::runtime_error("Failed to bind socket to " + std::string(getServer().getServerAddr()) + ":" + std::to_string(getServer().getServerPort()));
+	}
+
+	if (listen(_serverSocket, SOMAXCONN) < 0) {
+		close(_serverSocket);
+		throw std::runtime_error("Failed to listen on socket");
+	}
+	struct epoll_event event;
+    event.events = EPOLLIN | EPOLLET; // Edge-triggered for efficiency
+    event.data.fd = _serverSocket;
+    
+    if (epoll_ctl(_epollFd, EPOLL_CTL_ADD, _serverSocket, &event) == -1) {
+        close(_serverSocket);
+        throw std::runtime_error("Failed to add server socket to epoll");
+    }
+}
+
+NetworkManager::~NetworkManager() {
+    stopThreads();
+    
+    if (_serverSocket != -1) {
+        close(_serverSocket);
+    }
+    
+    if (_epollFd != -1) {
+        close(_epollFd);
     }
 }

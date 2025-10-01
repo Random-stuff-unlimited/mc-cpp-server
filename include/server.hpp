@@ -21,6 +21,8 @@ class Server
 		int					loadConfig();
 		std::string			_gameVersion;
 		std::string 		_serverMOTD;
+		int 				_serverPort;
+		char*				_serverAddr;
 		
 	public:
 		Server();
@@ -33,6 +35,8 @@ class Server
 		int			getAmountOnline();
 		std::string	getGameVersion();
 		std::string getServerMOTD();
+		int			getServerPort() {return _serverPort;}
+		char*		getServerAddr() {return _serverAddr;}
 
 		void	addPlayerToSample(const std::string &name);
 		void    removePlayerToSample(const std::string &name);
