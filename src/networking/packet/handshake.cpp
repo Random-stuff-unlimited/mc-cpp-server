@@ -5,7 +5,12 @@
 void	handleHandshakePacket(Packet &packet, Server &server)
 {
 	if (packet.getId() != 0x00) // not handshake packet
+	{
+		packet.getPlayer()->setPlayerState(PlayerState::None);
+		close(packet.getSocket());
+		server.removePlayer(packet.getPlayer());
 		return ;
+	}
 	int protocolVersion = packet.getData().readVarInt();
 	std::string serverAddr = packet.getData().readString(255);
 	uint16_t port = packet.getData().readUShort();

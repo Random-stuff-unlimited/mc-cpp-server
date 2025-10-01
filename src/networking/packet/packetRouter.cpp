@@ -14,7 +14,7 @@ void packetRouter(Packet &packet, Server &server) {
 			handleHandshakePacket(packet, server);
 			break;
 		case PlayerState::Status:
-			// handleStatusPacket(packet, server);
+			handleStatusPacket(packet, server);
 			break;
 		case PlayerState::Login:
 			// handleLoginPacket(packet, server);

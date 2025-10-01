@@ -109,6 +109,7 @@ class ThreadSafeQueue {
 };
 
 void	packetRouter(Packet &packet, Server &server);
-void    handleHandshakePacket(Packet &packet, Server &server);
+void	handleHandshakePacket(Packet &packet, Server &server);
+void	handleStatusPacket(Packet &packet, Server &server);
 
 #endif
