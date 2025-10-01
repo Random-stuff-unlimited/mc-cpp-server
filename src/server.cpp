@@ -1,7 +1,6 @@
 #include "server.hpp"
 #include "json.hpp"
 #include "enums.hpp"
-#include "network.hpp"
 #include "player.hpp"
 #include <sys/socket.h>
 #include <iostream>
@@ -16,10 +15,7 @@ Server::~Server() {}
 int Server::start_server(int port) {
 	try {
 		Server::loadConfig();
-		Network net(port, *this);
-		std::this_thread::sleep_for(std::chrono::seconds(20));
-		std::cout << "stop server try\n";
-		net.stopThreads();
+		
 	} catch (const std::exception& e) {
 		std::cout << "Error: " << e.what() << std::endl;
 		return (1);
@@ -53,6 +49,9 @@ int Server::loadConfig() {
 	return (0);
 }
 
+void Server::addPlayer(Player *player) {
+	_playerLst.push_back(*player);
+}
 
 void	Server::addPlayerToSample(const std::string &name)
 {

@@ -98,4 +98,6 @@ class ThreadSafeQueue {
 
 };
 
+void	packetRouter(Packet &packet, Server &server);
+
 #endif
