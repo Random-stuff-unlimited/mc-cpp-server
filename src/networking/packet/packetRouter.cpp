@@ -1,6 +1,7 @@
 #include "packet.hpp"
 #include "server.hpp"
 #include "enums.hpp"
+#include "networking.hpp"
 
 void packetRouter(Packet &packet, Server &server) {
 	Player  *player = packet.getPlayer();
@@ -10,7 +11,7 @@ void packetRouter(Packet &packet, Server &server) {
 
 	switch(player->getPlayerState()) {
 		case PlayerState::Handshake:
-			// handleHandshakePacket(packet, server);
+			handleHandshakePacket(packet, server);
 			break;
 		case PlayerState::Status:
 			// handleStatusPacket(packet, server);

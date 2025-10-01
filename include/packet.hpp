@@ -11,6 +11,7 @@ class Packet {
 		Buffer			_data;
 		Player			*_player;
 		int				_socketFd;
+		int				_returnPacket;
 
 	public:
 		Packet(Player *player);

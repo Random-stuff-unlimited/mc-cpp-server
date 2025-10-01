@@ -37,6 +37,8 @@ class Server
 		void	addPlayerToSample(const std::string &name);
 		void    removePlayerToSample(const std::string &name);
 		void 	addPlayer(Player *player);
+		void 	removePlayer(Player *player);
+		Player	&getLastPlayer();
 		json	getPlayerSample();
 };
 

@@ -32,5 +32,6 @@ Player::~Player() {}
 std::string	Player::getPlayerName(void) {return (this->_name);};
 void	Player::setPlayerName(const std::string &name) {this->_name = name;}
 PlayerState	Player::getPlayerState() {return (this->getPlayerState());}
+void	Player::setPlayerState(PlayerState state) {this->_state = state;}
 void	Player::setSocketFd(int socket) {this->_socketFd = socket;}
 int	Player::getSocketFd() const {return (this->_socketFd);}

@@ -19,10 +19,10 @@ class Buffer {
 		int readVarInt();
 		void writeVarInt(int value);
 
-		std::string readString();
+		std::string readString(int maxLength);
 		void writeString(const std::string &str);
 
-		std::vector<uint8_t>& getData() const;
+		std::vector<uint8_t>& getData();
 		size_t remaining() const;
 		uint16_t readUShort();
 		uint64_t readUInt64();
