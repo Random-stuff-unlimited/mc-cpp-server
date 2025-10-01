@@ -3,6 +3,7 @@
 
 # include "packet.hpp"
 # include "player.hpp"
+# include "UUID.hpp"
 # include <queue>
 # include <thread>
 # include <mutex>
@@ -30,7 +31,7 @@ class NetworkManager {
 		void shutdown();
 
 		void addPlayerConnection(std::shared_ptr<Player> connection);
-		//void removePlayerConnection(UUID id);
+		void removePlayerConnection(UUID id);
 
 		void enqueueOutgoingPacket(Packet p);
 	private:
