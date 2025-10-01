@@ -24,7 +24,7 @@ class Player
 		const void		setPlayerName(const std::string &name);
 		const PlayerState	getPlayerState();
 		const void	setSocketFd(int socket);
-		const int	getSocketFd();
+		int	getSocketFd() const ;
 };
 
 #endif

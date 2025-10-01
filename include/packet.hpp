@@ -18,11 +18,12 @@ class Packet {
 		static int readVarint(int sock);
 		static void writeVarint(int sock, int value);
 		static int varintLen(int value);
-		const Player *getPlayer();
+		const Player *getPlayer() const;
 		uint32_t Packet::getSize();
 		uint32_t Packet::getId();
 		Buffer	&Packet::getData();
 		const Player *Packet::getPlayer();
+		int	getSocket() const;
 };
 
 #endif
