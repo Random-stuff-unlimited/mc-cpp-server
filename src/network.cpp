@@ -5,6 +5,7 @@
 #include <thread>
 #include <chrono>
 #include <cstring>
+#include "packet.hpp"
 
 Network::Network(int port, Server &server)
     : server(server)
@@ -97,9 +98,87 @@ void Network::stopThreads()
 
 void Network::networkManagerLoop(Server &server)
 {
-	(void)server;
+	fd_set read_fds;
+    int max_fd;
+	struct timeval net_timeout;
+	Packet	packet;
+
 	_networkManagerRun = true;
 	while (!_stop)
-		std::this_thread::sleep_for(std::chrono::milliseconds(10));
+	{
+		FD_ZERO(&read_fds);
+		max_fd = _socket;
+		FD_SET(_socket, &read_fds);
+
+        // pthread_mutex_lock(&server->player_lock);
+        // for (unsigned int i = 0; i < server->player_max; i++) {
+        //     t_player *p = &server->players_lst[i];
+        //     if (p && p->connected)
+		// 	{
+        //         FD_SET(p->socket_fd, &read_fds);
+        //         if (p->socket_fd > max_fd)
+		// 			max_fd = p->socket_fd;
+        //     }
+        // }
+        // pthread_mutex_unlock(&server->player_lock);
+
+		net_timeout.tv_sec = 0;
+		net_timeout.tv_usec = 1000;
+
+		int select_result = select(max_fd + 1, &read_fds, nullptr, nullptr, &net_timeout);
+		if (select_result > 0) {
+			if (FD_ISSET(_socket, &read_fds)) {
+				sockaddr_in client_addr{};
+				socklen_t addr_len = sizeof(client_addr);
+				int client_fd = accept(_socket, (sockaddr*)&client_addr, &addr_len);
+				if (client_fd >= 0) {
+					int next_state = packet.handleHandshake(client_fd);
+					if (next_state == 1)
+					{
+						packet.handleStatusRequest(client_fd, server);
+						close(client_fd);
+					}
+					else if (next_state == 2)
+					{
+						// if (handle_login_start(client_fd, server) != 0)
+						std::cout << "try to connect" << std::endl;
+						close(client_fd);
+					}
+					else
+						close(client_fd);
+				} else {
+					perror("accept");
+				}
+			}
+
+			// données clients existants
+            // pthread_mutex_lock(&server->player_lock);
+            // for (unsigned int i = 0; i < server->player_max; i++)
+			// {
+            //     t_player *p = &server->players_lst[i];
+            //     if (p && p->connected && FD_ISSET(p->socket_fd, &read_fds)) {
+            //         unsigned char buffer[BUFFER_SIZE];
+            //         int n = read(p->socket_fd, buffer, BUFFER_SIZE);
+            //         if (n > 0) {
+            //             t_packet pkt;
+            //             pkt.player = p;
+            //             pkt.len = n;
+            //             ft_memcpy(pkt.data, buffer, n);
+            //             enqueue(&server->packet_queue, pkt);
+            //         } else {
+            //             close(p->socket_fd);
+            //             p->connected = 0;
+            //         }
+            //     }
+            // }
+            // pthread_mutex_unlock(&server->player_lock);
+		} else if (select_result < 0) {
+			perror("select error");
+			break;
+		}
+	}
 	_networkManagerRun = false;
 }
+
+
+

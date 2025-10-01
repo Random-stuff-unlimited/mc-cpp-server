@@ -7,6 +7,8 @@
 
 using json = nlohmann::json;
 
+Packet::Packet() {}
+Packet::~Packet() {}
 
 int Packet::readVarint(int sock) {
 	int value = 0, position = 0;
