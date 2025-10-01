@@ -1,17 +1,23 @@
 #include "server.hpp"
 #include "include/json.hpp"
+#include "network.hpp"
 #include <sys/socket.h>
 #include <iostream>
 #include <fstream>
 
 using json = nlohmann::json;
 
-Server::Server() : _port(0), _player_lst(nullptr), _socket(-1), _stopThread(false) {}
+Server::Server() : _player_lst(nullptr) {}
 Server::Server(const Server &src) {}
 Server &Server::operator=(const Server &src) {}
 Server::~Server() {}
 
 int Server::start_server(int port) {
+	try {
+		Network 
+    } catch (const std::exception& e) {
+        std::cout << "Erreur: " << e.what() << "\n";
+    }
 }
 
 int Server::loadConfig() {
