@@ -9,8 +9,8 @@
 
 class Buffer {
 	private:
-		std::vector<uint8_t> _data;
-		size_t _pos;
+		std::vector<uint8_t>	_data;
+		size_t					_pos;
 
 	public:
 		Buffer();
@@ -26,6 +26,8 @@ class Buffer {
 		size_t remaining() const;
 		uint16_t readUShort();
 		uint64_t readUInt64();
+		uint8_t readByte();
+		void writeByte(uint8_t byte);
 };
 
 

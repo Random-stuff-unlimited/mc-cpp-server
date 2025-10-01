@@ -14,17 +14,17 @@ Server::Server() : _playerLst(), _gameVersion("1.12.5"), _protocolVersion(770), 
 Server::~Server() {}
 
 int Server::start_server(int port) {
-    try {
+	try {
 		Server::loadConfig();
-        Network net(port, *this);
-        std::this_thread::sleep_for(std::chrono::seconds(20));
-        std::cout << "stop server try\n";
-        net.stopThreads();
-    } catch (const std::exception& e) {
-        std::cout << "Error: " << e.what() << std::endl;
-        return (1);
-    }
-    return (0);
+		Network net(port, *this);
+		std::this_thread::sleep_for(std::chrono::seconds(20));
+		std::cout << "stop server try\n";
+		net.stopThreads();
+	} catch (const std::exception& e) {
+		std::cout << "Error: " << e.what() << std::endl;
+		return (1);
+	}
+	return (0);
 }
 
 int Server::loadConfig() {
@@ -48,9 +48,9 @@ int Server::loadConfig() {
 
 	} catch (json::parse_error& e) {
 		std::cerr << "[Server]: Json parse error: " << e.what() << std::endl;
-		return 1;
+		return (1);
 	}
-	return 0;
+	return (0);
 }
 
 

@@ -2,6 +2,7 @@
 # define PACKET_HPP
 
 # include "server.hpp"
+# include "buffer.hpp"
 
 class Packet {
 	private:
@@ -12,15 +13,16 @@ class Packet {
 		int				_socketFd;
 
 	public:
-   		Packet(const Player *player);
+		Packet(const Player *player);
 		Packet(const int socketFd);
 		static int readVarint(int sock);
 		static void writeVarint(int sock, int value);
 		static int varintLen(int value);
 		const Player *getPlayer();
-		uint32_t *Packet::getSize();
-		uint32_t *Packet::getId();
+		uint32_t Packet::getSize();
+		uint32_t Packet::getId();
 		Buffer	&Packet::getData();
+		const Player *Packet::getPlayer();
 };
 
 #endif

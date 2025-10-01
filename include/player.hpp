@@ -3,25 +3,28 @@
 
 # include <iostream>
 # include "enums.hpp"
+# include "UUID.hpp"
 
 class Player
 {
 	private:
 		std::string	_name;
 		PlayerState _state;
-		int			_socket_fd;
-		int				x, y, z;
-		int				health;
-
+		int			_socketFd;
+		int			x, y, z;
+		int			health;
+		UUID		_uuid;
 	public:
 		Player();
 		Player(const std::string &name, const PlayerState state, const int socket);
-		Player(const Player &src);
 		Player &operator=(const Player &src);
 		~Player();
 
-		std::string	getPlayerName(void);
-		void		setPlayerName(const std::string &name);
+		const std::string	getPlayerName(void);
+		const void		setPlayerName(const std::string &name);
+		const PlayerState	getPlayerState();
+		const void	setSocketFd(int socket);
+		const int	getSocketFd();
 };
 
 #endif

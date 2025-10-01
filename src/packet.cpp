@@ -7,6 +7,34 @@
 
 using json = nlohmann::json;
 
+Packet::Packet(const Player *player) : _player(player), _socketFd(-1) {
+	_size = readVarint(_socketFd);
+	_id = readVarint(_socketFd);
+	if (player != NULL)
+		_socketFd =  _player->getSocketFd();
+	if (_size > 0) {
+		std::vector<uint8_t> tmp(_size);
+		ssize_t bytesRead = ::read(_socketFd, tmp.data(), _size);
+		if (bytesRead != _size) {
+			throw std::runtime_error("error on packet reading");
+		}
+		_data = Buffer(tmp);
+	}
+}
+
+Packet::Packet(const int socketFd) : _player(NULL), _socketFd(socketFd) {
+	_size = readVarint(_socketFd);
+	_id = readVarint(_socketFd);
+	if (_size > 0) {
+		std::vector<uint8_t> tmp(_size);
+		ssize_t bytesRead = ::read(_socketFd, tmp.data(), _size);
+		if (bytesRead != _size) {
+			throw std::runtime_error("error on packet reading");
+		}
+		_data = Buffer(tmp);
+	}
+}
+
 int Packet::readVarint(int sock) {
 	int value = 0, position = 0;
 	uint8_t byte;
@@ -35,3 +63,8 @@ int Packet::varintLen(int value) {
 	} while (value != 0);
 	return (len);
 }
+
+const Player *Packet::getPlayer() {return (_player);}
+uint32_t Packet::getSize() {return (_size);}
+uint32_t Packet::getId() {return (_id);}
+Buffer	&Packet::getData() {return (_data);}
