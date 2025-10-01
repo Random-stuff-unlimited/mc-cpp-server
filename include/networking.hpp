@@ -1,10 +1,11 @@
 #ifndef NETWORKING_HPP
 # define NETWORKING_HPP
 
+# include "packet.hpp"
+# include "player.hpp"
 # include <queue>
 # include <thread>
 # include <mutex>
-# include "packet.hpp"
 # include <atomic>
 
 class NetworkManager {
@@ -21,6 +22,24 @@ class NetworkManager {
 
 		int _epollFd;
 	public:
+		NetworkManager(size_t worker_count); // Could use std::thread::hardware_concurrency() for the worker size;
+		~NetworkManager();
+
+
+		void start();
+		void shutdown();
+
+		void addPlayerConnection(std::shared_ptr<Player> connection);
+		//void removePlayerConnection(UUID id);
+
+		void enqueueOutgoingPacket(Packet p);
+	private:
+		void receiverThreadLoop();
+		void senderThreadLoop();
+		void workerThreadLoop();
+
+		void setupEpoll();
+		void handleIncomingData(std::shared_ptr<Player> connection);
 };
 
 template<typename T>
