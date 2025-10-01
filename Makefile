@@ -1,134 +1,199 @@
-NAME     = engine
+# =============================================================================
+# Beautiful C++ Makefile with Colors and Dependency Tracking
+# =============================================================================
 
-# Style
-GREY     = \033[0;30m
-RED      = \033[0;31m
-GREEN    = \033[0;32m
-YELLOW   = \033[0;33m
-BLUE     = \033[0;34m
-PURPLE   = \033[0;35m
-CYAN     = \033[0;36m
-WHITE    = \033[0;37m
+# ================================ CONFIGURATION =============================
+# Easily modifiable output file names and paths
+TARGET_NAME     := mc-server
+BUILD_DIR       := build
+SOURCE_DIR      := src
+INCLUDE_DIR     := include
+DEPS_DIR        := .deps
 
-BOLD     = \033[1m
-UNDER    = \033[4m
-REV      = \033[7m
-BLINK    = \033[5m
-
-NC       = \033[0;0m
-ERASE    = \033[2K\r
-ERASE2   = $(ERASE)\033[F$(ERASE)
+# Final executable path (easily modifiable)
+TARGET          := $(BUILD_DIR)/$(TARGET_NAME)
 
 # Compiler and flags
-CC       = cc
+CXX             := g++
+CXXFLAGS        := -std=c++17 -Wall -Wextra -Wpedantic -O2
+DEBUG_FLAGS     := -g -DDEBUG -O0
+RELEASE_FLAGS   := -DNDEBUG -O3
+INCLUDE_FLAGS   := -I$(INCLUDE_DIR)
 
-DEPFLAGS = -MMD -MP
-CFLAGS   = $(DEPFLAGS) -Wall -Wextra #-Werror # -mavx # SIMD flag
-LDFLAGS  = -lm 
-DEBUG_FLAGS = -g3
-FAST_FLAGS = -O3 -flto -march=native -mtune=native -funroll-loops -ffast-math -falign-functions=32 -falign-loops=16
-# -O3 -march=native -mtune=native -flto -funsafe-math-optimizations -ffast-math -fomit-frame-pointer -funroll-loops -fno-exceptions -fno-rtti -fno-stack-protector -DNDEBUG -falign-functions=32 -falign-loops=16
+# Linker flags (add your libraries here)
+LDFLAGS         := 
+LIBS            := 
 
-ifeq ($(MAKECMDGOALS), debug)
-	CFLAGS += $(DEBUG_FLAGS)
+# ================================ COLOR SETUP ===============================
+# ANSI color codes for beautiful output
+RESET           := \033[0m
+BOLD            := \033[1m
+DIM             := \033[2m
+
+# Text colors
+BLACK           := \033[30m
+RED             := \033[31m
+GREEN           := \033[32m
+YELLOW          := \033[33m
+BLUE            := \033[34m
+MAGENTA         := \033[35m
+CYAN            := \033[36m
+WHITE           := \033[37m
+
+# Background colors
+BG_BLACK        := \033[40m
+BG_RED          := \033[41m
+BG_GREEN        := \033[42m
+BG_YELLOW       := \033[43m
+BG_BLUE         := \033[44m
+BG_MAGENTA      := \033[45m
+BG_CYAN         := \033[46m
+BG_WHITE        := \033[47m
+
+# Bright colors
+BRIGHT_RED      := \033[91m
+BRIGHT_GREEN    := \033[92m
+BRIGHT_YELLOW   := \033[93m
+BRIGHT_BLUE     := \033[94m
+BRIGHT_MAGENTA  := \033[95m
+BRIGHT_CYAN     := \033[96m
+BRIGHT_WHITE    := \033[97m
+
+# ============================= FILE DISCOVERY ==============================
+# Automatically find all source files
+SOURCES         := $(wildcard $(SOURCE_DIR)/*.cpp)
+HEADERS         := $(wildcard $(INCLUDE_DIR)/*.hpp)
+OBJECTS         := $(SOURCES:$(SOURCE_DIR)/%.cpp=$(BUILD_DIR)/%.o)
+DEPS            := $(SOURCES:$(SOURCE_DIR)/%.cpp=$(DEPS_DIR)/%.d)
+
+# ============================== BUILD MODES ===============================
+# Default build mode
+BUILD_MODE      := release
+
+# Set flags based on build mode
+ifeq ($(BUILD_MODE),debug)
+    CXXFLAGS += $(DEBUG_FLAGS)
+    MODE_COLOR := $(BRIGHT_YELLOW)
+    MODE_NAME := DEBUG
+else
+    CXXFLAGS += $(RELEASE_FLAGS)
+    MODE_COLOR := $(BRIGHT_GREEN)
+    MODE_NAME := RELEASE
 endif
-ifeq ($(MAKECMDGOALS), fast)
-	CC     = gcc
-	CFLAGS   = $(DEPFLAGS) -Wall -Wextra
-	CFLAGS += $(FAST_FLAGS)
-endif
 
-# Includes
-INCLUDES = -I includes/
+# ================================= TARGETS ==================================
+.PHONY: all clean debug release info help run install uninstall
 
-LIBFT_DIR = Libft
-LIBFT     = $(LIBFT_DIR)/libft.a
-INCLUDES += -I$(LIBFT_DIR)/include
+# Default target
+all: info $(TARGET)
 
-# Source files mandatory
+# Build in debug mode
+debug:
+	@$(MAKE) BUILD_MODE=debug all
 
-MAIN_DIR         = src/
-MAIN_FILE        = server.c queue.c protocol.c main.c command_manager.c network_worker.c tick_manager.c network_manager.c
+# Build in release mode  
+release:
+	@$(MAKE) BUILD_MODE=release all
 
-INIT_DIR         = src/init/
-INIT_FILE        = init_mutex.c init_network.c init_server.c init_thread.c
+# Create the main executable
+$(TARGET): $(OBJECTS) | $(BUILD_DIR)
+	@printf "$(BOLD)$(BRIGHT_CYAN)🔗 Linking executable: $(BRIGHT_WHITE)$@$(RESET)\n"
+	@$(CXX) $(OBJECTS) -o $@ $(LDFLAGS) $(LIBS)
+	@printf "$(BOLD)$(BRIGHT_GREEN)✅ Build completed successfully!$(RESET)\n"
+	@printf "$(BOLD)$(BRIGHT_BLUE)📁 Executable: $(BRIGHT_WHITE)$@$(RESET)\n"
 
-STOP_DIR         = src/stop_server/
-STOP_FILE        = clear_memory.c clear_thread.c stop_server.c
+# Compile source files to object files
+$(BUILD_DIR)/%.o: $(SOURCE_DIR)/%.cpp $(DEPS_DIR)/%.d | $(BUILD_DIR) $(DEPS_DIR)
+	@printf "$(BOLD)$(BRIGHT_BLUE)🔨 Compiling: $(BRIGHT_WHITE)$<$(RESET)\n"
+	@$(CXX) $(CXXFLAGS) $(INCLUDE_FLAGS) -c $< -o $@
 
+# Generate dependency files
+$(DEPS_DIR)/%.d: $(SOURCE_DIR)/%.cpp | $(DEPS_DIR)
+	@printf "$(DIM)$(CYAN)📋 Generating dependencies: $<$(RESET)\n"
+	@$(CXX) $(CXXFLAGS) $(INCLUDE_FLAGS) -MM -MT $(BUILD_DIR)/$*.o $< > $@
 
-M_FILE  =   $(addprefix $(MAIN_DIR), $(MAIN_FILE)) \
-			$(addprefix $(INIT_DIR), $(INIT_FILE)) \
-			$(addprefix $(STOP_DIR), $(STOP_FILE))
+# Create build directories
+$(BUILD_DIR):
+	@printf "$(BOLD)$(YELLOW)📁 Creating build directory: $(BRIGHT_WHITE)$@$(RESET)\n"
+	@mkdir -p $@
 
-# Object files directory
-OBJ_DIR   = .obj/
-OBJ       = $(M_FILE:%.c=$(OBJ_DIR)%.o)
-DEPS      = $(M_FILE:%.c=$(OBJ_DIR)%.d)
+$(DEPS_DIR):
+	@printf "$(DIM)$(YELLOW)📁 Creating deps directory: $(BRIGHT_WHITE)$@$(RESET)\n"
+	@mkdir -p $@
 
-COMPILED_FILES := 0
-
-# Pattern rule for object files
-$(OBJ_DIR)%.o : %.c
-	@if [ $(COMPILED_FILES) -eq 0 ]; then \
-		echo "\n$(YELLOW)╔══════════════════════════════════════════════╗$(NC)";                          \
-		echo "$(YELLOW)║        Starting $(YELLOW2)$(NAME)$(YELLOW) compilation...        ║$(NC)";           \
-		echo "$(YELLOW)╚══════════════════════════════════════════════╝$(NC)";                        \
-	fi
-	@$(eval COMPILED_FILES := 1)
-	@mkdir -p $(dir $@)
-	@$(CC) $(CFLAGS) -o $@ -c $< $(INCLUDES)
-	@printf "\n$(GREEN)[Compiling] $(NC)$(shell echo $< | sed 's|^srcs/||')";
-
-$(NAME) : $(LIBFT) $(OBJ)
-	@if [ $(COMPILED_FILES) -eq 0 ]; then \
-		echo "\n$(YELLOW)╔══════════════════════════════════════════════╗$(NC)"; \
-		echo "$(YELLOW)║        Starting $(YELLOW2)$(NAME)$(YELLOW) compilation...        ║$(NC)"; \
-		echo "$(YELLOW)╚══════════════════════════════════════════════╝$(NC)"; \
-	fi
-	@$(eval COMPILED_FILES := 1)
-	@echo "\n\n$(GREEN)[Compiling program] $(NC)$(NAME)"
-	@$(CC) $(CFLAGS) -o $(NAME) $(OBJ) $(LIBFT) $(MINILIBX) $(LDFLAGS) $(GPU_FLAGS)
-$(LIBFT):
-	@echo "\n$(YELLOW)[Compiling libft]$(NC)"
-	@make -C $(LIBFT_DIR)
-
-clean :
-	@echo "$(RED)[Removing] $(NC)object files"
-	@rm -rf $(OBJ_DIR)
-
-fclean : clean
-	@make --no-print-directory -C $(LIBFT_DIR) fclean
-	@if [ -f $(NAME) ]; then \
-		echo "$(RED)[Removing] $(NC)program $(NAME)"; \
-		rm -f $(NAME); \
-	fi
-
-fcleanp :
-	@echo "$(RED)[Removing] $(NC)object files"
-	@rm -rf $(OBJ_DIR)
-	@make --no-print-directory -C $(LIBFT_DIR) fclean
-	@if [ -f $(NAME) ]; then \
-		echo "$(RED)[Removing] $(NC)program $(NAME)"; \
-		rm -f $(NAME); \
-	fi
-
-re : fclean
-	@make --no-print-directory all
-
-fast: all
-
-debug: all 
-
-ffast: fcleanp
-	@make --no-print-directory fast
-
-fdebug: fcleanp
-	@make --no-print-directory debug
-
-norminette:
-	@norminette src/ includes/
-
-.PHONY: all clean fclean nothing_to_be_done re fast ffast debug fdebug fcleanp
-
+# Include dependency files (only if they exist)
 -include $(DEPS)
+
+# Clean build artifacts
+clean:
+	@printf "$(BOLD)$(BRIGHT_RED)🧹 Cleaning build artifacts...$(RESET)\n"
+	@rm -rf $(BUILD_DIR) $(DEPS_DIR)
+	@printf "$(BOLD)$(BRIGHT_GREEN)✨ Clean completed!$(RESET)\n"
+
+# Run the executable
+run: $(TARGET)
+	@printf "$(BOLD)$(BRIGHT_MAGENTA)🚀 Running $(TARGET_NAME)...$(RESET)\n"
+	@printf "$(DIM)$(WHITE)" && echo "================================================" && printf "$(RESET)"
+	@./$(TARGET)
+	@printf "$(DIM)$(WHITE)" && echo "================================================" && printf "$(RESET)"
+
+# Display project information
+info:
+	@printf "$(BOLD)$(BG_BLUE)$(WHITE) 🏗️  C++ BUILD SYSTEM $(RESET)\n"
+	@printf "$(BOLD)$(BRIGHT_CYAN)╔═══════════════════════════════════════════════╗$(RESET)\n"
+	@printf "$(BOLD)$(BRIGHT_CYAN)║$(RESET) $(BOLD)Project:$(RESET)                 $(BRIGHT_WHITE)%-20s$(RESET) $(BOLD)$(BRIGHT_CYAN)║$(RESET)\n" "$(TARGET_NAME)"
+	@printf "$(BOLD)$(BRIGHT_CYAN)║$(RESET) $(BOLD)Mode:$(RESET)                    $(MODE_COLOR)%-20s$(RESET) $(BOLD)$(BRIGHT_CYAN)║$(RESET)\n" "$(MODE_NAME)"
+	@printf "$(BOLD)$(BRIGHT_CYAN)║$(RESET) $(BOLD)Compiler:$(RESET)                $(BRIGHT_WHITE)%-20s$(RESET) $(BOLD)$(BRIGHT_CYAN)║$(RESET)\n" "$(CXX)"
+	@printf "$(BOLD)$(BRIGHT_CYAN)║$(RESET) $(BOLD)Target:$(RESET)                  $(BRIGHT_WHITE)%-20s$(RESET) $(BOLD)$(BRIGHT_CYAN)║$(RESET)\n" "$(TARGET)"
+	@printf "$(BOLD)$(BRIGHT_CYAN)║$(RESET) $(BOLD)Sources:$(RESET)                 $(BRIGHT_GREEN)%-20s$(RESET) $(BOLD)$(BRIGHT_CYAN)║$(RESET)\n" "$(words $(SOURCES)) files"
+	@printf "$(BOLD)$(BRIGHT_CYAN)║$(RESET) $(BOLD)Headers:$(RESET)                 $(BRIGHT_GREEN)%-20s$(RESET) $(BOLD)$(BRIGHT_CYAN)║$(RESET)\n" "$(words $(HEADERS)) files"
+	@printf "$(BOLD)$(BRIGHT_CYAN)╚═══════════════════════════════════════════════╝$(RESET)\n"
+
+# Install the executable (modify INSTALL_PREFIX as needed)
+INSTALL_PREFIX := /usr/local
+install: $(TARGET)
+	@printf "$(BOLD)$(BRIGHT_BLUE)📦 Installing $(TARGET_NAME) to $(INSTALL_PREFIX)/bin...$(RESET)\n"
+	@sudo cp $(TARGET) $(INSTALL_PREFIX)/bin/$(TARGET_NAME)
+	@sudo chmod +x $(INSTALL_PREFIX)/bin/$(TARGET_NAME)
+	@printf "$(BOLD)$(BRIGHT_GREEN)✅ Installation completed!$(RESET)\n"
+
+# Uninstall the executable
+uninstall:
+	@printf "$(BOLD)$(BRIGHT_RED)🗑️  Uninstalling $(TARGET_NAME)...$(RESET)\n"
+	@sudo rm -f $(INSTALL_PREFIX)/bin/$(TARGET_NAME)
+	@printf "$(BOLD)$(BRIGHT_GREEN)✅ Uninstallation completed!$(RESET)\n"
+
+# Display help information
+help:
+	@printf "$(BOLD)$(BG_GREEN)$(WHITE) 📖 MAKEFILE HELP $(RESET)\n"
+	@printf "$(BOLD)$(BRIGHT_CYAN)╔══════════════════════════════════════════════════════════╗$(RESET)\n"
+	@printf "$(BOLD)$(BRIGHT_CYAN)║$(RESET) $(BOLD)Available targets:$(RESET)                                       $(BOLD)$(BRIGHT_CYAN)║$(RESET)\n"
+	@printf "$(BOLD)$(BRIGHT_CYAN)║$(RESET)                                                          $(BOLD)$(BRIGHT_CYAN)║$(RESET)\n"
+	@printf "$(BOLD)$(BRIGHT_CYAN)║$(RESET) $(BRIGHT_GREEN)%-10s$(RESET) %-39s $(BOLD)$(BRIGHT_CYAN)    ║$(RESET)\n" "all" "Build the project (default: release mode)"
+	@printf "$(BOLD)$(BRIGHT_CYAN)║$(RESET) $(BRIGHT_GREEN)%-10s$(RESET) %-39s $(BOLD)$(BRIGHT_CYAN)      ║$(RESET)\n" "debug" "Build in debug mode"
+	@printf "$(BOLD)$(BRIGHT_CYAN)║$(RESET) $(BRIGHT_GREEN)%-10s$(RESET) %-39s $(BOLD)$(BRIGHT_CYAN)      ║$(RESET)\n" "release" "Build in release mode"
+	@printf "$(BOLD)$(BRIGHT_CYAN)║$(RESET) $(BRIGHT_GREEN)%-10s$(RESET) %-39s $(BOLD)$(BRIGHT_CYAN)      ║$(RESET)\n" "clean" "Remove all build artifacts"
+	@printf "$(BOLD)$(BRIGHT_CYAN)║$(RESET) $(BRIGHT_GREEN)%-10s$(RESET) %-39s $(BOLD)$(BRIGHT_CYAN)      ║$(RESET)\n" "run" "Build and run the executable"
+	@printf "$(BOLD)$(BRIGHT_CYAN)║$(RESET) $(BRIGHT_GREEN)%-10s$(RESET) %-39s $(BOLD)$(BRIGHT_CYAN)      ║$(RESET)\n" "install" "Install the executable to system"
+	@printf "$(BOLD)$(BRIGHT_CYAN)║$(RESET) $(BRIGHT_GREEN)%-10s$(RESET) %-39s $(BOLD)$(BRIGHT_CYAN)      ║$(RESET)\n" "uninstall" "Remove the executable from system"
+	@printf "$(BOLD)$(BRIGHT_CYAN)║$(RESET) $(BRIGHT_GREEN)%-10s$(RESET) %-39s $(BOLD)$(BRIGHT_CYAN)      ║$(RESET)\n" "info" "Display project information"
+	@printf "$(BOLD)$(BRIGHT_CYAN)║$(RESET) $(BRIGHT_GREEN)%-10s$(RESET) %-39s $(BOLD)$(BRIGHT_CYAN)      ║$(RESET)\n" "help" "Show this help message"
+	@printf "$(BOLD)$(BRIGHT_CYAN)║$(RESET)                                                          $(BOLD)$(BRIGHT_CYAN)║$(RESET)\n"
+	@printf "$(BOLD)$(BRIGHT_CYAN)║$(RESET) $(BOLD)Customization:$(RESET)                                           $(BOLD)$(BRIGHT_CYAN)║$(RESET)\n"
+	@printf "$(BOLD)$(BRIGHT_CYAN)║$(RESET) • Modify $(BRIGHT_YELLOW)TARGET_NAME$(RESET) to change executable name           $(BOLD)$(BRIGHT_CYAN)║$(RESET)\n"
+	@printf "$(BOLD)$(BRIGHT_CYAN)║$(RESET) • Modify $(BRIGHT_YELLOW)BUILD_DIR$(RESET) to change build directory             $(BOLD)$(BRIGHT_CYAN)║$(RESET)\n"
+	@printf "$(BOLD)$(BRIGHT_CYAN)║$(RESET) • Add libraries to $(BRIGHT_YELLOW)LIBS$(RESET) variable                         $(BOLD)$(BRIGHT_CYAN)║$(RESET)\n"
+	@printf "$(BOLD)$(BRIGHT_CYAN)║$(RESET) • Add compiler flags to $(BRIGHT_YELLOW)CXXFLAGS$(RESET)                         $(BOLD)$(BRIGHT_CYAN)║$(RESET)\n"
+	@printf "$(BOLD)$(BRIGHT_CYAN)╚══════════════════════════════════════════════════════════╝$(RESET)\n"
+
+# =============================================================================
+# 🎨 Beautiful Makefile - Features:
+# • Colorful output with emojis
+# • Automatic dependency tracking (.deps directory)
+# • Debug and release build modes
+# • Easy customization of output names
+# • Clean directory structure
+# • Install/uninstall targets
+# • Comprehensive help system
+# • No hardcoded file names (all auto-discovered)
+# =============================================================================
