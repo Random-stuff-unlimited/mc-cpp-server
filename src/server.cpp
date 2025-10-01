@@ -1,5 +1,5 @@
 #include "server.hpp"
-#include "include/json.hpp"
+#include "json.hpp"
 #include "network.hpp"
 #include <sys/socket.h>
 #include <iostream>
