@@ -7,7 +7,7 @@
 
 using json = nlohmann::json;
 
-Server::Server() : _player_lst(nullptr) {}
+Server::Server() : _player_lst(), _gameVersion("1.12.5"), _protocolVersion(770), _serverSize(0), _serverMOTD() {}
 Server::~Server() {}
 
 int Server::start_server(int port) {

@@ -24,6 +24,13 @@ Network::Network(int port, Server &server)
         throw std::runtime_error("socket error");
     }
 
+	int opt = 1;
+    if (setsockopt(_socket, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0) {
+        perror("setsockopt");
+        close(_socket);
+        throw std::runtime_error("setsockopt error");
+    }
+
     memset(&_addr, 0, sizeof(_addr));
     _addr.sin_family = AF_INET;
     _addr.sin_addr.s_addr = INADDR_ANY;
@@ -51,10 +58,10 @@ Network::Network(int port, Server &server)
 }
 
 Network::~Network() {
-    stopThreads();
-    if (_socket != -1) {
-        close(_socket);
-    }
+	stopThreads();
+	if (_socket != -1) {
+		close(_socket);
+	}
 }
 
 void Network::startThreads(Server &server)
