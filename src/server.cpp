@@ -1,33 +1,47 @@
 #include "server.hpp"
+#include "include/json.hpp"
 #include <sys/socket.h>
 #include <iostream>
+#include <fstream>
+
+using json = nlohmann::json;
 
 Server::Server() : _port(0), _player_lst(nullptr), _socket(-1), _stopThread(false) {}
 Server::Server(const Server &src) {}
 Server &Server::operator=(const Server &src) {}
 Server::~Server() {}
 
-int		Server::getServerPort() {return (this->_port);}
-void	Server::setServerPort(int port) {this->_port = port;}
-int		Server::getServerAddr() {return (this->_addr);}
-void	Server::setServerAddr(int addr) {this->_addr = addr;}
-
-int	Server::init_thread()
-{
-	try {
-		_networkManager = std::thread(&Server::networkManagerLoop, this);
-		// for (int i = 0; i < 10; i++)
-		// 	_networkWorker[i] = std::thread(&Server::networkWorkerLoop, this, i);
-		_tickManager = std::thread(&Server::tickLoop, this);
-	} catch (const std::system_error& e) {
-		std::cerr << "Error in thread creation : " << e.what() << "\n";
-		
-		return (1);
-	}
-}
-
 int Server::start_server(int port) {
-	if (init_network(port) != 0 || )
-		return (1);
 }
 
+int Server::loadConfig() {
+	std::ifstream inputFile(ConfigFileName);
+
+	if (!inputFile.is_open()) {
+		std::cerr << "[Server] Error: Could not open " << ConfigFileName << std::endl;
+		return 1;
+	}
+
+	json j;
+
+	try {
+		inputFile >> j;
+
+		std::cout << "[Server]: Successfully parsed " << ConfigFileName << "!" << std::endl;
+		Server::_gameVersion = j["version"]["name"];
+		Server::_protocolVersion = j["version"]["protocol"];
+		Server::_serverSize = j["maxPlayer"];
+		Server::_serverMOTD = j["serverMotd"];
+
+	} catch (json::parse_error& e) {
+		std::cerr << "[Server]: Json parse error: " << e.what() << std::endl;
+		return 1;
+	}
+	return 0;
+}
+
+std::string Server::getGameVersion() {return _gameVersion;}
+std::string Server::getServerMOTD() {return _serverMOTD;}
+int Server::getProtocolVersion() {return _protocolVersion;}
+int Server::getServerSize() {return _serverSize;}
+int Server::getAmountOnline() {return 69;}

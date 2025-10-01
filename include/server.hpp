@@ -3,13 +3,20 @@
 
 # include "player.hpp"
 # include <netinet/in.h>
+# define ConfigFileName "config.json"
 
 class Server
 {
 	private:
 		Player				*_player_lst;
-		std::atomic<bool>	_stopServer;
 
+		int			_protocolVersion;
+		int			_serverSize;
+		int			loadConfig();
+		Player		*_player_lst;
+		std::string	_gameVersion;
+		std::string _serverMOTD;
+		
 	public:
 		Server();
 		Server(const Server &src);
@@ -18,12 +25,12 @@ class Server
 
 		int	start_server(int port);
 
-		int		getServerPort();
-		void	setServerPort(int port);
-		int		getServerAddr();
-		void	setServerAddr(int addr);
+		int			getProtocolVersion();
+		int			getServerSize();
+		int			getAmountOnline();
+		std::string	getGameVersion();
+		std::string getServerMOTD();
 
-		int	init_thread();
-}
+};
 
 #endif

@@ -12,7 +12,7 @@ class Network {
 		std::atomic<bool> _stop;
 
 	public:
-		Network(int port = 25565);
+		Network(int port);
 		~Network();
 
 		void networkManagerLoop();

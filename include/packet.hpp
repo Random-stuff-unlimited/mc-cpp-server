@@ -11,8 +11,8 @@ class Packet
 		static int varintLen(int value);
 	public:
 		int handleHandshake(int client_sock);
-		void handleStatusRequest(int client_sock);
-		void sendDisconnectMessage(int client_sock, const char *reason_text);
+		void handleStatusRequest(int client_sock, Server &server);
+		void sendDisconnectMessage(int client_sock, std::string reason);
 		//void addPlayer(t_server *server, int client_sock, const char *player_name);
 		//int handleLoginStart(int client_sock, t_server *server);
 		Packet();
