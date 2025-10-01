@@ -37,6 +37,7 @@ class Server
 		std::string getServerMOTD();
 		int			getServerPort() {return _serverPort;}
 		char*		getServerAddr() {return _serverAddr;}
+		std::vector<Player> getServerPlayer() {return _playerLst;}
 
 		void	addPlayerToSample(const std::string &name);
 		void    removePlayerToSample(const std::string &name);

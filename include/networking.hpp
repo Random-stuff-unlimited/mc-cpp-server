@@ -16,9 +16,6 @@
 
 class NetworkManager {
 	private:
-		std::unordered_map<uint32_t, std::shared_ptr<Player>> _connections;
-		std::mutex 	_connectionsMutex;
-		
 		ThreadSafeQueue<Packet*>	_incomingPackets;
 		ThreadSafeQueue<Packet*>	_outgoingPackets;
 
@@ -58,7 +55,7 @@ class NetworkManager {
 		void workerThreadLoop();
 
 		void setupEpoll();
-		void handleIncomingData(std::shared_ptr<Player> connection);
+		void handleIncomingData(Player* connection);
 		void handleIncomingData(int socket);
 };
 

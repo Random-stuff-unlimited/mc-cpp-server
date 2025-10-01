@@ -22,22 +22,19 @@ void NetworkManager::receiverThreadLoop() {
 		for (int i = 0; i < eventCount; i++) {
 			int fd = events[i].data.fd;
 			uint32_t eventFlags = events[i].events;
-			
-			// Find the player connection associated with this file descriptor
-			std::shared_ptr<Player> player = nullptr;
-			{
-				std::shared_lock<std::mutex> lock(_connectionsMutex);
-				auto it = _connections.find(static_cast<uint32_t>(fd));
-				if (it != _connections.end()) {
-					player = it->second;
+		
+			Player* p;
+			for (int i = 0; i < getServer().getServerPlayer().size(); i++) {
+				if (fd == getServer().getServerPlayer()[i].getSocketFd()) {
+					p = &getServer().getServerPlayer()[i];
+					break ;
 				}
 			}
 			// Handle different types of events
 			if (eventFlags & EPOLLERR || eventFlags & EPOLLHUP) {
 				// Connection error or hangup - remove player
 				{
-					std::unique_lock<std::mutex> lock(_connectionsMutex);
-					_connections.erase(static_cast<uint32_t>(fd));
+					getServer().removePlayer(p);
 				}
 				close(fd);
 				continue;
@@ -46,19 +43,18 @@ void NetworkManager::receiverThreadLoop() {
 			if (eventFlags & EPOLLIN) {
 				// Data available to read
 				try {
-					if (!player) {
+					if (!p) {
 						sockaddr_in client_addr{};
               			socklen_t addr_len = sizeof(client_addr);
 		                int client_fd = accept(_epollFd, (sockaddr*)&client_addr, &addr_len);
 						handleIncomingData(client_fd);
 					} else {
-						handleIncomingData(player);
+						handleIncomingData(p);
 					}
 				} catch (const std::exception& e) {
 					// Handle parsing errors - disconnect player
 					{
-						std::unique_lock<std::mutex> lock(_connectionsMutex);
-						_connections.erase(static_cast<uint32_t>(fd));
+						getServer().removePlayer(p);
 					}
 					close(fd);
 				}
@@ -73,7 +69,6 @@ void NetworkManager::senderThreadLoop() {
 
 		while (_outgoingPackets.tryPop(p)) {
 			try {
-				std::shared_lock<std::mutex> lock(_connectionsMutex);
 				send(p->getSocket(),static_cast<const void *>(&p->getData().getData()), p->getSize(), MSG_NOSIGNAL); // May break ||SEND
 				delete p;
 			} catch (const std::exception& e) {
@@ -89,7 +84,7 @@ void NetworkManager::enqueueOutgoingPacket(Packet* p) {
 	_outgoingPackets.push(p); 
 }
 
-void NetworkManager::handleIncomingData(std::shared_ptr<Player> connection) {
+void NetworkManager::handleIncomingData(Player* connection) {
 	Packet *p;
 
 	try {
