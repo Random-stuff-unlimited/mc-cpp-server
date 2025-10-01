@@ -155,7 +155,7 @@ void Packet::handleStatusRequest(int clientSock, Server &server) {
 	Packet::writeVarint(clientSock, 0x00);
 	Packet::writeVarint(clientSock, jsonLen);
 	write(clientSock, response, jsonLen);
-	std::cout << "Response JSON sent.\n" << std::endl;	
+	std::cout << "Response JSON sent." << std::endl;	
 	
 
 	int totalPingLen = readVarint(clientSock);
