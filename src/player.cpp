@@ -2,7 +2,7 @@
 
 Player::Player() : _name("Player_entity"), _state(PlayerState::Ping), _socket_fd(-1), x(0), y(0), z(0), health(0) {}
 
-Player::Player(const std::string name, const PlayerState state, const int socket)
+Player::Player(const std::string &name, const PlayerState state, const int socket)
 {
 	if (name.length() > 32)
 		_name = name.substr(0, 31);
@@ -27,3 +27,6 @@ Player	&Player::operator=(const Player &src)
 }
 
 Player::~Player() {}
+
+std::string	Player::getPlayerName(void) {return (this->_name);};
+void	Player::setPlayerName(const std::string &name) {this->_name = name;}
