@@ -2,12 +2,13 @@
 # define SERVER_HPP
 
 # include "player.hpp"
+# include <netinet/in.h>
 
 class Server
 {
 	private:
-		int		_port;
-		Player	*_player_lst;
+		Player				*_player_lst;
+		std::atomic<bool>	_stopServer;
 
 	public:
 		Server();
@@ -19,6 +20,10 @@ class Server
 
 		int		getServerPort();
 		void	setServerPort(int port);
+		int		getServerAddr();
+		void	setServerAddr(int addr);
+
+		int	init_thread();
 }
 
 #endif
