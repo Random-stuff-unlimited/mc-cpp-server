@@ -1,4 +1,5 @@
 #include "networking.hpp"
+#include "packet.hpp"
 #include <sys/epoll.h>
 #include <shared_mutex>
 #include <mutex>
@@ -73,7 +74,7 @@ void NetworkManager::senderThreadLoop() {
 		while (_outgoingPackets.tryPop(p)) {
 			try {
 				std::shared_lock<std::mutex> lock(_connectionsMutex);
-				send(p->_socketFd, p->getData, p->getSize, MSG_NOSIGNAL);
+				send(p->getSocket(),static_cast<const void *>(&p->getData().getData()), p->getSize(), MSG_NOSIGNAL); // May break ||SEND
 				delete p;
 			} catch (const std::exception& e) {
 				std::cerr << "[Network Manager] Failed to send packet: " << e.what() << std::endl;

@@ -67,5 +67,5 @@ int Packet::varintLen(int value) {
 const Player *Packet::getPlayer() const {return (_player);}
 uint32_t Packet::getSize() {return (_size);}
 uint32_t Packet::getId() {return (_id);}
-Buffer	&Packet::getData() {return (_data);}
+Buffer &Packet::getData() {return (_data);}
 int	Packet::getSocket() const {return (_socketFd);};

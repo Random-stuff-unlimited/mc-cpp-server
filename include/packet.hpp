@@ -21,7 +21,7 @@ class Packet {
 		const Player *getPlayer() const;
 		uint32_t Packet::getSize();
 		uint32_t Packet::getId();
-		Buffer	&Packet::getData();
+		Buffer &Packet::getData();
 		const Player *Packet::getPlayer();
 		int	getSocket() const;
 };

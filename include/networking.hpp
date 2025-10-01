@@ -22,7 +22,9 @@ class NetworkManager {
 		ThreadSafeQueue<Packet*> _outgoingPackets;
 
 		std::thread _receiverThread;
+		char		_receiverThreadInit; 
 		std::thread _senderThread;
+		char		_senderThreadInit;
 		std::vector<std::thread> _workerThreads;
 		std::atomic<bool> _shutdownFlag;
 
@@ -33,6 +35,8 @@ class NetworkManager {
 
 
 		void start();
+		void startThreads();
+		void stopThreads();
 		void shutdown();
 
 		void addPlayerConnection(std::shared_ptr<Player> connection);
