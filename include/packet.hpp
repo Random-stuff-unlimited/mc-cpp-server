@@ -1,6 +1,8 @@
 #ifndef PACKET_HPP
 # define PACKET_HPP
 
+# include "server.hpp"
+
 class Packet
 {
 	private:

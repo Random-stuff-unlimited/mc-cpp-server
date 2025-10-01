@@ -8,16 +8,19 @@
 using json = nlohmann::json;
 
 Server::Server() : _player_lst(nullptr) {}
-Server::Server(const Server &src) {}
-Server &Server::operator=(const Server &src) {}
 Server::~Server() {}
 
 int Server::start_server(int port) {
-	try {
-		Network 
+    try {
+        Network net(port, *this); // création directe
+        std::this_thread::sleep_for(std::chrono::seconds(10));
+        std::cout << "stop server try\n";
+        net.stopThreads();
     } catch (const std::exception& e) {
-        std::cout << "Erreur: " << e.what() << "\n";
+        std::cout << "Error: " << e.what() << std::endl;
+        return 1;
     }
+    return 0;
 }
 
 int Server::loadConfig() {

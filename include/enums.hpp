@@ -3,9 +3,9 @@
 
 enum class PlayerState
 {
-    Ping,
-    Login,
-    Play
-}
+	Ping,
+	Login,
+	Play
+};
 
 #endif

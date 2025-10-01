@@ -1,7 +1,22 @@
 #include "network.hpp"
+#include "server.hpp"
+#include <unistd.h>
 #include <iostream>
+#include <thread>
+#include <chrono>
+#include <cstring>
 
-Network::Network(int port) : _port(port), _socket(-1), _stop(false) {
+Network::Network(int port, Server &server)
+    : server(server)
+    , _port(port)
+    , _socket(-1)
+    , _addr{}
+    , _networkManagerRun(false)
+    , _networkManagerInit(0)
+    , _networkWorkerInit{}
+    , _networkWorkerRun{}
+    , _stop(false)
+{
     _socket = socket(AF_INET, SOCK_STREAM, 0);
     if (_socket < 0) {
         perror("socket");
@@ -27,30 +42,64 @@ Network::Network(int port) : _port(port), _socket(-1), _stop(false) {
 
     std::cout << "Network ready on port " << _port << "\n";
 
-    startThreads();
-}
-
-void Network::startThreads() {
     try {
-        _networkManager = std::thread(&Network::networkManagerLoop, this);
-        for (int i = 0; i < 10; ++i)
-            _networkWorker[i] = std::thread(&Network::networkWorkerLoop, this, i);
+        startThreads(server);
     } catch (const std::exception& e) {
-        _stop = true;
-        if (_networkManager.joinable()) _networkManager.join();
-        for (int i = 0; i < 10; ++i)
-            if (_networkWorker[i].joinable()) _networkWorker[i].join();
-
-        close(_socket);
-        throw std::runtime_error(std::string("Thread start error: ") + e.what());
+        std::cout << "Error: " << e.what() << "\n";
     }
 }
 
-void Network::stopThreads() {
-    _stop = true;
+Network::~Network() {
+    stopThreads();
+    if (_socket != -1) {
+        close(_socket);
+    }
+}
 
-    if (_networkManager.joinable()) _networkManager.join();
-    for (int i = 0; i < 10; ++i)
-        if (_networkWorker[i].joinable())
-            _networkWorker[i].join();
+void Network::startThreads(Server &server)
+{
+	_networkManagerInit = 0;
+	_networkManagerRun = 0;
+	for (int i = 0; i < 10; ++i)
+	{
+		_networkWorkerInit[i] = 0;
+		_networkWorkerRun[i] = 0;
+	}
+	try {
+		_networkManager = std::thread(&Network::networkManagerLoop, this, std::ref(server));
+		_networkManager.detach();
+		_networkManagerInit = 1;
+		for (int i = 0; i < 10; ++i)
+		{
+			_networkWorkerInit[i] = 0;
+			_networkWorkerRun[i] = 0;
+			// _networkWorker[i] = std::thread(&Network::networkWorkerLoop, this, i);
+			// _networkWorker[i].detach();
+		}
+	} catch (const std::exception& e) {
+		stopThreads();
+		throw std::runtime_error(std::string("Thread start error: ") + e.what());
+	}
+}
+
+void Network::stopThreads()
+{
+	_stop = true;
+
+	if (_networkManagerInit == 1)
+		while (_networkManagerRun)
+			std::this_thread::sleep_for(std::chrono::milliseconds(100));
+	for (size_t i = 0; i < 10; i++)
+		if (_networkWorkerInit[i] == 1)
+			while (_networkWorkerRun[i] == true)
+				std::this_thread::sleep_for(std::chrono::milliseconds(100));
+}
+
+void Network::networkManagerLoop(Server &server)
+{
+	(void)server;
+	_networkManagerRun = true;
+	while (!_stop)
+		std::this_thread::sleep_for(std::chrono::milliseconds(10));
+	_networkManagerRun = false;
 }
