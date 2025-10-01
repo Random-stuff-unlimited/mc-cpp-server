@@ -36,7 +36,6 @@ void NetworkManager::setupEpoll() {
 void NetworkManager::startThreads() {
 	try {
 		_shutdownFlag = false;
-		// Main networkManager
 
 		if (!_receiverThreadInit) {
 			_receiverThread = std::thread(&NetworkManager::receiverThreadLoop, this);
