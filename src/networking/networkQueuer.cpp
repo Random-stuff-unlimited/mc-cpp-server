@@ -105,3 +105,7 @@ void NetworkManager::handleIncomingData(int socket) {
 		std::cerr << "[Network Manager] Failed to receive packet: " << e.what() << std::endl;
 	}
 }
+
+void NetworkManager::workerThreadLoop() {
+	
+}
