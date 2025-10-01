@@ -81,7 +81,7 @@ void Packet::handleStatusRequest(int clientSock, Server &server) {
 
 	json jres = {
 		{"version", {{"name", server.getGameVersion()}, {"protocol", server.getProtocolVersion()}}},
-		{"players", {{"max", server.getServerSize()}, {"online", server.getAmountOnline()}, {"sample", json::array()}}},
+		{"players", {{"max", server.getServerSize()}, {"online", server.getAmountOnline()}, {"sample", server.getPlayerSample()}}},
 		{"description", {{"text", server.getServerMOTD()}}}
 	};
 

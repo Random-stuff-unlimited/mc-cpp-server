@@ -4,13 +4,18 @@
 # include "player.hpp"
 # include <mutex>
 # include <netinet/in.h>
+# include <vector>
+#include "json.hpp"
 # define ConfigFileName "config.json"
+
+using json = nlohmann::json;
 
 class Server
 {
 	private:
-		Player				*_player_lst;		
-		std::mutex			_playerLock; 
+		std::vector<Player>	_playerLst;
+		json				_playerSample;
+		std::mutex			_playerLock;
 		int					_protocolVersion;
 		int					_serverSize;
 		int					loadConfig();
@@ -29,6 +34,9 @@ class Server
 		std::string	getGameVersion();
 		std::string getServerMOTD();
 
+		void	addPlayerToSample(const std::string &name);
+		void    removePlayerToSample(const std::string &name);
+		json	getPlayerSample();
 };
 
 #endif
