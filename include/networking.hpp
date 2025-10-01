@@ -31,7 +31,11 @@ class NetworkManager {
 		int _epollFd;
 	public:
 		NetworkManager(size_t worker_count); // Could use std::thread::hardware_concurrency() for the worker size;
-		~NetworkManager();
+		~NetworkManager() {
+			if (_epollFd != -1) {
+            	close(_epollFd);
+        	}
+		}
 
 
 		void start();
