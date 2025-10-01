@@ -3,7 +3,9 @@
 
 enum class PlayerState
 {
-	Ping,
+	None,
+	Handshake,
+	Status,
 	Login,
 	Play
 };

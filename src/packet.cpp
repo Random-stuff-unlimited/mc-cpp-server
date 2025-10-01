@@ -7,7 +7,7 @@
 
 using json = nlohmann::json;
 
-Packet::Packet(const Player *player) : _player(player), _socketFd(-1) {
+Packet::Packet(Player *player) : _player(player), _socketFd(-1) {
 	_size = readVarint(_socketFd);
 	_id = readVarint(_socketFd);
 	if (player != NULL)
@@ -22,9 +22,26 @@ Packet::Packet(const Player *player) : _player(player), _socketFd(-1) {
 	}
 }
 
-Packet::Packet(const int socketFd) : _player(NULL), _socketFd(socketFd) {
+Packet::Packet(int socketFd, Server &server) : _player(NULL), _socketFd(socketFd) {
 	_size = readVarint(_socketFd);
 	_id = readVarint(_socketFd);
+	try {
+		_player = new Player();
+		_player->setSocketFd(_socketFd);
+		_player->getPlayerState();
+		try
+		{
+			server.addPlayer(_player);
+		}
+		catch(const std::exception& e)
+		{
+			delete _player;
+			std::cerr << e.what() << '\n';
+		}
+	} catch(const std::exception& e) {
+		throw std::runtime_error("error on packet player init");
+	}
+	
 	if (_size > 0) {
 		std::vector<uint8_t> tmp(_size);
 		ssize_t bytesRead = ::read(_socketFd, tmp.data(), _size);
@@ -64,7 +81,7 @@ int Packet::varintLen(int value) {
 	return (len);
 }
 
-const Player *Packet::getPlayer() const {return (_player);}
+Player *Packet::getPlayer() const {return (_player);}
 uint32_t Packet::getSize() {return (_size);}
 uint32_t Packet::getId() {return (_id);}
 Buffer &Packet::getData() {return (_data);}

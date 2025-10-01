@@ -9,20 +9,19 @@ class Packet {
 		int32_t			_size;
 		int32_t			_id;
 		Buffer			_data;
-		const Player	*_player;
+		Player			*_player;
 		int				_socketFd;
 
 	public:
-		Packet(const Player *player);
-		Packet(const int socketFd);
-		static int readVarint(int sock);
+		Packet(Player *player);
+        Packet(int socketFd, Server &server);
+        static int readVarint(int sock);
 		static void writeVarint(int sock, int value);
 		static int varintLen(int value);
-		const Player *getPlayer() const;
-		uint32_t Packet::getSize();
-		uint32_t Packet::getId();
-		Buffer &Packet::getData();
-		const Player *Packet::getPlayer();
+		Player *getPlayer() const;
+		uint32_t getSize();
+		uint32_t getId();
+		Buffer	&getData();
 		int	getSocket() const;
 };
 

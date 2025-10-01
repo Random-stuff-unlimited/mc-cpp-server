@@ -1,6 +1,6 @@
 #include "player.hpp"
 
-Player::Player() : _name("Player_entity"), _state(PlayerState::Ping), _socketFd(-1), x(0), y(0), z(0), health(0), _uuid() {
+Player::Player() : _name("Player_entity"), _state(PlayerState::None), _socketFd(-1), x(0), y(0), z(0), health(0), _uuid() {
 	
 }
 
@@ -29,8 +29,8 @@ Player	&Player::operator=(const Player &src)
 
 Player::~Player() {}
 
-const std::string	Player::getPlayerName(void) {return (this->_name);};
-const void	Player::setPlayerName(const std::string &name) {this->_name = name;}
-const PlayerState	Player::getPlayerState() {return (this->getPlayerState());}
-const void	Player::setSocketFd(int socket) {this->_socketFd = socket;}
+std::string	Player::getPlayerName(void) {return (this->_name);};
+void	Player::setPlayerName(const std::string &name) {this->_name = name;}
+PlayerState	Player::getPlayerState() {return (this->getPlayerState());}
+void	Player::setSocketFd(int socket) {this->_socketFd = socket;}
 int	Player::getSocketFd() const {return (this->_socketFd);}
