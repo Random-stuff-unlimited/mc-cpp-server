@@ -14,7 +14,7 @@ class Packet {
 		int				_returnPacket;
 
 	public:
-		Packet(Player *player);
+		Packet(Player *player, Server &server);
         Packet(int socketFd, Server &server);
         static int readVarint(int sock);
 		static void writeVarint(int sock, int value);
@@ -23,7 +23,9 @@ class Packet {
 		uint32_t getSize();
 		uint32_t getId();
 		Buffer	&getData();
-		int	getSocket() const;
+		int		getSocket() const;
+		void	setReturnPacket(int value);
+		int		getReturnPacket();
 };
 
 #endif

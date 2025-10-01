@@ -7,11 +7,30 @@
 
 using json = nlohmann::json;
 
-Packet::Packet(Player *player) : _player(player), _socketFd(-1), _returnPacket(0) {
+Packet::Packet(Player *player, Server &server) : _player(player), _socketFd(-1), _returnPacket(0) {
 	_size = readVarint(_socketFd);
 	_id = readVarint(_socketFd);
 	if (player != NULL)
 		_socketFd =  _player->getSocketFd();
+	try {
+		_player = new Player();
+		_player->setSocketFd(_socketFd);
+		_player->getPlayerState();
+		try
+		{
+			server.addPlayer(_player);
+			delete _player;
+			_player = &server.getLastPlayer();  
+		}
+		catch(const std::exception& e)
+		{
+			delete _player;
+			_player = nullptr;
+			std::cerr << e.what() << '\n';
+		}
+	} catch(const std::exception& e) {
+		throw std::runtime_error("error on packet player init");
+	}
 	if (_size > 0) {
 		std::vector<uint8_t> tmp(_size);
 		ssize_t bytesRead = ::read(_socketFd, tmp.data(), _size);
@@ -74,6 +93,9 @@ void Packet::writeVarint(int sock, int value) {
 	buf.writeVarInt(value);
 	::write(sock, buf.getData().data(), buf.getData().size());
 }
+
+void	Packet::setReturnPacket(int value) {this->_returnPacket = value;}
+int		Packet::getReturnPacket() {return (this->_returnPacket);}
 
 int Packet::varintLen(int value) {
 	int len = 0;

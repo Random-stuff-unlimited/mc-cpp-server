@@ -93,7 +93,7 @@ void NetworkManager::handleIncomingData(std::shared_ptr<Player> connection) {
 	Packet *p;
 
 	try {
-		p = new Packet(connection);
+		p = new Packet(connection, _server);
 		_incomingPackets.push(p);
 	} catch (const std::exception& e) {
 		std::cerr << "[Network Manager] Failed to receive packet: " << e.what() << std::endl;
@@ -104,7 +104,7 @@ void NetworkManager::handleIncomingData(int socket) {
 	Packet *p;
 
 	try {
-		p = new Packet(socket);
+		p = new Packet(socket, _server);
 		_incomingPackets.push(p);
 	} catch (const std::exception& e) {
 		std::cerr << "[Network Manager] Failed to receive packet: " << e.what() << std::endl;
