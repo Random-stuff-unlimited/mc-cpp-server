@@ -18,6 +18,8 @@ class NetworkManager {
 		std::thread _senderThread;
 		std::vector<std::thread> _workerThreads;
 		std::atomic<bool> _shutdownFlag;
+
+		int _epollFd;
 	public:
 };
 
