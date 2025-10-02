@@ -24,12 +24,17 @@ void	handleHandshakePacket(Packet &packet, Server &server)
 	std::cout << "[Handshake] Protocol=" << protocolVersion
 		<< ", Addr=" << serverAddr
 		<< ", State=" << nextState << "\n";
-	if (nextState == 1)
+	if (nextState == 1) {
 		packet.getPlayer()->setPlayerState(PlayerState::Status);
-	else if (nextState == 2)
+		std::cout << "Status packet sent status 1" << std::endl;
+	}
+	else if (nextState == 2) {
 		packet.getPlayer()->setPlayerState(PlayerState::Login);
+		std::cout << "Status packet status 2" << std::endl;
+	}
 	else
 	{
+	    std::cout << "Status packet sent removed the player" << std::endl;
 		packet.getPlayer()->setPlayerState(PlayerState::None);
 		close(packet.getSocket());
 		server.removePlayer(packet.getPlayer());

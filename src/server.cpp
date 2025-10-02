@@ -33,6 +33,7 @@ int Server::start_server(int port) {
 		while (true) {
 			std::cout << "Server is running..." << std::endl;
 			sleep(10);
+			break ;
 		}
 
 	} catch (const std::exception& e) {
@@ -66,8 +67,9 @@ int Server::loadConfig() {
 		_serverMOTD = j["server"]["motd"];
 		std::cout << "[Server]: Server MOTD: " << _serverMOTD << std::endl;
 		std::string temp = j["server"]["ip-address"];
-		std::cout << "[Server]: Server IP address: " << _serverAddr << std::endl;
+		std::cout << "[Server]: Server IP address before conversion: " << temp << std::endl;
 		_serverAddr = const_cast<char*>(temp.c_str());
+		std::cout << "[Server]: Server IP address after conversion: " << temp << std::endl;
 		_serverPort = j["server"]["port"];
 		std::cout << "[Server]: Server port: " << _serverPort << std::endl;
 
