@@ -1,10 +1,19 @@
 #include "networking.hpp"
+#include "player.hpp"
 #include "packet.hpp"
+#include "server.hpp"
 #include <sys/epoll.h>
-#include <shared_mutex>
-#include <mutex>
 #include <unistd.h>
 #include <errno.h>
+#include <exception>
+#include <netinet/in.h>
+#include <iostream>
+#include <iostream>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <unistd.h>
+#include <cstdint>
 
 void NetworkManager::receiverThreadLoop() {
 	const int MaxEvent = 256;
@@ -24,9 +33,9 @@ void NetworkManager::receiverThreadLoop() {
 			uint32_t eventFlags = events[i].events;
 
 			Player* p;
-			for (int i = 0; i < getServer().getServerPlayer().size(); i++) {
-				if (fd == getServer().getServerPlayer()[i].getSocketFd()) {
-					p = &getServer().getServerPlayer()[i];
+			for (unsigned int i = 0; i < getServer().getPlayerLst().size(); i++) {
+				if (fd == getServer().getPlayerLst()[i].getSocketFd()) {
+					p = &getServer().getPlayerLst()[i];
 					break ;
 				}
 			}

@@ -1,5 +1,7 @@
 #include "networking.hpp"
 #include "packet.hpp"
+#include "server.hpp"
+#include "enums.hpp"
 #include <unistd.h>
 
 void	handleStatusPacket(Packet &packet, Server &server)

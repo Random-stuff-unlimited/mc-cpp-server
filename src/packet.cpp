@@ -1,16 +1,23 @@
 #include "packet.hpp"
 #include "buffer.hpp"
+#include "player.hpp"
+#include "json.hpp"
+#include "server.hpp"
+#include <sys/types.h>
 #include <unistd.h>
 #include <iostream>
 #include <vector>
-#include "json.hpp"
+#include <stdexcept>
+#include <exception>
+#include <cstdint>
+
 
 using json = nlohmann::json;
 
 Packet::Packet(Player *player, Server &server) : _player(player), _socketFd(-1), _returnPacket(0) {
 	_size = readVarint(_socketFd);
 	_id = readVarint(_socketFd);
-	if (player != NULL)
+	if (player != nullptr)
 		_socketFd =  _player->getSocketFd();
 	try {
 		_player = new Player();
@@ -20,7 +27,7 @@ Packet::Packet(Player *player, Server &server) : _player(player), _socketFd(-1),
 		{
 			server.addPlayer(_player);
 			delete _player;
-			_player = &server.getLastPlayer();  
+			_player = &server.getLastPlayer();
 		}
 		catch(const std::exception& e)
 		{
@@ -52,7 +59,7 @@ Packet::Packet(int socketFd, Server &server) : _player(NULL), _socketFd(socketFd
 		{
 			server.addPlayer(_player);
 			delete _player;
-			_player = &server.getLastPlayer();  
+			_player = &server.getLastPlayer();
 		}
 		catch(const std::exception& e)
 		{
@@ -63,7 +70,7 @@ Packet::Packet(int socketFd, Server &server) : _player(NULL), _socketFd(socketFd
 	} catch(const std::exception& e) {
 		throw std::runtime_error("error on packet player init");
 	}
-	
+
 	if (_size > 0) {
 		std::vector<uint8_t> tmp(_size);
 		ssize_t bytesRead = ::read(_socketFd, tmp.data(), _size);

@@ -1,5 +1,11 @@
 #include "server.hpp"
 #include "packet.hpp"
+#include "enums.hpp"
+#include <unistd.h>
+#include <iostream>
+#include <iostream>
+#include <string>
+#include <cstdint>
 #include <unistd.h>
 
 void	handleHandshakePacket(Packet &packet, Server &server)
@@ -13,8 +19,8 @@ void	handleHandshakePacket(Packet &packet, Server &server)
 	}
 	int protocolVersion = packet.getData().readVarInt();
 	std::string serverAddr = packet.getData().readString(255);
-	uint16_t port = packet.getData().readUShort();
-	int nextState = packet.getData().readVarInt();
+	uint16_t port = packet.getData().readUShort(); // add check if the port is valid (same as the server port)
+	int nextState = packet.getData().readVarInt(); // add check if the address is valid (same as the server address)
 	std::cout << "[Handshake] Protocol=" << protocolVersion
 		<< ", Addr=" << serverAddr
 		<< ", State=" << nextState << "\n";
@@ -28,4 +34,5 @@ void	handleHandshakePacket(Packet &packet, Server &server)
 		close(packet.getSocket());
 		server.removePlayer(packet.getPlayer());
 	}
+	(void)port;
 }

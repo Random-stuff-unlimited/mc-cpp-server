@@ -5,7 +5,8 @@
 # include <mutex>
 # include <netinet/in.h>
 # include <vector>
-#include "json.hpp"
+# include <string>
+# include "json.hpp"
 # define ConfigFileName "config.json"
 
 using json = nlohmann::json;
@@ -23,7 +24,7 @@ class Server
 		std::string 		_serverMOTD;
 		int 				_serverPort;
 		char*				_serverAddr;
-		
+
 	public:
 		Server();
 		~Server();
@@ -37,7 +38,7 @@ class Server
 		std::string getServerMOTD();
 		int			getServerPort() {return _serverPort;}
 		char*		getServerAddr() {return _serverAddr;}
-		std::vector<Player> getServerPlayer() {return _playerLst;}
+		std::vector<Player> &getPlayerLst() {return _playerLst;}
 
 		void	addPlayerToSample(const std::string &name);
 		void    removePlayerToSample(const std::string &name);

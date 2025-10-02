@@ -2,11 +2,12 @@
 #include "server.hpp"
 #include "enums.hpp"
 #include "networking.hpp"
+#include "player.hpp"
 
 void packetRouter(Packet &packet, Server &server) {
 	Player  *player = packet.getPlayer();
 
-	if(player == NULL)
+	if(player == nullptr)
 		return;
 
 	switch(player->getPlayerState()) {

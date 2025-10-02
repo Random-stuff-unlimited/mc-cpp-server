@@ -12,6 +12,7 @@
 # include <condition_variable>
 # include <chrono>
 # include <memory>
+# include <unistd.h>
 
 template<typename T>
 class ThreadSafeQueue {

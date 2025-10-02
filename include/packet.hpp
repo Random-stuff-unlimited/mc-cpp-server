@@ -3,6 +3,8 @@
 
 # include "server.hpp"
 # include "buffer.hpp"
+# include "player.hpp"
+# include <cstdint>
 
 class Packet {
 	private:

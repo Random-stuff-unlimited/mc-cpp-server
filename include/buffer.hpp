@@ -1,11 +1,11 @@
 #ifndef BUFFER_HPP
 # define BUFFER_HPP
 
-#pragma once
-#include <vector>
-#include <string>
-#include <cstdint>
-#include <stdexcept>
+# include <vector>
+# include <string>
+# include <cstdint>
+# include <cstdint>
+# include <cstddef>
 
 class Buffer {
 	private:

@@ -1,24 +1,29 @@
-# include "networking.hpp"
-# include <sys/epoll.h>
-# include <sys/socket.h>
-# include <netinet/in.h>
-# include <arpa/inet.h>
-# include <unistd.h>
-# include <stdexcept>
-# include <fcntl.h>
+#include "networking.hpp"
+#include "server.hpp"
+#include <sys/epoll.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <unistd.h>
+#include <stdexcept>
+#include <fcntl.h>
+#include <cstring>
+#include <thread>
+#include <string>
+#include <stdexcept>
 
 NetworkManager::NetworkManager(size_t workerCount, Server& s)
-	: _shutdownFlag(false),
-	  _receiverThreadInit(0),
-	  _senderThreadInit(0),
-	  _epollFd(-1),
-	  _serverSocket(-1),
+	: _incomingPackets(),
+	  _outgoingPackets(),
+	  _workerThreads(),
+	  _shutdownFlag(false),
 	  _receiverThread(),
 	  _senderThread(),
-	  _workerThreads(),
-	  _incomingPackets(),
-	  _outgoingPackets(),
-	  _server(s)
+	  _receiverThreadInit(0),
+	  _senderThreadInit(0),
+	  _server(s),
+	  _epollFd(-1),
+	  _serverSocket(-1)
 {
 	_workerThreads.reserve(workerCount);
 
@@ -76,7 +81,7 @@ void NetworkManager::stopThreads() {
         _receiverThread.join();
         _receiverThreadInit = 0;
     }
-    
+
     // Join sender thread
     if (_senderThread.joinable()) {
         _senderThread.join();
@@ -104,7 +109,7 @@ void NetworkManager::start() {
 	serverAddr.sin_family = AF_INET;
 	serverAddr.sin_port = htons(getServer().getServerPort());
 
-	if (getServer().getServerAddr() == "0.0.0.0") {
+	if (strcmp(getServer().getServerAddr(), "0.0.0.0") == 0) {
 		serverAddr.sin_addr.s_addr = INADDR_ANY;
 	} else {
 		if (inet_aton(getServer().getServerAddr(), &serverAddr.sin_addr) == 0) {
@@ -125,21 +130,9 @@ void NetworkManager::start() {
 	struct epoll_event event;
     event.events = EPOLLIN | EPOLLET; // Edge-triggered for efficiency
     event.data.fd = _serverSocket;
-    
+
     if (epoll_ctl(_epollFd, EPOLL_CTL_ADD, _serverSocket, &event) == -1) {
         close(_serverSocket);
         throw std::runtime_error("Failed to add server socket to epoll");
-    }
-}
-
-NetworkManager::~NetworkManager() {
-    stopThreads();
-    
-    if (_serverSocket != -1) {
-        close(_serverSocket);
-    }
-    
-    if (_epollFd != -1) {
-        close(_epollFd);
     }
 }

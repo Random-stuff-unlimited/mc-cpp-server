@@ -1,4 +1,8 @@
 #include "buffer.hpp"
+#include <stdexcept>
+#include <vector>
+#include <string>
+#include <cstdint>
 
 Buffer::Buffer() : _pos(0) {}
 Buffer::Buffer(const std::vector<uint8_t> &data) : _data(data), _pos(0) {}

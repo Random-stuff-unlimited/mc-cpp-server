@@ -2,6 +2,9 @@
 #include "buffer.hpp"
 #include <sstream>
 #include <iomanip>
+#include <string>
+#include <cstdint>
+#include <iostream>
 
 UUID::UUID() : _mostSigBits(0), _leastSigBits(0) {}
 UUID::UUID(uint64_t most, uint64_t least) : _mostSigBits(most), _leastSigBits(least) {}

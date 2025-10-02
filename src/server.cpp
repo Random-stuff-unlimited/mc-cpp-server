@@ -1,25 +1,28 @@
 #include "server.hpp"
 #include "json.hpp"
-#include "enums.hpp"
+
 #include "player.hpp"
-#include <sys/socket.h>
 #include <iostream>
 #include <fstream>
+#include <algorithm>
+#include <string>
+#include <exception>
 
 using json = nlohmann::json;
 
-Server::Server() : _playerLst(), _gameVersion("1.12.5"), _protocolVersion(770), _serverSize(-100000000), _serverMOTD() {}
+Server::Server() : _playerLst(), _protocolVersion(770), _serverSize(-100000000), _gameVersion("1.12.5"), _serverMOTD() {}
 
 Server::~Server() {}
 
 int Server::start_server(int port) {
 	try {
 		Server::loadConfig();
-		
+
 	} catch (const std::exception& e) {
 		std::cout << "Error: " << e.what() << std::endl;
 		return (1);
 	}
+	(void)port;
 	return (0);
 }
 

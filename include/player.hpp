@@ -1,7 +1,7 @@
 #ifndef PLAYER_HPP
 # define PLAYER_HPP
 
-# include <iostream>
+# include <string>
 # include "enums.hpp"
 # include "UUID.hpp"
 

@@ -1,5 +1,7 @@
 #include <chrono>
 #include <iostream>
+#include <exception>
+#include "packet.hpp"
 #include "networking.hpp"
 
 void NetworkManager::workerThreadLoop() {
@@ -12,7 +14,7 @@ void NetworkManager::workerThreadLoop() {
             }
 
             try {
-                packetRouter(&packet, getServer());
+                packetRouter(*packet, getServer());
             } catch (const std::exception& e) {
                 std::cerr << "Error processing packet: " << e.what() << std::endl;
             }
