@@ -30,6 +30,11 @@ int Server::start_server(int port) {
 		_networkManager = new NetworkManager(workerCount, *this);
 		_networkManager->startThreads();
 
+		while (true) {
+			std::cout << "Server is running..." << std::endl;
+			sleep(10);
+		}
+
 	} catch (const std::exception& e) {
 		std::cout << "Error: " << e.what() << std::endl;
 		return (1);
@@ -53,12 +58,19 @@ int Server::loadConfig() {
 
 		std::cout << "[Server]: Successfully parsed " << ConfigFileName << "!" << std::endl;
 		_gameVersion = j["version"]["name"];
+		std::cout << "[Server]: Game version: " << _gameVersion << std::endl;
 		_protocolVersion = j["version"]["protocol"];
+		std::cout << "[Server]: Protocol version: " << _protocolVersion << std::endl;
 		_serverSize = j["server"]["max-players"];
-		_serverMOTD = j["motd"];
+		std::cout << "[Server]: Server size: " << _serverSize << std::endl;
+		_serverMOTD = j["server"]["motd"];
+		std::cout << "[Server]: Server MOTD: " << _serverMOTD << std::endl;
 		std::string temp = j["server"]["ip-address"];
-		_serverAddr = (char*)temp.c_str();
+		std::cout << "[Server]: Server IP address: " << _serverAddr << std::endl;
+		_serverAddr = const_cast<char*>(temp.c_str());
 		_serverPort = j["server"]["port"];
+		std::cout << "[Server]: Server port: " << _serverPort << std::endl;
+
 
 	} catch (json::parse_error& e) {
 		std::cerr << "[Server]: Json parse error: " << e.what() << std::endl;
