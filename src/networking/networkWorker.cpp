@@ -19,12 +19,17 @@ void NetworkManager::workerThreadLoop() {
                 packetRouter(*packet, getServer());
                 if (packet->getReturnPacket() == 1) {
                     _outgoingPackets.push(packet);
+                    // Don't delete packet here - it will be deleted by sender thread
+                    packet = nullptr;
                 }
             } catch (const std::exception& e) {
                 std::cerr << "Error processing packet: " << e.what() << std::endl;
             }
         }
 
-        delete packet;
+        // Only delete if packet wasn't moved to outgoing queue
+        if (packet != nullptr) {
+            delete packet;
+        }
     }
 }

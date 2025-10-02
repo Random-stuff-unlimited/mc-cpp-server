@@ -16,6 +16,12 @@ void Buffer::writeByte(uint8_t byte) {
     _data.push_back(byte);
 }
 
+void Buffer::writeBytes(const std::string &data) {
+    for (char c : data) {
+        writeByte(static_cast<uint8_t>(c));
+    }
+}
+
 int Buffer::readVarInt() {
     int value = 0, position = 0;
     uint8_t currentByte;

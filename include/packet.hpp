@@ -18,6 +18,7 @@ class Packet {
 	public:
 		Packet(Player *player);
 		Packet(int socketFd, Server &server);
+		~Packet();
         static int readVarint(int sock);
         static void writeVarint(int sock, int value);
 		static int varintLen(int value);
@@ -29,6 +30,8 @@ class Packet {
 		void	setReturnPacket(int value);
 		int		getReturnPacket();
 		int     getVarintSize(int32_t value);
+		void	setPacketSize(int32_t value);
+		void	setPacketId(int32_t value);
 };
 
 #endif

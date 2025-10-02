@@ -78,15 +78,21 @@ void NetworkManager::senderThreadLoop() {
 		Packet* p = nullptr;
 
 		while (_outgoingPackets.tryPop(p)) {
+			if (p == nullptr) {
+				break;
+			}
+
 			try {
-				send(p->getSocket(),static_cast<const void *>(&p->getData().getData()), p->getSize(), MSG_NOSIGNAL); // May break ||SEND
-				delete p;
+				std::cout << "Sending packet to player " << std::endl;
+				send(p->getSocket(), p->getData().getData().data(), p->getSize(), MSG_NOSIGNAL);
 			} catch (const std::exception& e) {
 				std::cerr << "[Network Manager] Failed to send packet: " << e.what() << std::endl;
-				delete p;
 			}
+			delete p;
+			p = nullptr;
+			std::cout << "Packet sent" << std::endl;
 		}
-		usleep(1000); // 1ms
+		usleep(1000);
 	}
 }
 
@@ -99,7 +105,9 @@ void NetworkManager::handleIncomingData(Player* connection) {
 	std::cout << "Handling incoming data for player " << std::endl;
 	try {
 		p = new Packet(connection);
+		std::cout << "1 test" << std::endl;
 		_incomingPackets.push(p);
+		std::cout << "2 test" << std::endl;
 	} catch (const std::exception& e) {
 		std::cerr << "[Network Manager] Failed to receive packet 1: " << e.what() << std::endl;
 	}

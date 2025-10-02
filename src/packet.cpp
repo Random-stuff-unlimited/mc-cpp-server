@@ -15,6 +15,11 @@
 
 using json = nlohmann::json;
 
+Packet::~Packet() {
+    // Destructor - cleanup handled by RAII for std::vector and other members
+    // No explicit cleanup needed as _data (Buffer) contains std::vector which manages its own memory
+}
+
 Packet::Packet(Player *player)  : _player(player), _socketFd(-1), _returnPacket(0)
 {
     if (_player == nullptr)
@@ -131,3 +136,5 @@ uint32_t Packet::getSize() {return (_size);}
 uint32_t Packet::getId() {return (_id);}
 Buffer &Packet::getData() {return (_data);}
 int	Packet::getSocket() const {return (_socketFd);};
+void    Packet::setPacketSize(int32_t value) {_size = value;}
+void    Packet::setPacketId(int32_t value) {_id = value;}

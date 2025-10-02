@@ -28,6 +28,7 @@ class Buffer {
 		uint64_t readUInt64();
 		uint8_t readByte();
 		void writeByte(uint8_t byte);
+		void writeBytes(const std::string &data);
 };
 
 
