@@ -10,42 +10,88 @@
 #include <stdexcept>
 #include <exception>
 #include <cstdint>
+#include <iostream>
 
 
 using json = nlohmann::json;
 
-Packet::Packet(Player *player) : _player(player), _socketFd(-1), _returnPacket(0) {
-	_size = readVarint(_socketFd);
-	_id = readVarint(_socketFd);
-	if (player != nullptr)
-		_socketFd =  _player->getSocketFd();
-	if (_size > 0) {
-		std::vector<uint8_t> tmp(_size);
-		ssize_t bytesRead = ::read(_socketFd, tmp.data(), _size);
-		if (bytesRead != _size) {
-			throw std::runtime_error("error on packet reading");
-		}
-		_data = Buffer(tmp);
-	}
+Packet::Packet(Player *player)  : _player(player), _socketFd(-1), _returnPacket(0)
+{
+    if (_player == nullptr)
+        throw std::runtime_error("Packet init with null player");
+    _socketFd = _player->getSocketFd();
+    _size = readVarint(_socketFd);
+    _id = readVarint(_socketFd);
+    int remaining = _size - getVarintSize(_id);
+    if (remaining < 0)
+        throw std::runtime_error("Invalid packet size");
+    if (remaining > 0) {
+        std::vector<uint8_t> tmp(remaining);
+        ssize_t totalRead = 0;
+
+        while (totalRead < remaining) {
+            ssize_t bytesRead = ::read(_socketFd, tmp.data() + totalRead, remaining - totalRead);
+            if (bytesRead <= 0) {
+                throw std::runtime_error("error on packet reading (socket closed or error)");
+            }
+            totalRead += bytesRead;
+        }
+
+        std::cout << "Packet total size: " << _size << std::endl;
+        std::cout << "Packet id: " << _id << std::endl;
+        std::cout << "Data size: " << remaining << std::endl;
+        std::cout << "Read size: " << totalRead << std::endl;
+
+        _data = Buffer(tmp);
+    }
 }
 
+
 Packet::Packet(int socketFd, Server &server) : _player(nullptr), _socketFd(socketFd), _returnPacket(0) {
-	_size = readVarint(_socketFd);
-	_id = readVarint(_socketFd);
-	try {
-		_player = server.addPlayer("None", PlayerState::Handshake, socketFd);
-	} catch(const std::exception& e) {
-		_player = nullptr;
-		throw std::runtime_error("error on packet player init");
-	}
-	if (_size > 0) {
-		std::vector<uint8_t> tmp(_size);
-		ssize_t bytesRead = ::read(_socketFd, tmp.data(), _size);
-		if (bytesRead != _size) {
-			throw std::runtime_error("error on packet reading");
-		}
-		_data = Buffer(tmp);
-	}
+
+    _size = readVarint(_socketFd);
+    _id = readVarint(_socketFd);
+
+    int remaining = _size - (getVarintSize(_id));
+
+    if (remaining < 0)
+        throw std::runtime_error("Invalid packet size");
+
+    try {
+        _player = server.addPlayer("None", PlayerState::Handshake, socketFd);
+    } catch(const std::exception& e) {
+        _player = nullptr;
+        throw std::runtime_error("error on packet player init");
+    }
+
+    if (remaining > 0) {
+        std::vector<uint8_t> tmp(remaining);
+        ssize_t totalRead = 0;
+
+        while (totalRead < remaining) {
+            ssize_t bytesRead = ::read(_socketFd, tmp.data() + totalRead, remaining - totalRead);
+            if (bytesRead <= 0) {
+                throw std::runtime_error("error on packet reading (socket closed or error)");
+            }
+            totalRead += bytesRead;
+        }
+
+        std::cout << "Packet total size: " << _size << std::endl;
+        std::cout << "Packet id: " << _id << std::endl;
+        std::cout << "Data size: " << remaining << std::endl;
+        std::cout << "Read size: " << totalRead << std::endl;
+
+        _data = Buffer(tmp);
+    }
+}
+
+int Packet::getVarintSize(int32_t value) {
+    int size = 0;
+    do {
+        value >>= 7;
+        size++;
+    } while (value != 0);
+    return size;
 }
 
 int Packet::readVarint(int sock) {

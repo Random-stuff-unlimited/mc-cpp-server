@@ -15,6 +15,7 @@ void NetworkManager::workerThreadLoop() {
             }
 
             try {
+                std::cout << "Handling incoming data for player " << std::endl;
                 packetRouter(*packet, getServer());
                 if (packet->getReturnPacket() == 1) {
                     _outgoingPackets.push(packet);

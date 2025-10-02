@@ -28,6 +28,7 @@ class Packet {
 		int		getSocket() const;
 		void	setReturnPacket(int value);
 		int		getReturnPacket();
+		int     getVarintSize(int32_t value);
 };
 
 #endif

@@ -96,22 +96,22 @@ void NetworkManager::enqueueOutgoingPacket(Packet* p) {
 
 void NetworkManager::handleIncomingData(Player* connection) {
 	Packet *p;
-
+	std::cout << "Handling incoming data for player " << std::endl;
 	try {
 		p = new Packet(connection);
 		_incomingPackets.push(p);
 	} catch (const std::exception& e) {
-		std::cerr << "[Network Manager] Failed to receive packet: " << e.what() << std::endl;
+		std::cerr << "[Network Manager] Failed to receive packet 1: " << e.what() << std::endl;
 	}
 }
 
 void NetworkManager::handleIncomingData(int socket) {
-	Packet *p;
-
+    Packet *p;
+    std::cout << "Handling incoming data for socket " << socket << std::endl;
 	try {
 		p = new Packet(socket, getServer());
 		_incomingPackets.push(p);
 	} catch (const std::exception& e) {
-		std::cerr << "[Network Manager] Failed to receive packet: " << e.what() << std::endl;
+		std::cerr << "[Network Manager] Failed to receive packet 2: " << e.what() << std::endl;
 	}
 }
