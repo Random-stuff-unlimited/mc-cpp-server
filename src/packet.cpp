@@ -1,11 +1,11 @@
 #include "packet.hpp"
 #include "buffer.hpp"
+#include "enums.hpp"
 #include "player.hpp"
 #include "json.hpp"
 #include "server.hpp"
 #include <sys/types.h>
 #include <unistd.h>
-#include <iostream>
 #include <vector>
 #include <stdexcept>
 #include <exception>
@@ -14,30 +14,11 @@
 
 using json = nlohmann::json;
 
-Packet::Packet(Player *player, Server &server) : _player(player), _socketFd(-1), _returnPacket(0) {
+Packet::Packet(Player *player) : _player(player), _socketFd(-1), _returnPacket(0) {
 	_size = readVarint(_socketFd);
 	_id = readVarint(_socketFd);
 	if (player != nullptr)
 		_socketFd =  _player->getSocketFd();
-	try {
-		_player = new Player();
-		_player->setSocketFd(_socketFd);
-		_player->getPlayerState();
-		try
-		{
-			server.addPlayer(_player);
-			delete _player;
-			_player = &server.getLastPlayer();
-		}
-		catch(const std::exception& e)
-		{
-			delete _player;
-			_player = nullptr;
-			std::cerr << e.what() << '\n';
-		}
-	} catch(const std::exception& e) {
-		throw std::runtime_error("error on packet player init");
-	}
 	if (_size > 0) {
 		std::vector<uint8_t> tmp(_size);
 		ssize_t bytesRead = ::read(_socketFd, tmp.data(), _size);
@@ -48,29 +29,15 @@ Packet::Packet(Player *player, Server &server) : _player(player), _socketFd(-1),
 	}
 }
 
-Packet::Packet(int socketFd, Server &server) : _player(NULL), _socketFd(socketFd), _returnPacket(0) {
+Packet::Packet(int socketFd, Server &server) : _player(nullptr), _socketFd(socketFd), _returnPacket(0) {
 	_size = readVarint(_socketFd);
 	_id = readVarint(_socketFd);
 	try {
-		_player = new Player();
-		_player->setSocketFd(_socketFd);
-		_player->getPlayerState();
-		try
-		{
-			server.addPlayer(_player);
-			delete _player;
-			_player = &server.getLastPlayer();
-		}
-		catch(const std::exception& e)
-		{
-			delete _player;
-			_player = nullptr;
-			std::cerr << e.what() << '\n';
-		}
+		_player = server.addPlayer("None", PlayerState::Handshake, socketFd);
 	} catch(const std::exception& e) {
+		_player = nullptr;
 		throw std::runtime_error("error on packet player init");
 	}
-
 	if (_size > 0) {
 		std::vector<uint8_t> tmp(_size);
 		ssize_t bytesRead = ::read(_socketFd, tmp.data(), _size);

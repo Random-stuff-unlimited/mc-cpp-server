@@ -2,11 +2,12 @@
 #include "json.hpp"
 #include "networking.hpp"
 #include "player.hpp"
+#include "enums.hpp"
 #include <iostream>
 #include <fstream>
-#include <algorithm>
 #include <string>
 #include <exception>
+#include <cstddef>
 
 using json = nlohmann::json;
 
@@ -67,23 +68,29 @@ int Server::loadConfig() {
 	return (0);
 }
 
-void Server::addPlayer(Player *player) {
-	_playerLst.push_back(*player);
+Player* Server::addPlayer(const std::string &name, const PlayerState state, const int socket) {
+	Player* newPlayer = nullptr;
+	try
+	{
+		newPlayer = new Player(name, state, socket);
+	} catch (std::exception& e) {
+		std::cerr << "[Server]: Error adding player: " << e.what() << std::endl;
+		return (nullptr);
+	}
+	newPlayer->setPlayerName(name);
+	newPlayer->setPlayerState(state);
+	newPlayer->setSocketFd(socket);
+	_playerLst[socket] = newPlayer;
+	return (newPlayer);
 }
 
 void Server::removePlayer(Player *player) {
-    auto it = std::remove_if(_playerLst.begin(), _playerLst.end(),
-        [player](const Player &p) {
-            return &p == player;
-        });
-
-    if (it != _playerLst.end()) {
-        _playerLst.erase(it, _playerLst.end());
+    if (!player) {
+        return;
     }
-}
-
-Player& Server::getLastPlayer() {
-    return _playerLst.back();
+    int socket = player->getSocketFd();
+    delete player;
+    _playerLst.erase(socket);
 }
 
 void	Server::addPlayerToSample(const std::string &name)
@@ -94,16 +101,16 @@ void	Server::addPlayerToSample(const std::string &name)
 void	Server::removePlayerToSample(const std::string &name)
 {
 	for (size_t i = 0; i < _playerLst.size(); i++)
-		if(_playerLst[i].getPlayerName() == name)
+		if(_playerSample[i] == name)
 		{
-			_playerLst.erase(_playerLst.begin() + i);
+			_playerSample.erase(_playerSample.begin() + i);
 			break ;
 		}
 }
 
 std::string	Server::getGameVersion() {return _gameVersion;}
 std::string	Server::getServerMOTD() {return _serverMOTD;}
-int	Server::getProtocolVersion() {return _protocolVersion;}
-int	Server::getServerSize() {return _serverSize;}
-int	Server::getAmountOnline() {return 69;}
-json	Server::getPlayerSample() {return _playerSample;}
+int			Server::getProtocolVersion() {return _protocolVersion;}
+int			Server::getServerSize() {return _serverSize;}
+int			Server::getAmountOnline() {return _playerLst.size();}
+json		Server::getPlayerSample() {return _playerSample;}
