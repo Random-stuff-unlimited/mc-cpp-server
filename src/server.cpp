@@ -1,6 +1,5 @@
 #include "server.hpp"
 #include "json.hpp"
-
 #include "networking.hpp"
 #include "player.hpp"
 #include <iostream>
@@ -11,14 +10,25 @@
 
 using json = nlohmann::json;
 
-Server::Server() : _playerLst(), _protocolVersion(770), _serverSize(-100000000), _gameVersion("1.12.5"), _serverMOTD() {}
+Server::Server() : _playerLst(), _protocolVersion(770), _serverSize(-100000000), _gameVersion("1.12.5"), _serverMOTD(), _networkManager(nullptr) {}
 
-Server::~Server() {}
+Server::~Server() {
+   	if (_networkManager) {
+		_networkManager->stopThreads();
+		delete _networkManager;
+	}
+}
 
 int Server::start_server(int port) {
 	try {
 		Server::loadConfig();
+		size_t workerCount = 4;
+		if (workerCount == 0) workerCount = 4; // fallback
 
+		T& self = *this;
+		// Create NetworkManager with BOTH required parameters
+		_networkManager = new NetworkManager(workerCount, self);
+		_networkManager->startThreads();
 
 	} catch (const std::exception& e) {
 		std::cout << "Error: " << e.what() << std::endl;

@@ -1,6 +1,7 @@
 #ifndef SERVER_HPP
 # define SERVER_HPP
 
+#include "networking.hpp"
 # include "player.hpp"
 # include <mutex>
 # include <netinet/in.h>
@@ -24,6 +25,7 @@ class Server
 		std::string 		_serverMOTD;
 		int 				_serverPort;
 		char*				_serverAddr;
+		NetworkManager*		_networkManager;
 
 	public:
 		Server();
