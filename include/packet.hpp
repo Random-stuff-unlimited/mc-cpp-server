@@ -16,10 +16,10 @@ class Packet {
 		int				_returnPacket;
 
 	public:
-		Packet(Player *player, Server &server);
-        Packet(int socketFd, Server &server);
+		Packet(Player *player);
+		Packet(int socketFd, Server &server);
         static int readVarint(int sock);
-		static void writeVarint(int sock, int value);
+        static void writeVarint(int sock, int value);
 		static int varintLen(int value);
 		Player *getPlayer() const;
 		uint32_t getSize();

@@ -15,6 +15,7 @@
 #include <unistd.h>
 #include <cstdint>
 
+
 void NetworkManager::receiverThreadLoop() {
 	const int MaxEvent = 256;
 	epoll_event events[MaxEvent];
@@ -24,7 +25,6 @@ void NetworkManager::receiverThreadLoop() {
 
 		if (eventCount == -1) {
 			if (errno == EINTR) continue;
-			// Log error and break on other errors
 			break;
 		}
 
@@ -32,39 +32,41 @@ void NetworkManager::receiverThreadLoop() {
 			int fd = events[i].data.fd;
 			uint32_t eventFlags = events[i].events;
 
-			Player* p;
-			for (unsigned int i = 0; i < getServer().getPlayerLst().size(); i++) {
-				if (fd == getServer().getPlayerLst()[i].getSocketFd()) {
-					p = &getServer().getPlayerLst()[i];
-					break ;
+			if (fd == _serverSocket) {
+				sockaddr_in client_addr{};
+				socklen_t addr_len = sizeof(client_addr);
+				int client_fd = accept(_serverSocket, (sockaddr*)&client_addr, &addr_len);
+				if (client_fd != -1) {
+					handleIncomingData(client_fd);
+					epoll_event event;
+					event.events = EPOLLIN;
+					event.data.fd = client_fd;
+					epoll_ctl(_epollFd, EPOLL_CTL_ADD, client_fd, &event);
 				}
+                continue;
 			}
-			// Handle different types of events
+
+			auto it = getServer().getPlayerLst().find(fd);
+			Player* p = nullptr;
+			if (it != getServer().getPlayerLst().end())
+			    p = it->second;
+
+			if (!p)
+				continue;
+
 			if (eventFlags & EPOLLERR || eventFlags & EPOLLHUP) {
-				// Connection error or hangup - remove player
-				{
-					getServer().removePlayer(p);
-				}
+				getServer().removePlayer(p);
+				epoll_ctl(_epollFd, EPOLL_CTL_DEL, fd, nullptr);
 				close(fd);
 				continue;
 			}
 
 			if (eventFlags & EPOLLIN) {
-				// Data available to read
 				try {
-					if (!p) {
-						sockaddr_in client_addr{};
-              			socklen_t addr_len = sizeof(client_addr);
-		                int client_fd = accept(_epollFd, (sockaddr*)&client_addr, &addr_len);
-						handleIncomingData(client_fd);
-					} else {
-						handleIncomingData(p);
-					}
+					handleIncomingData(p);
 				} catch (const std::exception& e) {
-					// Handle parsing errors - disconnect player
-					{
-						getServer().removePlayer(p);
-					}
+					getServer().removePlayer(p);
+					epoll_ctl(_epollFd, EPOLL_CTL_DEL, fd, nullptr);
 					close(fd);
 				}
 			}
@@ -97,7 +99,7 @@ void NetworkManager::handleIncomingData(Player* connection) {
 	Packet *p;
 
 	try {
-		p = new Packet(connection, getServer());
+		p = new Packet(connection);
 		_incomingPackets.push(p);
 	} catch (const std::exception& e) {
 		std::cerr << "[Network Manager] Failed to receive packet: " << e.what() << std::endl;
