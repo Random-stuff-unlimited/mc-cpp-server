@@ -1,5 +1,8 @@
 .obj
-.vscode
 engine
 .deps
 build
+
+# Generated LSP files
+compile_commands.json
+.cache

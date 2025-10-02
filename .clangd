@@ -1,0 +1,28 @@
+CompileFlags:
+  Add:
+    - "-std=c++17"
+    - "-Wall"
+    - "-Wextra"
+    - "-Wpedantic"
+    - "-Iinclude"
+  Remove:
+    - "-W*"
+    - "-f*"
+
+Index:
+  Background: Build
+
+Diagnostics:
+  UnusedIncludes: Strict
+  MissingIncludes: Strict
+
+InlayHints:
+  Enabled: true
+  ParameterNames: true
+  DeducedTypes: true
+
+Hover:
+  ShowAKA: true
+
+Completion:
+  AllScopes: true

@@ -11,53 +11,7 @@
 # include <atomic>
 # include <condition_variable>
 # include <chrono>
-# include <unordered_map>
 # include <memory>
-
-class NetworkManager {
-	private:
-		ThreadSafeQueue<Packet*>	_incomingPackets;
-		ThreadSafeQueue<Packet*>	_outgoingPackets;
-
-		std::vector<std::thread>	_workerThreads;
-		std::atomic<bool>			_shutdownFlag;
-		std::thread 				_receiverThread;
-		std::thread 				_senderThread;
-		char						_receiverThreadInit; 
-		char						_senderThreadInit;
-		Server& 					_server;
-		int 						_epollFd;
-		int							_serverSocket;
-
-	public:
-		NetworkManager(size_t worker_count, Server& s); // Could use std::thread::hardware_concurrency() for the worker size;
-		~NetworkManager() {
-			if (_epollFd != -1) {
-            	close(_epollFd);
-        	}
-		}
-
-
-		void start();
-		void startThreads();
-		void stopThreads();
-		void shutdown();
-
-		void addPlayerConnection(std::shared_ptr<Player> connection);
-		void removePlayerConnection(UUID id);
-
-		Server& getServer() {return _server; }
-
-		void enqueueOutgoingPacket(Packet* p);
-	private:
-		void receiverThreadLoop();
-		void senderThreadLoop();
-		void workerThreadLoop();
-
-		void setupEpoll();
-		void handleIncomingData(Player* connection);
-		void handleIncomingData(int socket);
-};
 
 template<typename T>
 class ThreadSafeQueue {
@@ -106,6 +60,51 @@ class ThreadSafeQueue {
 			return _queue.size();
 		}
 
+};
+
+class NetworkManager {
+	private:
+		ThreadSafeQueue<Packet*>	_incomingPackets;
+		ThreadSafeQueue<Packet*>	_outgoingPackets;
+
+		std::vector<std::thread>	_workerThreads;
+		std::atomic<bool>			_shutdownFlag;
+		std::thread 				_receiverThread;
+		std::thread 				_senderThread;
+		char						_receiverThreadInit;
+		char						_senderThreadInit;
+		Server& 					_server;
+		int 						_epollFd;
+		int							_serverSocket;
+
+	public:
+		NetworkManager(size_t worker_count, Server& s); // Could use std::thread::hardware_concurrency() for the worker size;
+		~NetworkManager() {
+			if (_epollFd != -1) {
+            	close(_epollFd);
+        	}
+		}
+
+
+		void start();
+		void startThreads();
+		void stopThreads();
+		void shutdown();
+
+		void addPlayerConnection(std::shared_ptr<Player> connection);
+		void removePlayerConnection(UUID id);
+
+		Server& getServer() {return _server; }
+
+		void enqueueOutgoingPacket(Packet* p);
+	private:
+		void receiverThreadLoop();
+		void senderThreadLoop();
+		void workerThreadLoop();
+
+		void setupEpoll();
+		void handleIncomingData(Player* connection);
+		void handleIncomingData(int socket);
 };
 
 void	packetRouter(Packet &packet, Server &server);

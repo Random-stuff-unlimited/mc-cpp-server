@@ -23,7 +23,7 @@ class Player
 		std::string	getPlayerName(void);
 		void		setPlayerName(const std::string &name);
 		PlayerState	getPlayerState();
-		void	Player::setPlayerState(PlayerState state);
+		void		setPlayerState(PlayerState state);
 		void	setSocketFd(int socket);
 		int	getSocketFd() const ;
 };
