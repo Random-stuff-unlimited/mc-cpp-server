@@ -15,6 +15,11 @@ void NetworkManager::workerThreadLoop() {
 
             try {
                 packetRouter(*packet, getServer());
+                if (packet->getReturnPacket() == 1) {
+                    _outgoingPackets.push(packet);
+                } else {
+                    delete packet;
+                }
             } catch (const std::exception& e) {
                 std::cerr << "Error processing packet: " << e.what() << std::endl;
             }
