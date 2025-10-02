@@ -18,11 +18,11 @@ void NetworkManager::receiverThreadLoop() {
 			// Log error and break on other errors
 			break;
 		}
-		
+
 		for (int i = 0; i < eventCount; i++) {
 			int fd = events[i].data.fd;
 			uint32_t eventFlags = events[i].events;
-		
+
 			Player* p;
 			for (int i = 0; i < getServer().getServerPlayer().size(); i++) {
 				if (fd == getServer().getServerPlayer()[i].getSocketFd()) {
@@ -39,7 +39,7 @@ void NetworkManager::receiverThreadLoop() {
 				close(fd);
 				continue;
 			}
-			
+
 			if (eventFlags & EPOLLIN) {
 				// Data available to read
 				try {
@@ -81,7 +81,7 @@ void NetworkManager::senderThreadLoop() {
 }
 
 void NetworkManager::enqueueOutgoingPacket(Packet* p) {
-	_outgoingPackets.push(p); 
+	_outgoingPackets.push(p);
 }
 
 void NetworkManager::handleIncomingData(Player* connection) {
@@ -107,5 +107,5 @@ void NetworkManager::handleIncomingData(int socket) {
 }
 
 void NetworkManager::workerThreadLoop() {
-	
+
 }
