@@ -3,6 +3,7 @@
 #include <exception>
 #include "packet.hpp"
 #include "networking.hpp"
+#include "server.hpp"
 
 void NetworkManager::workerThreadLoop() {
     while (!_shutdownFlag.load()) {

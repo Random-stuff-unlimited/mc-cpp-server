@@ -1,7 +1,8 @@
 #ifndef SERVER_HPP
 # define SERVER_HPP
 
-#include "networking.hpp"
+// Forward declaration to avoid circular dependency
+class NetworkManager;
 # include "player.hpp"
 # include <mutex>
 # include <netinet/in.h>
@@ -16,19 +17,6 @@ using json = nlohmann::json;
 class Server
 {
 	private:
-<<<<<<< HEAD
-		std::vector<Player>	_playerLst;
-		json				_playerSample;
-		std::mutex			_playerLock;
-		int					_protocolVersion;
-		int					_serverSize;
-		int					loadConfig();
-		std::string			_gameVersion;
-		std::string 		_serverMOTD;
-		int 				_serverPort;
-		char*				_serverAddr;
-		NetworkManager*		_networkManager;
-=======
 		std::unordered_map<int, Player*>	_playerLst;
 		json								_playerSample;
 		std::mutex							_playerLock;
@@ -39,7 +27,7 @@ class Server
 		std::string							_serverMOTD;
 		int									_serverPort;
 		char*								_serverAddr;
->>>>>>> refs/remotes/origin/skyvence/new-networking
+		NetworkManager*						_networkManager;
 
 	public:
 		Server();

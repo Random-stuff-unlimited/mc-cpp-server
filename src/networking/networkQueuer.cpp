@@ -15,7 +15,6 @@
 #include <unistd.h>
 #include <cstdint>
 
-
 void NetworkManager::receiverThreadLoop() {
 	const int MaxEvent = 256;
 	epoll_event events[MaxEvent];
@@ -115,8 +114,4 @@ void NetworkManager::handleIncomingData(int socket) {
 	} catch (const std::exception& e) {
 		std::cerr << "[Network Manager] Failed to receive packet: " << e.what() << std::endl;
 	}
-}
-
-void NetworkManager::workerThreadLoop() {
-
 }

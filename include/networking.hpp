@@ -3,8 +3,10 @@
 
 # include "packet.hpp"
 # include "player.hpp"
-# include "server.hpp"
 # include "UUID.hpp"
+
+// Forward declaration to avoid circular dependency
+class Server;
 # include <queue>
 # include <thread>
 # include <mutex>

@@ -26,9 +26,8 @@ int Server::start_server(int port) {
 		size_t workerCount = 4;
 		if (workerCount == 0) workerCount = 4; // fallback
 
-		T& self = *this;
 		// Create NetworkManager with BOTH required parameters
-		_networkManager = new NetworkManager(workerCount, self);
+		_networkManager = new NetworkManager(workerCount, *this);
 		_networkManager->startThreads();
 
 	} catch (const std::exception& e) {
