@@ -22,6 +22,7 @@ class Packet {
         static int readVarint(int sock);
         static void writeVarint(int sock, int value);
 		static int varintLen(int value);
+		static bool isSocketValid(int sock);
 		Player *getPlayer() const;
 		uint32_t getSize();
 		uint32_t getId();
