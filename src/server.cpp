@@ -1,5 +1,6 @@
 #include "server.hpp"
 #include "json.hpp"
+#include "networking.hpp"
 #include "player.hpp"
 #include "enums.hpp"
 #include <iostream>
@@ -17,6 +18,7 @@ Server::~Server() {}
 int Server::start_server(int port) {
 	try {
 		Server::loadConfig();
+
 
 	} catch (const std::exception& e) {
 		std::cout << "Error: " << e.what() << std::endl;
@@ -42,8 +44,11 @@ int Server::loadConfig() {
 		std::cout << "[Server]: Successfully parsed " << ConfigFileName << "!" << std::endl;
 		_gameVersion = j["version"]["name"];
 		_protocolVersion = j["version"]["protocol"];
-		_serverSize = j["maxPlayer"];
-		_serverMOTD = j["serverMotd"];
+		_serverSize = j["server"]["max-players"];
+		_serverMOTD = j["motd"];
+		std::string temp = j["server"]["ip-address"];
+		_serverAddr = (char*)temp.c_str();
+		_serverPort = j["server"]["port"];
 
 	} catch (json::parse_error& e) {
 		std::cerr << "[Server]: Json parse error: " << e.what() << std::endl;
