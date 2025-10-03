@@ -61,14 +61,14 @@ struct Size {
 	Size(int w = 0, int h = 0) : width(w), height(h) {}
 };
 
-class Console {
+class Term {
   private:
 	struct termios original_termios;
 	bool raw_mode_enabled = false;
 
   public:
-	Console();
-	~Console() {
+	Term();
+	~Term() {
 		disableRawMode();
 	}
 	void enableRawMode() {

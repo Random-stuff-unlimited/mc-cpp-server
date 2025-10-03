@@ -1,5 +1,5 @@
 #pragma once
-#include "console.hpp"
+#include "terminal.hpp"
 
 enum class EventType { KEY_PRESS, RESIZE, QUIT };
 
