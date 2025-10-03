@@ -1,17 +1,19 @@
 #ifndef UUID_HPP
 #define UUID_HPP
 
-# include <cstdint>
-# include <string>
+#include <cstdint>
+#include <string>
 
 class Buffer;
 class Player;
 
-class UUID {
-private:
-	uint64_t		_mostSigBits;
-	uint64_t		_leastSigBits;
-public:
+class UUID
+{
+  private:
+	uint64_t _mostSigBits;
+	uint64_t _leastSigBits;
+
+  public:
 	UUID();
 	UUID(uint64_t most, uint64_t least);
 	~UUID();
@@ -23,8 +25,8 @@ public:
 
 	std::string toString() const;
 
-	void readFromBuffer(Buffer &buf);
-	void writeToBuffer(Buffer &buf) const;
+	void readFromBuffer(Buffer& buf);
+	void writeToBuffer(Buffer& buf) const;
 };
 
 #endif
