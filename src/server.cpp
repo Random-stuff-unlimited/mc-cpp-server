@@ -1,21 +1,21 @@
-#include "server.hpp"
-
 #include "enums.hpp"
 #include "json.hpp"
 #include "networking.hpp"
 #include "player.hpp"
+#include "server.hpp"
 
 #include <cstddef>
 #include <exception>
 #include <fstream>
 #include <iostream>
 #include <string>
+#include <unistd.h>
 
 using json = nlohmann::json;
 
 Server::Server()
     : _playerLst(), _protocolVersion(770), _serverSize(-100000000), _gameVersion("1.12.5"),
-      _serverMOTD(), _networkManager(nullptr) {}
+      _serverMOTD(), _serverAddr("0.0.0.0"), _serverPort(25565), _networkManager(nullptr) {}
 
 Server::~Server() {
 	if (_networkManager) {

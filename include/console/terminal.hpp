@@ -1,5 +1,4 @@
 #pragma once
-#include <asm-generic/ioctls.h>
 #include <iostream>
 #include <sys/ioctl.h>
 #include <termios.h>
@@ -64,7 +63,7 @@ class Term {
 	bool raw_mode_enabled = false;
 
   public:
-	Term();
+	Term() = default;
 	~Term() {
 		disableRawMode();
 	}
@@ -95,35 +94,32 @@ class Term {
 	void clearScreen() const {
 		std::cout << "\033[2J";
 	}
-	void clear_screen() const {
-		std::cout << "\033[2J";
-	}
-	void hide_cursor() const {
+	void hideCursor() const {
 		std::cout << "\033[?25l";
 	}
-	void show_cursor() const {
+	void showCursor() const {
 		std::cout << "\033[?25h";
 	}
-	void move_cursor(int x, int y) const {
+	void moveCursor(int x, int y) const {
 		std::cout << "\033[" << y + 1 << ";" << x + 1 << "H";
 	}
 	void flush() const {
 		std::cout.flush();
 	}
-	void set_color(Color fg, BGColor bg = BGColor::RESET) const {
+	void setColor(Color fg, BGColor bg = BGColor::RESET) const {
 		if (fg != Color::RESET)
 			std::cout << "\033[" << static_cast<int>(fg) << "m";
 		if (bg != BGColor::RESET)
 			std::cout << "\033[" << static_cast<int>(bg) << "m";
 	}
-	void reset_color() const {
+	void resetColor() const {
 		std::cout << "\033[0m";
 	}
-	char read_key() const {
+	char readKey() const {
 		char c;
 		return (read(STDIN_FILENO, &c, 1) == 1) ? c : 0;
 	}
-	Size get_terminal_size() const {
+	Size getTerminalSize() const {
 		struct winsize w;
 		ioctl(STDOUT_FILENO, TIOCGWINSZ, &w);
 		return {w.ws_col, w.ws_row};

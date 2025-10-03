@@ -1,7 +1,7 @@
 #pragma once
 
-#include "event.hpp"
-#include "terminal.hpp"
+#include "console/event.hpp"
+#include "console/terminal.hpp"
 
 #include <string>
 
@@ -57,7 +57,7 @@ class Base {
 	}
 
 	virtual void draw(Term& term) = 0;
-	virtual bool handleEvent(const Event& event) {
+	virtual bool handleEvent(const Event& /* event */) {
 		return false;
 	}
 	virtual void onFocusGained() {}
