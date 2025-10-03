@@ -1,8 +1,7 @@
-#include "packet.hpp"
-
 #include "buffer.hpp"
 #include "enums.hpp"
 #include "json.hpp"
+#include "packet.hpp"
 #include "player.hpp"
 #include "server.hpp"
 
@@ -176,7 +175,7 @@ void Packet::writeVarint(int sock, int value) {
 	std::vector<uint8_t> tmp;
 	Buffer buf(tmp);
 	buf.writeVarInt(value);
-	::write(sock, buf.getData().data(), buf.getData().size());
+	(void)!::write(sock, buf.getData().data(), buf.getData().size());
 }
 
 bool Packet::isSocketValid(int sock) {

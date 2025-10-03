@@ -42,8 +42,8 @@ void handleStatusPacket(Packet& packet, Server& server) {
 	buf.writeBytes(payload.c_str());
 	packet.getData() = buf;
 	packet.setReturnPacket(1);
-
 	packet.setPacketSize(buf.getData().size());
+	packet.getPlayer()->setPlayerState(PlayerState::Status);
 
 	std::cout << "[Status] JSON response ready" << std::endl;
 }

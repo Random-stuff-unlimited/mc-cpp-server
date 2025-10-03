@@ -35,11 +35,16 @@ void NetworkManager::receiverThreadLoop() {
 				socklen_t addr_len = sizeof(client_addr);
 				int client_fd      = accept(_serverSocket, (sockaddr*)&client_addr, &addr_len);
 				if (client_fd != -1) {
-					handleIncomingData(client_fd);
+					std::cout << "[Network Manager] New connection accepted on socket " << client_fd
+					          << std::endl;
 					epoll_event event;
 					event.events  = EPOLLIN;
 					event.data.fd = client_fd;
-					epoll_ctl(_epollFd, EPOLL_CTL_ADD, client_fd, &event);
+					if (epoll_ctl(_epollFd, EPOLL_CTL_ADD, client_fd, &event) == -1) {
+						std::cerr << "[Network Manager] Failed to add new client socket to epoll"
+						          << std::endl;
+						close(client_fd);
+					}
 				}
 				continue;
 			}
@@ -49,11 +54,9 @@ void NetworkManager::receiverThreadLoop() {
 			if (it != getServer().getPlayerLst().end())
 				p = it->second;
 
-			if (!p)
-				continue;
-
 			if (eventFlags & EPOLLERR || eventFlags & EPOLLHUP) {
-				getServer().removePlayer(p);
+				if (p)
+					getServer().removePlayer(p);
 				epoll_ctl(_epollFd, EPOLL_CTL_DEL, fd, nullptr);
 				close(fd);
 				continue;
@@ -61,9 +64,13 @@ void NetworkManager::receiverThreadLoop() {
 
 			if (eventFlags & EPOLLIN) {
 				try {
-					handleIncomingData(p);
+					if (p)
+						handleIncomingData(p);
+					else
+						handleIncomingData(fd);
 				} catch (const std::exception& e) {
-					getServer().removePlayer(p);
+					if (p)
+						getServer().removePlayer(p);
 					epoll_ctl(_epollFd, EPOLL_CTL_DEL, fd, nullptr);
 					close(fd);
 				}
@@ -77,9 +84,8 @@ void NetworkManager::senderThreadLoop() {
 		Packet* p = nullptr;
 
 		while (_outgoingPackets.tryPop(p)) {
-			if (p == nullptr) {
+			if (p == nullptr)
 				break;
-			}
 
 			try {
 				std::cout << "Sending packet to player " << std::endl;
@@ -109,6 +115,7 @@ void NetworkManager::handleIncomingData(Player* connection) {
 		std::cout << "2 test" << std::endl;
 	} catch (const std::exception& e) {
 		std::cerr << "[Network Manager] Failed to receive packet 1: " << e.what() << std::endl;
+		throw;
 	}
 }
 
@@ -120,5 +127,6 @@ void NetworkManager::handleIncomingData(int socket) {
 		_incomingPackets.push(p);
 	} catch (const std::exception& e) {
 		std::cerr << "[Network Manager] Failed to receive packet 2: " << e.what() << std::endl;
+		throw;
 	}
 }
