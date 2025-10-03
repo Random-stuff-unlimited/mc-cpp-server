@@ -6,3 +6,4 @@ build
 # Generated LSP files
 compile_commands.json
 .cache
+.vscode
