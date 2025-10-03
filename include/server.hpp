@@ -15,8 +15,7 @@ class NetworkManager;
 
 using json = nlohmann::json;
 
-class Server
-{
+class Server {
   private:
 	std::unordered_map<int, Player*> _playerLst;
 	json _playerSample;
@@ -41,16 +40,13 @@ class Server
 	int getAmountOnline();
 	std::string getGameVersion();
 	std::string getServerMOTD();
-	int getServerPort()
-	{
+	int getServerPort() {
 		return _serverPort;
 	}
-	char* getServerAddr()
-	{
+	char* getServerAddr() {
 		return _serverAddr;
 	}
-	std::unordered_map<int, Player*>& getPlayerLst()
-	{
+	std::unordered_map<int, Player*>& getPlayerLst() {
 		return _playerLst;
 	}
 

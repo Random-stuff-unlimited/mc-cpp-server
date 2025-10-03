@@ -6,8 +6,7 @@
 
 #include <string>
 
-class Player
-{
+class Player {
   private:
 	std::string _name;
 	PlayerState _state;

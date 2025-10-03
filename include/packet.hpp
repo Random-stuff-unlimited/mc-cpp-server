@@ -7,8 +7,7 @@
 
 #include <cstdint>
 
-class Packet
-{
+class Packet {
   private:
 	int32_t _size;
 	int32_t _id;

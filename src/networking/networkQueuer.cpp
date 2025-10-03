@@ -13,34 +13,28 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
-void NetworkManager::receiverThreadLoop()
-{
+void NetworkManager::receiverThreadLoop() {
 	const int MaxEvent = 256;
 	epoll_event events[MaxEvent];
 
-	while (!_shutdownFlag.load())
-	{
+	while (!_shutdownFlag.load()) {
 		int eventCount = epoll_wait(_epollFd, events, MaxEvent, 50);
 
-		if (eventCount == -1)
-		{
+		if (eventCount == -1) {
 			if (errno == EINTR)
 				continue;
 			break;
 		}
 
-		for (int i = 0; i < eventCount; i++)
-		{
+		for (int i = 0; i < eventCount; i++) {
 			int fd              = events[i].data.fd;
 			uint32_t eventFlags = events[i].events;
 
-			if (fd == _serverSocket)
-			{
+			if (fd == _serverSocket) {
 				sockaddr_in client_addr{};
 				socklen_t addr_len = sizeof(client_addr);
 				int client_fd      = accept(_serverSocket, (sockaddr*)&client_addr, &addr_len);
-				if (client_fd != -1)
-				{
+				if (client_fd != -1) {
 					handleIncomingData(client_fd);
 					epoll_event event;
 					event.events  = EPOLLIN;
@@ -58,22 +52,17 @@ void NetworkManager::receiverThreadLoop()
 			if (!p)
 				continue;
 
-			if (eventFlags & EPOLLERR || eventFlags & EPOLLHUP)
-			{
+			if (eventFlags & EPOLLERR || eventFlags & EPOLLHUP) {
 				getServer().removePlayer(p);
 				epoll_ctl(_epollFd, EPOLL_CTL_DEL, fd, nullptr);
 				close(fd);
 				continue;
 			}
 
-			if (eventFlags & EPOLLIN)
-			{
-				try
-				{
+			if (eventFlags & EPOLLIN) {
+				try {
 					handleIncomingData(p);
-				}
-				catch (const std::exception& e)
-				{
+				} catch (const std::exception& e) {
 					getServer().removePlayer(p);
 					epoll_ctl(_epollFd, EPOLL_CTL_DEL, fd, nullptr);
 					close(fd);
@@ -83,26 +72,19 @@ void NetworkManager::receiverThreadLoop()
 	}
 }
 
-void NetworkManager::senderThreadLoop()
-{
-	while (!_shutdownFlag.load())
-	{
+void NetworkManager::senderThreadLoop() {
+	while (!_shutdownFlag.load()) {
 		Packet* p = nullptr;
 
-		while (_outgoingPackets.tryPop(p))
-		{
-			if (p == nullptr)
-			{
+		while (_outgoingPackets.tryPop(p)) {
+			if (p == nullptr) {
 				break;
 			}
 
-			try
-			{
+			try {
 				std::cout << "Sending packet to player " << std::endl;
 				send(p->getSocket(), p->getData().getData().data(), p->getSize(), MSG_NOSIGNAL);
-			}
-			catch (const std::exception& e)
-			{
+			} catch (const std::exception& e) {
 				std::cerr << "[Network Manager] Failed to send packet: " << e.what() << std::endl;
 			}
 			delete p;
@@ -113,39 +95,30 @@ void NetworkManager::senderThreadLoop()
 	}
 }
 
-void NetworkManager::enqueueOutgoingPacket(Packet* p)
-{
+void NetworkManager::enqueueOutgoingPacket(Packet* p) {
 	_outgoingPackets.push(p);
 }
 
-void NetworkManager::handleIncomingData(Player* connection)
-{
+void NetworkManager::handleIncomingData(Player* connection) {
 	Packet* p;
 	std::cout << "Handling incoming data for player " << std::endl;
-	try
-	{
+	try {
 		p = new Packet(connection);
 		std::cout << "1 test" << std::endl;
 		_incomingPackets.push(p);
 		std::cout << "2 test" << std::endl;
-	}
-	catch (const std::exception& e)
-	{
+	} catch (const std::exception& e) {
 		std::cerr << "[Network Manager] Failed to receive packet 1: " << e.what() << std::endl;
 	}
 }
 
-void NetworkManager::handleIncomingData(int socket)
-{
+void NetworkManager::handleIncomingData(int socket) {
 	Packet* p;
 	std::cout << "Handling incoming data for socket " << socket << std::endl;
-	try
-	{
+	try {
 		p = new Packet(socket, getServer());
 		_incomingPackets.push(p);
-	}
-	catch (const std::exception& e)
-	{
+	} catch (const std::exception& e) {
 		std::cerr << "[Network Manager] Failed to receive packet 2: " << e.what() << std::endl;
 	}
 }

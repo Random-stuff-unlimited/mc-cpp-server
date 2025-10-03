@@ -12,25 +12,20 @@ UUID::UUID() : _mostSigBits(0), _leastSigBits(0) {}
 UUID::UUID(uint64_t most, uint64_t least) : _mostSigBits(most), _leastSigBits(least) {}
 UUID::~UUID() {}
 
-uint64_t UUID::getMostSigBits() const
-{
+uint64_t UUID::getMostSigBits() const {
 	return _mostSigBits;
 }
-uint64_t UUID::getLeastSigBits() const
-{
+uint64_t UUID::getLeastSigBits() const {
 	return _leastSigBits;
 }
-void UUID::setMostSigBits(uint64_t val)
-{
+void UUID::setMostSigBits(uint64_t val) {
 	_mostSigBits = val;
 }
-void UUID::setLeastSigBits(uint64_t val)
-{
+void UUID::setLeastSigBits(uint64_t val) {
 	_leastSigBits = val;
 }
 
-std::string UUID::toString() const
-{
+std::string UUID::toString() const {
 	std::stringstream ss;
 	ss << std::hex << std::setfill('0') << std::setw(8) << ((_mostSigBits >> 32) & 0xFFFFFFFF)
 	   << "-" << std::setw(4) << ((_mostSigBits >> 16) & 0xFFFF) << "-" << std::setw(4)
@@ -39,8 +34,7 @@ std::string UUID::toString() const
 	return ss.str();
 }
 
-void UUID::readFromBuffer(Buffer& buf)
-{
+void UUID::readFromBuffer(Buffer& buf) {
 	uint64_t most = 0, least = 0;
 	for (int i = 0; i < 8; ++i)
 		most = (most << 8) | buf.readByte();
@@ -50,8 +44,7 @@ void UUID::readFromBuffer(Buffer& buf)
 	_leastSigBits = least;
 }
 
-void UUID::writeToBuffer(Buffer& buf) const
-{
+void UUID::writeToBuffer(Buffer& buf) const {
 	for (int i = 7; i >= 0; --i)
 		buf.writeByte((_mostSigBits >> (i * 8)) & 0xFF);
 	for (int i = 7; i >= 0; --i)

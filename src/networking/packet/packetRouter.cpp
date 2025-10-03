@@ -4,15 +4,13 @@
 #include "player.hpp"
 #include "server.hpp"
 
-void packetRouter(Packet& packet, Server& server)
-{
+void packetRouter(Packet& packet, Server& server) {
 	Player* player = packet.getPlayer();
 
 	if (player == nullptr)
 		return;
 
-	switch (player->getPlayerState())
-	{
+	switch (player->getPlayerState()) {
 	case PlayerState::Handshake:
 		handleHandshakePacket(packet, server);
 		break;

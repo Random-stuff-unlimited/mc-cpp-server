@@ -7,8 +7,7 @@
 class Buffer;
 class Player;
 
-class UUID
-{
+class UUID {
   private:
 	uint64_t _mostSigBits;
 	uint64_t _leastSigBits;

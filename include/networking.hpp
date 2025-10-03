@@ -16,23 +16,20 @@ class Server;
 #include <thread>
 #include <unistd.h>
 
-template <typename T> class ThreadSafeQueue
-{
+template <typename T> class ThreadSafeQueue {
   private:
 	std::queue<T> _queue;
 	mutable std::mutex _mutex;
 	std::condition_variable _condition;
 
   public:
-	void push(T item)
-	{
+	void push(T item) {
 		std::lock_guard<std::mutex> lock(_mutex);
 		_queue.push(std::move(item));
 		_condition.notify_one();
 	}
 
-	bool tryPop(T& item)
-	{
+	bool tryPop(T& item) {
 		std::lock_guard<std::mutex> lock(_mutex);
 		if (_queue.empty())
 			return false;
@@ -42,12 +39,10 @@ template <typename T> class ThreadSafeQueue
 		return true;
 	}
 
-	bool waitAndPopTimeout(T& item, const std::chrono::milliseconds& timeout)
-	{
+	bool waitAndPopTimeout(T& item, const std::chrono::milliseconds& timeout) {
 		std::unique_lock<std::mutex> lock(_mutex);
 
-		if (_condition.wait_for(lock, timeout, [this] { return !_queue.empty(); }))
-		{
+		if (_condition.wait_for(lock, timeout, [this] { return !_queue.empty(); })) {
 			item = std::move(_queue.front());
 			_queue.pop();
 			return true;
@@ -55,8 +50,7 @@ template <typename T> class ThreadSafeQueue
 		return false;
 	}
 
-	void waitAndPop(T& item)
-	{
+	void waitAndPop(T& item) {
 		std::unique_lock<std::mutex> lock(_mutex);
 		_condition.wait(lock, [this] { return !_queue.empty(); });
 
@@ -64,15 +58,13 @@ template <typename T> class ThreadSafeQueue
 		_queue.pop();
 	}
 
-	size_t size() const
-	{
+	size_t size() const {
 		std::lock_guard<std::mutex> lock(_mutex);
 		return _queue.size();
 	}
 };
 
-class NetworkManager
-{
+class NetworkManager {
   private:
 	ThreadSafeQueue<Packet*> _incomingPackets;
 	ThreadSafeQueue<Packet*> _outgoingPackets;
@@ -90,10 +82,8 @@ class NetworkManager
   public:
 	NetworkManager(size_t worker_count,
 	               Server& s); // Could use std::thread::hardware_concurrency() for the worker size;
-	~NetworkManager()
-	{
-		if (_epollFd != -1)
-		{
+	~NetworkManager() {
+		if (_epollFd != -1) {
 			close(_epollFd);
 		}
 	}
@@ -106,8 +96,7 @@ class NetworkManager
 	void addPlayerConnection(std::shared_ptr<Player> connection);
 	void removePlayerConnection(UUID id);
 
-	Server& getServer()
-	{
+	Server& getServer() {
 		return _server;
 	}
 

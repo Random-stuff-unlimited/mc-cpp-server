@@ -6,8 +6,7 @@
 #include <string>
 #include <vector>
 
-class Buffer
-{
+class Buffer {
   private:
 	std::vector<uint8_t> _data;
 	size_t _pos;
