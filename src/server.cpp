@@ -14,7 +14,7 @@ using json = nlohmann::json;
 
 Server::Server()
     : _playerLst(), _protocolVersion(770), _serverSize(-100000000), _gameVersion("1.12.5"),
-      _serverMOTD(), _serverAddr("0.0.0.0"), _serverPort(25565), _networkManager(nullptr) {}
+      _serverMOTD(), _serverPort(25565), _serverAddr("0.0.0.0"), _networkManager(nullptr) {}
 
 Server::~Server() {
 	if (_networkManager) {
@@ -69,10 +69,8 @@ int Server::loadConfig() {
 		std::cout << "[Server]: Server size: " << _serverSize << std::endl;
 		_serverMOTD = j["server"]["motd"];
 		std::cout << "[Server]: Server MOTD: " << _serverMOTD << std::endl;
-		std::string temp = j["server"]["ip-address"];
-		std::cout << "[Server]: Server IP address before conversion: " << temp << std::endl;
-		_serverAddr = const_cast<char*>(temp.c_str());
-		std::cout << "[Server]: Server IP address after conversion: " << temp << std::endl;
+		_serverAddr = j["server"]["ip-address"];
+		std::cout << "[Server]: Server IP address : " << _serverAddr << std::endl;
 		_serverPort = j["server"]["port"];
 		std::cout << "[Server]: Server port: " << _serverPort << std::endl;
 	} catch (json::parse_error& e) {

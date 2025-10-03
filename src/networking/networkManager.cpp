@@ -97,10 +97,10 @@ void NetworkManager::start() {
 	serverAddr.sin_family = AF_INET;
 	serverAddr.sin_port   = htons(getServer().getServerPort());
 
-	if (strcmp(getServer().getServerAddr(), "0.0.0.0") == 0) {
+	if (strcmp(getServer().getServerAddr().c_str(), "0.0.0.0") == 0) {
 		serverAddr.sin_addr.s_addr = INADDR_ANY;
 	} else {
-		if (inet_aton(getServer().getServerAddr(), &serverAddr.sin_addr) == 0) {
+		if (inet_aton(getServer().getServerAddr().c_str(), &serverAddr.sin_addr) == 0) {
 			close(_serverSocket);
 			throw std::runtime_error("Invalid IP address");
 		}

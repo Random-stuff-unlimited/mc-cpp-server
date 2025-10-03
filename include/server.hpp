@@ -26,7 +26,7 @@ class Server {
 	std::string _gameVersion;
 	std::string _serverMOTD;
 	int _serverPort;
-	char* _serverAddr;
+	std::string _serverAddr;
 	NetworkManager* _networkManager;
 
   public:
@@ -43,7 +43,7 @@ class Server {
 	int getServerPort() {
 		return _serverPort;
 	}
-	char* getServerAddr() {
+	std::string getServerAddr() {
 		return _serverAddr;
 	}
 	std::unordered_map<int, Player*>& getPlayerLst() {
