@@ -1,5 +1,6 @@
 #include "buffer.hpp"
 #include "json.hpp"
+#include "logger.hpp"
 #include "packet.hpp"
 #include "player.hpp"
 #include "server.hpp"
@@ -7,9 +8,9 @@
 #include <cstdint>
 #include <errno.h>
 #include <exception>
-#include <iostream>
 #include <poll.h>
 #include <stdexcept>
+#include <string>
 #include <sys/poll.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -23,21 +24,24 @@ Packet::Packet(Player* player) : _player(player), _socketFd(-1), _returnPacket(0
 	if (_player == nullptr)
 		throw std::runtime_error("Packet init with null player");
 	_socketFd = _player->getSocketFd();
-	std::cout << "[Packet] Constructor: Socket FD = " << _socketFd << std::endl;
+	g_logger->logNetwork(DEBUG, "Constructor: Socket FD = " + std::to_string(_socketFd), "Packet");
 
 	_size = readVarint(_socketFd);
 	if (_size == -1)
 		throw std::runtime_error("Failed to read packet size");
-	std::cout << "[Packet] Read size: " << _size << std::endl;
+	g_logger->logNetwork(DEBUG, "Read size: " + std::to_string(_size), "Packet");
 
 	_id = readVarint(_socketFd);
 	if (_id == -1)
 		throw std::runtime_error("Failed to read packet id");
-	std::cout << "[Packet] Read ID: " << _id << std::endl;
+	g_logger->logNetwork(DEBUG, "Read ID: " + std::to_string(_id), "Packet");
 
 	int remaining = _size - getVarintSize(_id);
-	std::cout << "[Packet] Calculated remaining: " << remaining << " (size=" << _size
-	          << " - varintSize(" << _id << ")=" << getVarintSize(_id) << ")" << std::endl;
+	g_logger->logNetwork(DEBUG,
+	                     "Calculated remaining: " + std::to_string(remaining) + " (size=" +
+	                             std::to_string(_size) + " - varintSize(" + std::to_string(_id) +
+	                             ")=" + std::to_string(getVarintSize(_id)) + ")",
+	                     "Packet");
 
 	if (remaining < 0)
 		throw std::runtime_error("Invalid packet size");
@@ -53,10 +57,10 @@ Packet::Packet(Player* player) : _player(player), _socketFd(-1), _returnPacket(0
 			totalRead += bytesRead;
 		}
 
-		std::cout << "Packet total size: " << _size << std::endl;
-		std::cout << "Packet id: " << _id << std::endl;
-		std::cout << "Data size: " << remaining << std::endl;
-		std::cout << "Read size: " << totalRead << std::endl;
+		g_logger->logNetwork(DEBUG, "Packet total size: " + std::to_string(_size), "Packet");
+		g_logger->logNetwork(DEBUG, "Packet id: " + std::to_string(_id), "Packet");
+		g_logger->logNetwork(DEBUG, "Data size: " + std::to_string(remaining), "Packet");
+		g_logger->logNetwork(DEBUG, "Read size: " + std::to_string(totalRead), "Packet");
 
 		_data = Buffer(tmp);
 	}
@@ -64,21 +68,25 @@ Packet::Packet(Player* player) : _player(player), _socketFd(-1), _returnPacket(0
 
 Packet::Packet(int socketFd, Server& server)
     : _player(nullptr), _socketFd(socketFd), _returnPacket(0) {
-	std::cout << "[Packet] Constructor (socket): Socket FD = " << _socketFd << std::endl;
+	g_logger->logNetwork(
+	        DEBUG, "Constructor (socket): Socket FD = " + std::to_string(_socketFd), "Packet");
 
 	_size = readVarint(_socketFd);
 	if (_size == -1)
 		throw std::runtime_error("Failed to read packet size");
-	std::cout << "[Packet] Read size: " << _size << std::endl;
+	g_logger->logNetwork(DEBUG, "Read size: " + std::to_string(_size), "Packet");
 
 	_id = readVarint(_socketFd);
 	if (_id == -1)
 		throw std::runtime_error("Failed to read packet id");
-	std::cout << "[Packet] Read ID: " << _id << std::endl;
+	g_logger->logNetwork(DEBUG, "Read ID: " + std::to_string(_id), "Packet");
 
 	int remaining = _size - (getVarintSize(_id));
-	std::cout << "[Packet] Calculated remaining: " << remaining << " (size=" << _size
-	          << " - varintSize(" << _id << ")=" << getVarintSize(_id) << ")" << std::endl;
+	g_logger->logNetwork(DEBUG,
+	                     "Calculated remaining: " + std::to_string(remaining) + " (size=" +
+	                             std::to_string(_size) + " - varintSize(" + std::to_string(_id) +
+	                             ")=" + std::to_string(getVarintSize(_id)) + ")",
+	                     "Packet");
 
 	if (remaining < 0)
 		throw std::runtime_error("Invalid packet size");
@@ -102,10 +110,10 @@ Packet::Packet(int socketFd, Server& server)
 			totalRead += bytesRead;
 		}
 
-		std::cout << "Packet total size: " << _size << std::endl;
-		std::cout << "Packet id: " << _id << std::endl;
-		std::cout << "Data size: " << remaining << std::endl;
-		std::cout << "Read size: " << totalRead << std::endl;
+		g_logger->logNetwork(DEBUG, "Packet total size: " + std::to_string(_size), "Packet");
+		g_logger->logNetwork(DEBUG, "Packet id: " + std::to_string(_id), "Packet");
+		g_logger->logNetwork(DEBUG, "Data size: " + std::to_string(remaining), "Packet");
+		g_logger->logNetwork(DEBUG, "Read size: " + std::to_string(totalRead), "Packet");
 
 		_data = Buffer(tmp);
 	}
@@ -113,8 +121,9 @@ Packet::Packet(int socketFd, Server& server)
 
 int Packet::getVarintSize(int32_t value) {
 	if (value < 0) {
-		std::cerr << "[Packet] ERROR: getVarintSize called with negative value: " << value
-		          << std::endl;
+		g_logger->logNetwork(ERROR,
+		                     "getVarintSize called with negative value: " + std::to_string(value),
+		                     "Packet");
 		throw std::runtime_error("getVarintSize called with negative value");
 	}
 	int size           = 0;
@@ -123,7 +132,10 @@ int Packet::getVarintSize(int32_t value) {
 		value >>= 7;
 		size++;
 	} while (value != 0);
-	std::cout << "[Packet] getVarintSize(" << original_value << ") = " << size << std::endl;
+	g_logger->logNetwork(DEBUG,
+	                     "getVarintSize(" + std::to_string(original_value) +
+	                             ") = " + std::to_string(size),
+	                     "Packet");
 	return size;
 }
 
@@ -139,8 +151,11 @@ int Packet::readVarint(int sock) {
 	while (true) {
 		ssize_t result = ::read(sock, &byte, 1);
 		if (result <= 0) {
-			std::cerr << "readVarint: Failed to read byte " << bytesRead << " from socket " << sock
-			          << " (errno: " << errno << ")" << std::endl;
+			g_logger->logNetwork(ERROR,
+			                     "readVarint: Failed to read byte " + std::to_string(bytesRead) +
+			                             " from socket " + std::to_string(sock) +
+			                             " (errno: " + std::to_string(errno) + ")",
+			                     "Packet");
 			return -1;
 		}
 
@@ -152,21 +167,27 @@ int Packet::readVarint(int sock) {
 
 		position += 7;
 		if (position >= 32) {
-			std::cerr << "readVarint: Varint too long (> 32 bits) after " << bytesRead << " bytes"
-			          << std::endl;
+			g_logger->logNetwork(ERROR,
+			                     "readVarint: Varint too long (> 32 bits) after " +
+			                             std::to_string(bytesRead) + " bytes",
+			                     "Packet");
 			return -1;
 		}
 
 		// Safety check to prevent infinite loops
 		if (bytesRead > 5) {
-			std::cerr << "readVarint: Too many bytes read (" << bytesRead << "), corrupted varint"
-			          << std::endl;
+			g_logger->logNetwork(ERROR,
+			                     "readVarint: Too many bytes read (" + std::to_string(bytesRead) +
+			                             "), corrupted varint",
+			                     "Packet");
 			return -1;
 		}
 	}
 
-	std::cout << "readVarint: Successfully read " << value << " (" << bytesRead << " bytes)"
-	          << std::endl;
+	g_logger->logNetwork(DEBUG,
+	                     "readVarint: Successfully read " + std::to_string(value) + " (" +
+	                             std::to_string(bytesRead) + " bytes)",
+	                     "Packet");
 	return value;
 }
 
@@ -179,7 +200,8 @@ void Packet::writeVarint(int sock, int value) {
 
 bool Packet::isSocketValid(int sock) {
 	if (sock < 0) {
-		std::cerr << "Socket validation: Invalid descriptor " << sock << std::endl;
+		g_logger->logNetwork(
+		        ERROR, "Socket validation: Invalid descriptor " + std::to_string(sock), "Packet");
 		return false;
 	}
 
@@ -189,13 +211,17 @@ bool Packet::isSocketValid(int sock) {
 
 	int result = poll(&pfd, 1, 0);
 	if (result < 0) {
-		std::cerr << "Socket validation: poll() failed with errno " << errno << std::endl;
+		g_logger->logNetwork(ERROR,
+		                     "Socket validation: poll() failed with errno " + std::to_string(errno),
+		                     "Packet");
 		return false;
 	}
 
 	if (pfd.revents & (POLLHUP | POLLERR)) {
-		std::cerr << "Socket validation: Socket " << sock << " is disconnected or has error"
-		          << std::endl;
+		g_logger->logNetwork(WARN,
+		                     "Socket validation: Socket " + std::to_string(sock) +
+		                             " is disconnected or has error",
+		                     "Packet");
 		return false;
 	}
 

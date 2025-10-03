@@ -1,7 +1,9 @@
 #pragma once
 #include <chrono>
+#include <filesystem>
 #include <fstream>
 #include <functional>
+#include <memory>
 #include <mutex>
 #include <queue>
 #include <string>
@@ -19,12 +21,9 @@ struct LogEntry {
 	std::string source;
 };
 
-class TUILogDisplay;
-
 class LogManager {
-
   private:
-	std::string _logDir;
+	std::filesystem::path _logDir;
 	std::ofstream _networkFile;
 	std::ofstream _gameInfoFile;
 	std::queue<LogEntry> _logQueue;
@@ -33,8 +32,13 @@ class LogManager {
 	std::thread _writerThread;
 	bool _running;
 
+	// TUI integration
 	std::vector<std::function<void(const LogEntry&)>> _tuiCallbacks;
 	std::mutex _callbackMutex;
+
+	// Display settings (for future TUI integration)
+	int _scrollOffset;
+	bool _autoScroll;
 
   public:
 	LogManager();
@@ -50,11 +54,16 @@ class LogManager {
 
 	// TUI integration
 	void registerTUICallback(std::function<void(const LogEntry&)> callback);
-	void unregisterTUICallback(); // simplified for single TUI display
+	void unregisterTUICallback();
 
   private:
 	bool initializeLogDirectory();
 	void writerThreadLoop();
 	std::string formatLogEntry(const LogEntry& entry);
 	std::string getCurrentTimestamp();
+	std::string getDetailedTimestamp();
 };
+
+// Global logger instance
+extern std::unique_ptr<LogManager> g_logger;
+void initializeGlobalLogger();

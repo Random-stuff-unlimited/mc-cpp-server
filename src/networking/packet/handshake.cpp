@@ -1,9 +1,9 @@
+#include "logger.hpp"
 #include "packet.hpp"
 #include "player.hpp"
 #include "server.hpp"
 
 #include <cstdint>
-#include <iostream>
 #include <string>
 #include <unistd.h>
 
@@ -17,17 +17,20 @@ void handleHandshakePacket(Packet& packet, Server& server) {
 	std::string serverAddr = packet.getData().readString(255);
 	uint16_t port          = packet.getData().readUShort();
 	int nextState          = packet.getData().readVarInt();
-	std::cout << "[Handshake] Protocol=" << protocolVersion << ", Addr=" << serverAddr
-	          << ", State=" << nextState << "\n";
+	g_logger->logNetwork(INFO,
+	                     "Protocol=" + std::to_string(protocolVersion) + ", Addr=" + serverAddr +
+	                             ", State=" + std::to_string(nextState),
+	                     "HandshakeHandler");
 	if (nextState == 1) {
 		packet.getPlayer()->setPlayerState(PlayerState::Status);
-		std::cout << "Status request - keeping in temp list" << std::endl;
+		g_logger->logNetwork(INFO, "Status request - keeping in temp list", "HandshakeHandler");
 	} else if (nextState == 2) {
 		packet.getPlayer()->setPlayerState(PlayerState::Login);
 		server.promoteTempPlayer(packet.getPlayer());
-		std::cout << "Login attempt - player promoted to main list" << std::endl;
+		g_logger->logNetwork(
+		        INFO, "Login attempt - player promoted to main list", "HandshakeHandler");
 	} else {
-		std::cout << "Status packet sent removed the player" << std::endl;
+		g_logger->logNetwork(WARN, "Status packet sent removed the player", "HandshakeHandler");
 		packet.getPlayer()->setPlayerState(PlayerState::None);
 		packet.setReturnPacket(PACKET_DISCONNECT);
 	}

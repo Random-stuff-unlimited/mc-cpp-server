@@ -1,3 +1,4 @@
+#include "logger.hpp"
 #include "networking.hpp"
 #include "packet.hpp"
 #include "player.hpp"
@@ -7,8 +8,8 @@
 #include <cstdint>
 #include <errno.h>
 #include <exception>
-#include <iostream>
 #include <netinet/in.h>
+#include <string>
 #include <sys/epoll.h>
 #include <sys/socket.h>
 #include <unistd.h>
@@ -35,14 +36,17 @@ void NetworkManager::receiverThreadLoop() {
 				socklen_t addr_len = sizeof(client_addr);
 				int client_fd      = accept(_serverSocket, (sockaddr*)&client_addr, &addr_len);
 				if (client_fd != -1) {
-					std::cout << "[Network Manager] New connection accepted on socket " << client_fd
-					          << std::endl;
+					g_logger->logNetwork(INFO,
+					                     "New connection accepted on socket " +
+					                             std::to_string(client_fd),
+					                     "NetworkManager");
 					epoll_event event;
 					event.events  = EPOLLIN;
 					event.data.fd = client_fd;
 					if (epoll_ctl(_epollFd, EPOLL_CTL_ADD, client_fd, &event) == -1) {
-						std::cerr << "[Network Manager] Failed to add new client socket to epoll"
-						          << std::endl;
+						g_logger->logNetwork(ERROR,
+						                     "Failed to add new client socket to epoll",
+						                     "NetworkManager");
 						close(client_fd);
 					}
 				}
@@ -93,21 +97,22 @@ void NetworkManager::senderThreadLoop() {
 				break;
 
 			try {
-				std::cout << "Sending packet to player " << std::endl;
+				g_logger->logNetwork(INFO, "Sending packet to player", "NetworkManager");
 				send(p->getSocket(), p->getData().getData().data(), p->getSize(), MSG_NOSIGNAL);
 				if (p->getPlayer() && p->getPlayer()->getPlayerState() == PlayerState::None) {
-					std::cout << "[Network Manager] Closing status connection after response"
-					          << std::endl;
+					g_logger->logNetwork(
+					        INFO, "Closing status connection after response", "NetworkManager");
 					getServer().removePlayerFromAnyList(p->getPlayer());
 					epoll_ctl(_epollFd, EPOLL_CTL_DEL, p->getSocket(), nullptr);
 					close(p->getSocket());
 				}
 			} catch (const std::exception& e) {
-				std::cerr << "[Network Manager] Failed to send packet: " << e.what() << std::endl;
+				g_logger->logNetwork(
+				        ERROR, "Failed to send packet: " + std::string(e.what()), "NetworkManager");
 			}
 			delete p;
 			p = nullptr;
-			std::cout << "Packet sent" << std::endl;
+			g_logger->logNetwork(INFO, "Packet sent", "NetworkManager");
 		}
 		usleep(1000);
 	}
@@ -119,24 +124,27 @@ void NetworkManager::enqueueOutgoingPacket(Packet* p) {
 
 void NetworkManager::handleIncomingData(Player* connection) {
 	Packet* p;
-	std::cout << "Handling incoming data for player " << std::endl;
+	g_logger->logNetwork(INFO, "Handling incoming data for player", "NetworkManager");
 	try {
 		p = new Packet(connection);
 		_incomingPackets.push(p);
 	} catch (const std::exception& e) {
-		std::cerr << "[Network Manager] Failed to receive packet 1: " << e.what() << std::endl;
+		g_logger->logNetwork(
+		        ERROR, "Failed to receive packet 1: " + std::string(e.what()), "NetworkManager");
 		throw;
 	}
 }
 
 void NetworkManager::handleIncomingData(int socket) {
 	Packet* p;
-	std::cout << "Handling incoming data for socket " << socket << std::endl;
+	g_logger->logNetwork(
+	        INFO, "Handling incoming data for socket " + std::to_string(socket), "NetworkManager");
 	try {
 		p = new Packet(socket, getServer());
 		_incomingPackets.push(p);
 	} catch (const std::exception& e) {
-		std::cerr << "[Network Manager] Failed to receive packet 2: " << e.what() << std::endl;
+		g_logger->logNetwork(
+		        ERROR, "Failed to receive packet 2: " + std::string(e.what()), "NetworkManager");
 		throw;
 	}
 }

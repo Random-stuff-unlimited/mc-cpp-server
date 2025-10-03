@@ -1,4 +1,5 @@
 #include "json.hpp"
+#include "logger.hpp"
 #include "networking.hpp"
 #include "player.hpp"
 #include "server.hpp"
@@ -6,7 +7,6 @@
 #include <cstddef>
 #include <exception>
 #include <fstream>
-#include <iostream>
 #include <string>
 #include <unistd.h>
 
@@ -25,6 +25,8 @@ Server::~Server() {
 
 int Server::start_server(int port) {
 	try {
+		initializeGlobalLogger();
+		g_logger->logGameInfo(INFO, "Starting Server", "Server");
 		Server::loadConfig();
 		size_t workerCount = 4;
 		if (workerCount == 0)
@@ -35,12 +37,12 @@ int Server::start_server(int port) {
 		_networkManager->startThreads();
 
 		while (true) {
-			std::cout << "Server is running..." << std::endl;
+			g_logger->logGameInfo(INFO, "Server is running...", "Server");
 			sleep(10);
 			break;
 		}
 	} catch (const std::exception& e) {
-		std::cout << "Error: " << e.what() << std::endl;
+		g_logger->logGameInfo(ERROR, "Server error: " + std::string(e.what()), "Server");
 		return (1);
 	}
 	(void)port;
@@ -51,7 +53,7 @@ int Server::loadConfig() {
 	std::ifstream inputFile(ConfigFileName);
 
 	if (!inputFile.is_open()) {
-		std::cerr << "[Server] Error: Could not open " << ConfigFileName << std::endl;
+		g_logger->logGameInfo(ERROR, "Could not open " + std::string(ConfigFileName), "Server");
 		return 1;
 	}
 
@@ -60,21 +62,23 @@ int Server::loadConfig() {
 	try {
 		inputFile >> j;
 
-		std::cout << "[Server]: Successfully parsed " << ConfigFileName << "!" << std::endl;
+		g_logger->logGameInfo(
+		        INFO, "Successfully parsed " + std::string(ConfigFileName) + "!", "Server");
 		_gameVersion = j["version"]["name"];
-		std::cout << "[Server]: Game version: " << _gameVersion << std::endl;
+		g_logger->logGameInfo(INFO, "Game version: " + _gameVersion, "Server");
 		_protocolVersion = j["version"]["protocol"];
-		std::cout << "[Server]: Protocol version: " << _protocolVersion << std::endl;
+		g_logger->logGameInfo(
+		        INFO, "Protocol version: " + std::to_string(_protocolVersion), "Server");
 		_serverSize = j["server"]["max-players"];
-		std::cout << "[Server]: Server size: " << _serverSize << std::endl;
+		g_logger->logGameInfo(INFO, "Server size: " + std::to_string(_serverSize), "Server");
 		_serverMOTD = j["server"]["motd"];
-		std::cout << "[Server]: Server MOTD: " << _serverMOTD << std::endl;
+		g_logger->logGameInfo(INFO, "Server MOTD: " + _serverMOTD, "Server");
 		_serverAddr = j["server"]["ip-address"];
-		std::cout << "[Server]: Server IP address : " << _serverAddr << std::endl;
+		g_logger->logGameInfo(INFO, "Server IP address: " + _serverAddr, "Server");
 		_serverPort = j["server"]["port"];
-		std::cout << "[Server]: Server port: " << _serverPort << std::endl;
+		g_logger->logGameInfo(INFO, "Server port: " + std::to_string(_serverPort), "Server");
 	} catch (json::parse_error& e) {
-		std::cerr << "[Server]: Json parse error: " << e.what() << std::endl;
+		g_logger->logGameInfo(ERROR, "Json parse error: " + std::string(e.what()), "Server");
 		return (1);
 	}
 	return (0);
@@ -85,7 +89,7 @@ Player* Server::addPlayer(const std::string& name, const PlayerState state, cons
 	try {
 		newPlayer = new Player(name, state, socket);
 	} catch (std::exception& e) {
-		std::cerr << "[Server]: Error adding player: " << e.what() << std::endl;
+		g_logger->logGameInfo(ERROR, "Error adding player: " + std::string(e.what()), "Server");
 		return (nullptr);
 	}
 	newPlayer->setPlayerName(name);
@@ -109,7 +113,8 @@ Player* Server::addTempPlayer(const std::string& name, const PlayerState state, 
 	try {
 		newPlayer = new Player(name, state, socket);
 	} catch (std::exception& e) {
-		std::cerr << "[Server]: Error adding temp player: " << e.what() << std::endl;
+		g_logger->logGameInfo(
+		        ERROR, "Error adding temp player: " + std::string(e.what()), "Server");
 		return (nullptr);
 	}
 	newPlayer->setPlayerName(name);
@@ -118,7 +123,7 @@ Player* Server::addTempPlayer(const std::string& name, const PlayerState state, 
 
 	std::lock_guard<std::mutex> lock(_tempPlayerLock);
 	_tempPlayerLst[socket] = newPlayer;
-	std::cout << "[Server] Added temp player on socket " << socket << std::endl;
+	g_logger->logGameInfo(INFO, "Added temp player on socket " + std::to_string(socket), "Server");
 	return (newPlayer);
 }
 
@@ -130,7 +135,8 @@ void Server::removeTempPlayer(Player* player) {
 	std::lock_guard<std::mutex> lock(_tempPlayerLock);
 	_tempPlayerLst.erase(socket);
 	delete player;
-	std::cout << "[Server] Removed temp player from socket " << socket << std::endl;
+	g_logger->logGameInfo(
+	        INFO, "Removed temp player from socket " + std::to_string(socket), "Server");
 }
 
 void Server::promoteTempPlayer(Player* player) {
@@ -144,7 +150,9 @@ void Server::promoteTempPlayer(Player* player) {
 	std::lock_guard<std::mutex> lockPlayer(_playerLock);
 	_playerLst[socket] = player;
 
-	std::cout << "[Server] Promoted temp player to main list on socket " << socket << std::endl;
+	g_logger->logGameInfo(INFO,
+	                      "Promoted temp player to main list on socket " + std::to_string(socket),
+	                      "Server");
 }
 
 void Server::removePlayerFromAnyList(Player* player) {
@@ -159,7 +167,8 @@ void Server::removePlayerFromAnyList(Player* player) {
 		if (temp_it != _tempPlayerLst.end()) {
 			_tempPlayerLst.erase(socket);
 			delete player;
-			std::cout << "[Server] Removed temp player from socket " << socket << std::endl;
+			g_logger->logGameInfo(
+			        INFO, "Removed temp player from socket " + std::to_string(socket), "Server");
 			return;
 		}
 	}
@@ -170,12 +179,14 @@ void Server::removePlayerFromAnyList(Player* player) {
 		if (main_it != _playerLst.end()) {
 			_playerLst.erase(socket);
 			delete player;
-			std::cout << "[Server] Removed main player from socket " << socket << std::endl;
+			g_logger->logGameInfo(
+			        INFO, "Removed main player from socket " + std::to_string(socket), "Server");
 			return;
 		}
 	}
 	delete player;
-	std::cout << "[Server] Deleted orphaned player from socket " << socket << std::endl;
+	g_logger->logGameInfo(
+	        WARN, "Deleted orphaned player from socket " + std::to_string(socket), "Server");
 }
 
 void Server::addPlayerToSample(const std::string& name) {

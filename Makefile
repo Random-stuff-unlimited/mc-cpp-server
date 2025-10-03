@@ -82,7 +82,7 @@ else
 endif
 
 # ================================= TARGETS ==================================
-.PHONY: all clean debug release info help run install uninstall compile_commands
+.PHONY: all clean debug release info help run install uninstall compile_commands test_logger debug_logger test_logger_tui
 
 # Default target
 all: info $(TARGET)
@@ -197,6 +197,9 @@ help:
 	@printf "$(BOLD)$(BRIGHT_CYAN)║$(RESET) $(BRIGHT_GREEN)%-10s$(RESET) %-39s $(BOLD)$(BRIGHT_CYAN)      ║$(RESET)\n" "uninstall" "Remove the executable from system"
 	@printf "$(BOLD)$(BRIGHT_CYAN)║$(RESET) $(BRIGHT_GREEN)%-10s$(RESET) %-39s $(BOLD)$(BRIGHT_CYAN)      ║$(RESET)\n" "info" "Display project information"
 	@printf "$(BOLD)$(BRIGHT_CYAN)║$(RESET) $(BRIGHT_GREEN)%-10s$(RESET) %-39s $(BOLD)$(BRIGHT_CYAN)      ║$(RESET)\n" "help" "Show this help message"
+	@printf "$(BOLD)$(BRIGHT_CYAN)║$(RESET) $(BRIGHT_GREEN)%-10s$(RESET) %-39s $(BOLD)$(BRIGHT_CYAN)      ║$(RESET)\n" "test_logger" "Build and run logger example"
+	@printf "$(BOLD)$(BRIGHT_CYAN)║$(RESET) $(BRIGHT_GREEN)%-10s$(RESET) %-39s $(BOLD)$(BRIGHT_CYAN)      ║$(RESET)\n" "debug_logger" "Build and run debug logger (no TUI)"
+	@printf "$(BOLD)$(BRIGHT_CYAN)║$(RESET) $(BRIGHT_GREEN)%-10s$(RESET) %-39s $(BOLD)$(BRIGHT_CYAN)      ║$(RESET)\n" "test_logger_tui" "Build and run TUI-safe logger test"
 	@printf "$(BOLD)$(BRIGHT_CYAN)║$(RESET)                                                          $(BOLD)$(BRIGHT_CYAN)║$(RESET)\n"
 	@printf "$(BOLD)$(BRIGHT_CYAN)║$(RESET) $(BOLD)Customization:$(RESET)                                           $(BOLD)$(BRIGHT_CYAN)║$(RESET)\n"
 	@printf "$(BOLD)$(BRIGHT_CYAN)║$(RESET) • Modify $(BRIGHT_YELLOW)TARGET_NAME$(RESET) to change executable name           $(BOLD)$(BRIGHT_CYAN)║$(RESET)\n"

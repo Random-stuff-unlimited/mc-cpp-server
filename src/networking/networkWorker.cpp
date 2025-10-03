@@ -1,3 +1,4 @@
+#include "logger.hpp"
 #include "networking.hpp"
 #include "packet.hpp"
 #include "player.hpp"
@@ -5,7 +6,7 @@
 
 #include <chrono>
 #include <exception>
-#include <iostream>
+#include <string>
 #include <sys/epoll.h>
 #include <unistd.h>
 
@@ -17,7 +18,7 @@ void NetworkManager::workerThreadLoop() {
 			if (packet == nullptr)
 				break;
 			try {
-				std::cout << "Handling incoming data for player " << std::endl;
+				g_logger->logNetwork(INFO, "Handling incoming data for player", "NetworkWorker");
 				packetRouter(*packet, getServer());
 				if (packet->getReturnPacket() == PACKET_SEND) {
 					_outgoingPackets.push(packet);
@@ -28,12 +29,16 @@ void NetworkManager::workerThreadLoop() {
 						getServer().removePlayerFromAnyList(player);
 						epoll_ctl(_epollFd, EPOLL_CTL_DEL, packet->getSocket(), nullptr);
 						close(packet->getSocket());
-						std::cout << "[Worker] Disconnected player socket " << packet->getSocket()
-						          << std::endl;
+						g_logger->logNetwork(INFO,
+						                     "Disconnected player socket " +
+						                             std::to_string(packet->getSocket()),
+						                     "NetworkWorker");
 					}
 				}
 			} catch (const std::exception& e) {
-				std::cerr << "Error processing packet: " << e.what() << std::endl;
+				g_logger->logNetwork(ERROR,
+				                     "Error processing packet: " + std::string(e.what()),
+				                     "NetworkWorker");
 			}
 		}
 		if (packet != nullptr)
