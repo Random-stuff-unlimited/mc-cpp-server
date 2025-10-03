@@ -42,7 +42,7 @@ int Buffer::readVarInt() {
 void Buffer::writeVarInt(int value) {
 	while (true) {
 		if ((value & ~0x7F) == 0) {
-			writeByte(static_cast<uint8_t>(value)); // <- utilise writeByte
+			writeByte(static_cast<uint8_t>(value));
 			return;
 		} else {
 			writeByte(static_cast<uint8_t>((value & 0x7F) | 0x80));
@@ -54,7 +54,6 @@ void Buffer::writeVarInt(int value) {
 std::string Buffer::readString(int maxLength) {
 	int len = readVarInt();
 
-	// Vérifie si la longueur dépasse la limite
 	if (maxLength > 0 && len > maxLength) {
 		throw std::runtime_error("String length exceeds maximum allowed");
 	}
@@ -92,4 +91,18 @@ uint64_t Buffer::readUInt64() {
 		value = (value << 8) | readByte();
 	}
 	return value;
+}
+
+long Buffer::readLong() {
+	long value = 0;
+	for (int i = 0; i < 8; ++i) {
+		value = (value << 8) | readByte();
+	}
+	return value;
+}
+
+void Buffer::writeLong(long value) {
+	for (int i = 7; i >= 0; --i) {
+		writeByte(static_cast<uint8_t>((value >> (i * 8)) & 0xFF));
+	}
 }

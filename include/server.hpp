@@ -1,9 +1,7 @@
 #ifndef SERVER_HPP
 #define SERVER_HPP
 
-// Forward declaration to avoid circular dependency
 class NetworkManager;
-#include "enums.hpp"
 #include "json.hpp"
 #include "player.hpp"
 
@@ -18,8 +16,10 @@ using json = nlohmann::json;
 class Server {
   private:
 	std::unordered_map<int, Player*> _playerLst;
+	std::unordered_map<int, Player*> _tempPlayerLst;
 	json _playerSample;
 	std::mutex _playerLock;
+	std::mutex _tempPlayerLock;
 	int _protocolVersion;
 	int _serverSize;
 	int loadConfig();
@@ -49,11 +49,18 @@ class Server {
 	std::unordered_map<int, Player*>& getPlayerLst() {
 		return _playerLst;
 	}
+	std::unordered_map<int, Player*>& getTempPlayerLst() {
+		return _tempPlayerLst;
+	}
 
 	void addPlayerToSample(const std::string& name);
 	void removePlayerToSample(const std::string& name);
 	Player* addPlayer(const std::string& name, const PlayerState state, const int socket);
 	void removePlayer(Player* player);
+	Player* addTempPlayer(const std::string& name, const PlayerState state, const int socket);
+	void removeTempPlayer(Player* player);
+	void promoteTempPlayer(Player* player);
+	void removePlayerFromAnyList(Player* player);
 	json getPlayerSample();
 };
 

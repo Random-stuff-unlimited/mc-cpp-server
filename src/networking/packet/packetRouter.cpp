@@ -1,4 +1,3 @@
-#include "enums.hpp"
 #include "networking.hpp"
 #include "packet.hpp"
 #include "player.hpp"
@@ -15,7 +14,14 @@ void packetRouter(Packet& packet, Server& server) {
 		handleHandshakePacket(packet, server);
 		break;
 	case PlayerState::Status:
-		handleStatusPacket(packet, server);
+		if (packet.getId() == 0x00) {
+			handleStatusPacket(packet, server);
+		} else if (packet.getId() == 0x01) {
+			handlePingPacket(packet, server);
+		} else {
+			packet.getPlayer()->setPlayerState(PlayerState::None);
+			packet.setReturnPacket(PACKET_DISCONNECT);
+		}
 		break;
 	case PlayerState::Login:
 		// handleLoginPacket(packet, server);

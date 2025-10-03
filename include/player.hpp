@@ -2,9 +2,10 @@
 #define PLAYER_HPP
 
 #include "UUID.hpp"
-#include "enums.hpp"
 
 #include <string>
+
+enum class PlayerState { None, Handshake, Status, Login, Play };
 
 class Player {
   private:

@@ -1,5 +1,4 @@
 #include "buffer.hpp"
-#include "enums.hpp"
 #include "json.hpp"
 #include "packet.hpp"
 #include "player.hpp"
@@ -11,6 +10,7 @@
 #include <iostream>
 #include <poll.h>
 #include <stdexcept>
+#include <sys/poll.h>
 #include <sys/types.h>
 #include <unistd.h>
 #include <vector>
@@ -84,7 +84,7 @@ Packet::Packet(int socketFd, Server& server)
 		throw std::runtime_error("Invalid packet size");
 
 	try {
-		_player = server.addPlayer("None", PlayerState::Handshake, socketFd);
+		_player = server.addTempPlayer("None", PlayerState::Handshake, socketFd);
 	} catch (const std::exception& e) {
 		_player = nullptr;
 		throw std::runtime_error("error on packet player init");
@@ -128,7 +128,6 @@ int Packet::getVarintSize(int32_t value) {
 }
 
 int Packet::readVarint(int sock) {
-	// Validate socket first
 	if (!isSocketValid(sock)) {
 		return -1;
 	}
@@ -184,18 +183,16 @@ bool Packet::isSocketValid(int sock) {
 		return false;
 	}
 
-	// Check if socket is still connected using poll or similar
 	struct pollfd pfd;
 	pfd.fd     = sock;
 	pfd.events = POLLIN;
 
-	int result = poll(&pfd, 1, 0); // Non-blocking check
+	int result = poll(&pfd, 1, 0);
 	if (result < 0) {
 		std::cerr << "Socket validation: poll() failed with errno " << errno << std::endl;
 		return false;
 	}
 
-	// If POLLHUP or POLLERR is set, socket is disconnected or has error
 	if (pfd.revents & (POLLHUP | POLLERR)) {
 		std::cerr << "Socket validation: Socket " << sock << " is disconnected or has error"
 		          << std::endl;

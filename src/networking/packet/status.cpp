@@ -1,8 +1,8 @@
 #include "buffer.hpp"
-#include "enums.hpp"
 #include "json.hpp"
 #include "networking.hpp"
 #include "packet.hpp"
+#include "player.hpp"
 #include "server.hpp"
 
 #include <iostream>
@@ -14,8 +14,7 @@ using json = nlohmann::json;
 void handleStatusPacket(Packet& packet, Server& server) {
 	if (packet.getId() != 0x00) {
 		packet.getPlayer()->setPlayerState(PlayerState::None);
-		close(packet.getSocket());
-		server.removePlayer(packet.getPlayer());
+		packet.setReturnPacket(PACKET_DISCONNECT);
 		return;
 	}
 
@@ -41,9 +40,9 @@ void handleStatusPacket(Packet& packet, Server& server) {
 	buf.writeVarInt(jsonLen);
 	buf.writeBytes(payload.c_str());
 	packet.getData() = buf;
-	packet.setReturnPacket(1);
+	packet.setReturnPacket(PACKET_SEND);
 	packet.setPacketSize(buf.getData().size());
 	packet.getPlayer()->setPlayerState(PlayerState::Status);
 
-	std::cout << "[Status] JSON response ready" << std::endl;
+	std::cout << "[Status] JSON response ready - connection will be closed" << std::endl;
 }

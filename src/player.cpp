@@ -1,7 +1,5 @@
 #include "player.hpp"
 
-#include "enums.hpp"
-
 #include <string>
 
 Player::Player()

@@ -7,6 +7,8 @@
 
 #include <cstdint>
 
+enum PacketResult { PACKET_OK = 0, PACKET_SEND = 1, PACKET_DISCONNECT = 2, PACKET_ERROR = -1 };
+
 class Packet {
   private:
 	int32_t _size;

@@ -51,12 +51,17 @@ void NetworkManager::receiverThreadLoop() {
 
 			auto it   = getServer().getPlayerLst().find(fd);
 			Player* p = nullptr;
-			if (it != getServer().getPlayerLst().end())
+			if (it != getServer().getPlayerLst().end()) {
 				p = it->second;
+			} else {
+				auto temp_it = getServer().getTempPlayerLst().find(fd);
+				if (temp_it != getServer().getTempPlayerLst().end())
+					p = temp_it->second;
+			}
 
 			if (eventFlags & EPOLLERR || eventFlags & EPOLLHUP) {
 				if (p)
-					getServer().removePlayer(p);
+					getServer().removePlayerFromAnyList(p);
 				epoll_ctl(_epollFd, EPOLL_CTL_DEL, fd, nullptr);
 				close(fd);
 				continue;
@@ -70,7 +75,7 @@ void NetworkManager::receiverThreadLoop() {
 						handleIncomingData(fd);
 				} catch (const std::exception& e) {
 					if (p)
-						getServer().removePlayer(p);
+						getServer().removePlayerFromAnyList(p);
 					epoll_ctl(_epollFd, EPOLL_CTL_DEL, fd, nullptr);
 					close(fd);
 				}
@@ -90,6 +95,13 @@ void NetworkManager::senderThreadLoop() {
 			try {
 				std::cout << "Sending packet to player " << std::endl;
 				send(p->getSocket(), p->getData().getData().data(), p->getSize(), MSG_NOSIGNAL);
+				if (p->getPlayer() && p->getPlayer()->getPlayerState() == PlayerState::None) {
+					std::cout << "[Network Manager] Closing status connection after response"
+					          << std::endl;
+					getServer().removePlayerFromAnyList(p->getPlayer());
+					epoll_ctl(_epollFd, EPOLL_CTL_DEL, p->getSocket(), nullptr);
+					close(p->getSocket());
+				}
 			} catch (const std::exception& e) {
 				std::cerr << "[Network Manager] Failed to send packet: " << e.what() << std::endl;
 			}
@@ -110,9 +122,7 @@ void NetworkManager::handleIncomingData(Player* connection) {
 	std::cout << "Handling incoming data for player " << std::endl;
 	try {
 		p = new Packet(connection);
-		std::cout << "1 test" << std::endl;
 		_incomingPackets.push(p);
-		std::cout << "2 test" << std::endl;
 	} catch (const std::exception& e) {
 		std::cerr << "[Network Manager] Failed to receive packet 1: " << e.what() << std::endl;
 		throw;

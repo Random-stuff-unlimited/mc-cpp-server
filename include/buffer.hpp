@@ -25,6 +25,8 @@ class Buffer {
 	size_t remaining() const;
 	uint16_t readUShort();
 	uint64_t readUInt64();
+	long readLong();
+	void writeLong(long value);
 	uint8_t readByte();
 	void writeByte(uint8_t byte);
 	void writeBytes(const std::string& data);

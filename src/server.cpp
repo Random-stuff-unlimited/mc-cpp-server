@@ -1,4 +1,3 @@
-#include "enums.hpp"
 #include "json.hpp"
 #include "networking.hpp"
 #include "player.hpp"
@@ -105,6 +104,80 @@ void Server::removePlayer(Player* player) {
 	int socket = player->getSocketFd();
 	delete player;
 	_playerLst.erase(socket);
+}
+
+Player* Server::addTempPlayer(const std::string& name, const PlayerState state, const int socket) {
+	Player* newPlayer = nullptr;
+	try {
+		newPlayer = new Player(name, state, socket);
+	} catch (std::exception& e) {
+		std::cerr << "[Server]: Error adding temp player: " << e.what() << std::endl;
+		return (nullptr);
+	}
+	newPlayer->setPlayerName(name);
+	newPlayer->setPlayerState(state);
+	newPlayer->setSocketFd(socket);
+
+	std::lock_guard<std::mutex> lock(_tempPlayerLock);
+	_tempPlayerLst[socket] = newPlayer;
+	std::cout << "[Server] Added temp player on socket " << socket << std::endl;
+	return (newPlayer);
+}
+
+void Server::removeTempPlayer(Player* player) {
+	if (!player) {
+		return;
+	}
+	int socket = player->getSocketFd();
+	std::lock_guard<std::mutex> lock(_tempPlayerLock);
+	_tempPlayerLst.erase(socket);
+	delete player;
+	std::cout << "[Server] Removed temp player from socket " << socket << std::endl;
+}
+
+void Server::promoteTempPlayer(Player* player) {
+	if (!player)
+		return;
+	int socket = player->getSocketFd();
+
+	std::lock_guard<std::mutex> lockTemp(_tempPlayerLock);
+	_tempPlayerLst.erase(socket);
+
+	std::lock_guard<std::mutex> lockPlayer(_playerLock);
+	_playerLst[socket] = player;
+
+	std::cout << "[Server] Promoted temp player to main list on socket " << socket << std::endl;
+}
+
+void Server::removePlayerFromAnyList(Player* player) {
+	if (!player) {
+		return;
+	}
+	int socket = player->getSocketFd();
+
+	{
+		std::lock_guard<std::mutex> lock(_tempPlayerLock);
+		auto temp_it = _tempPlayerLst.find(socket);
+		if (temp_it != _tempPlayerLst.end()) {
+			_tempPlayerLst.erase(socket);
+			delete player;
+			std::cout << "[Server] Removed temp player from socket " << socket << std::endl;
+			return;
+		}
+	}
+
+	{
+		std::lock_guard<std::mutex> lock(_playerLock);
+		auto main_it = _playerLst.find(socket);
+		if (main_it != _playerLst.end()) {
+			_playerLst.erase(socket);
+			delete player;
+			std::cout << "[Server] Removed main player from socket " << socket << std::endl;
+			return;
+		}
+	}
+	delete player;
+	std::cout << "[Server] Deleted orphaned player from socket " << socket << std::endl;
 }
 
 void Server::addPlayerToSample(const std::string& name) {
