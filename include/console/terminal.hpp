@@ -1,12 +1,9 @@
 #pragma once
-#include <functional>
+#include <asm-generic/ioctls.h>
 #include <iostream>
-#include <memory>
-#include <string>
 #include <sys/ioctl.h>
 #include <termios.h>
 #include <unistd.h>
-#include <vector>
 
 enum class Color {
 	RESET          = 0,
