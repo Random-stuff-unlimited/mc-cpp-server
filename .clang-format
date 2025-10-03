@@ -1,0 +1,22 @@
+# .clang-format
+BasedOnStyle: LLVM
+IndentWidth: 4          # logical indent level = 1 tab
+TabWidth: 4             # how wide a tab renders (adjust per team preference)
+UseTab: ForIndentation  # use tabs for indentation, spaces for alignment
+ContinuationIndentWidth: 8
+BreakBeforeBraces: Allman
+ColumnLimit: 100
+AllowShortIfStatementsOnASingleLine: false
+AllowShortFunctionsOnASingleLine: Empty
+PointerAlignment: Left
+SpaceBeforeParens: ControlStatements
+AlignConsecutiveAssignments: Consecutive
+AlignConsecutiveDeclarations: None
+BinPackArguments: false
+BinPackParameters: false
+Cpp11BracedListStyle: true
+ReflowComments: true
+SortIncludes: true
+IncludeBlocks: Regroup
+AccessModifierOffset: -2
+NamespaceIndentation: All
