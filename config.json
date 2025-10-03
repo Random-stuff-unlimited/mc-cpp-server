@@ -1,8 +1,12 @@
 {
-	"version": {
-		"name": "1.21.5",
-		"protocol": 770
-	},
-	"maxPlayer": 42,
-	"serverMotd": "§aServeur Minecraft en C!"
+    "version": {
+        "name": "1.21.5",
+        "protocol": 770
+    },
+    "server": {
+        "ip-address": "127.0.0.1",
+        "port": 25565,
+        "motd": "§aServeur Minecraft en C!",
+        "max-players": 20
+    }
 }

@@ -21,8 +21,8 @@ RELEASE_FLAGS   := -DNDEBUG -O3
 INCLUDE_FLAGS   := -I$(INCLUDE_DIR)
 
 # Linker flags (add your libraries here)
-LDFLAGS         := 
-LIBS            := 
+LDFLAGS         :=
+LIBS            :=
 
 # ================================ COLOR SETUP ===============================
 # ANSI color codes for beautiful output
@@ -60,11 +60,11 @@ BRIGHT_CYAN     := \033[96m
 BRIGHT_WHITE    := \033[97m
 
 # ============================= FILE DISCOVERY ==============================
-# Automatically find all source files
-SOURCES         := $(wildcard $(SOURCE_DIR)/*.cpp)
-HEADERS         := $(wildcard $(INCLUDE_DIR)/*.hpp)
-OBJECTS         := $(SOURCES:$(SOURCE_DIR)/%.cpp=$(BUILD_DIR)/%.o)
-DEPS            := $(SOURCES:$(SOURCE_DIR)/%.cpp=$(DEPS_DIR)/%.d)
+# Automatically find all source files recursively
+SOURCES         := $(shell find $(SOURCE_DIR) -name "*.cpp" -type f)
+HEADERS         := $(shell find $(INCLUDE_DIR) -name "*.hpp" -type f)
+OBJECTS         := $(patsubst $(SOURCE_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(SOURCES))
+DEPS            := $(patsubst $(SOURCE_DIR)/%.cpp,$(DEPS_DIR)/%.d,$(SOURCES))
 
 # ============================== BUILD MODES ===============================
 # Default build mode
@@ -82,7 +82,7 @@ else
 endif
 
 # ================================= TARGETS ==================================
-.PHONY: all clean debug release info help run install uninstall
+.PHONY: all clean debug release info help run install uninstall compile_commands
 
 # Default target
 all: info $(TARGET)
@@ -91,7 +91,7 @@ all: info $(TARGET)
 debug:
 	@$(MAKE) BUILD_MODE=debug all
 
-# Build in release mode  
+# Build in release mode
 release:
 	@$(MAKE) BUILD_MODE=release all
 
@@ -105,11 +105,13 @@ $(TARGET): $(OBJECTS) | $(BUILD_DIR)
 # Compile source files to object files
 $(BUILD_DIR)/%.o: $(SOURCE_DIR)/%.cpp $(DEPS_DIR)/%.d | $(BUILD_DIR) $(DEPS_DIR)
 	@printf "$(BOLD)$(BRIGHT_BLUE)🔨 Compiling: $(BRIGHT_WHITE)$<$(RESET)\n"
+	@mkdir -p $(dir $@)
 	@$(CXX) $(CXXFLAGS) $(INCLUDE_FLAGS) -c $< -o $@
 
 # Generate dependency files
 $(DEPS_DIR)/%.d: $(SOURCE_DIR)/%.cpp | $(DEPS_DIR)
 	@printf "$(DIM)$(CYAN)📋 Generating dependencies: $<$(RESET)\n"
+	@mkdir -p $(dir $@)
 	@$(CXX) $(CXXFLAGS) $(INCLUDE_FLAGS) -MM -MT $(BUILD_DIR)/$*.o $< > $@
 
 # Create build directories
@@ -163,6 +165,22 @@ uninstall:
 	@sudo rm -f $(INSTALL_PREFIX)/bin/$(TARGET_NAME)
 	@printf "$(BOLD)$(BRIGHT_GREEN)✅ Uninstallation completed!$(RESET)\n"
 
+# Generate compile_commands.json for LSP support
+compile_commands:
+	@printf "$(BOLD)$(BRIGHT_BLUE)📝 Generating compile_commands.json for LSP...$(RESET)\n"
+	@echo '[' > compile_commands.json
+	@first=true; for src in $(SOURCES); do \
+		[ "$$first" = true ] && first=false || echo ',' >> compile_commands.json; \
+		echo '  {' >> compile_commands.json; \
+		echo '    "directory": "'$(shell pwd)'",' >> compile_commands.json; \
+		obj_path=$$(echo "$$src" | sed 's|$(SOURCE_DIR)/|$(BUILD_DIR)/|' | sed 's|\.cpp$$|.o|'); \
+		echo "    \"command\": \"$(CXX) $(CXXFLAGS) $(INCLUDE_FLAGS) -c $$src -o $$obj_path\"," >> compile_commands.json; \
+		echo '    "file": "'$$src'"' >> compile_commands.json; \
+		echo '  }' >> compile_commands.json; \
+	done
+	@echo ']' >> compile_commands.json
+	@printf "$(BOLD)$(BRIGHT_GREEN)✅ compile_commands.json generated successfully!$(RESET)\n"
+
 # Display help information
 help:
 	@printf "$(BOLD)$(BG_GREEN)$(WHITE) 📖 MAKEFILE HELP $(RESET)\n"
@@ -174,6 +192,7 @@ help:
 	@printf "$(BOLD)$(BRIGHT_CYAN)║$(RESET) $(BRIGHT_GREEN)%-10s$(RESET) %-39s $(BOLD)$(BRIGHT_CYAN)      ║$(RESET)\n" "release" "Build in release mode"
 	@printf "$(BOLD)$(BRIGHT_CYAN)║$(RESET) $(BRIGHT_GREEN)%-10s$(RESET) %-39s $(BOLD)$(BRIGHT_CYAN)      ║$(RESET)\n" "clean" "Remove all build artifacts"
 	@printf "$(BOLD)$(BRIGHT_CYAN)║$(RESET) $(BRIGHT_GREEN)%-10s$(RESET) %-39s $(BOLD)$(BRIGHT_CYAN)      ║$(RESET)\n" "run" "Build and run the executable"
+	@printf "$(BOLD)$(BRIGHT_CYAN)║$(RESET) $(BRIGHT_GREEN)%-10s$(RESET) %-39s $(BOLD)$(BRIGHT_CYAN)      ║$(RESET)\n" "compile_commands" "Generate compile_commands.json for LSP"
 	@printf "$(BOLD)$(BRIGHT_CYAN)║$(RESET) $(BRIGHT_GREEN)%-10s$(RESET) %-39s $(BOLD)$(BRIGHT_CYAN)      ║$(RESET)\n" "install" "Install the executable to system"
 	@printf "$(BOLD)$(BRIGHT_CYAN)║$(RESET) $(BRIGHT_GREEN)%-10s$(RESET) %-39s $(BOLD)$(BRIGHT_CYAN)      ║$(RESET)\n" "uninstall" "Remove the executable from system"
 	@printf "$(BOLD)$(BRIGHT_CYAN)║$(RESET) $(BRIGHT_GREEN)%-10s$(RESET) %-39s $(BOLD)$(BRIGHT_CYAN)      ║$(RESET)\n" "info" "Display project information"

@@ -1,42 +1,67 @@
 #ifndef SERVER_HPP
-# define SERVER_HPP
+#define SERVER_HPP
 
-# include "player.hpp"
-# include <mutex>
-# include <netinet/in.h>
-# include <vector>
+class NetworkManager;
 #include "json.hpp"
-# define ConfigFileName "config.json"
+#include "player.hpp"
+
+#include <mutex>
+#include <netinet/in.h>
+#include <string>
+#include <unordered_map>
+#define ConfigFileName "config.json"
 
 using json = nlohmann::json;
 
-class Server
-{
-	private:
-		std::vector<Player>	_playerLst;
-		json				_playerSample;
-		std::mutex			_playerLock;
-		int					_protocolVersion;
-		int					_serverSize;
-		int					loadConfig();
-		std::string			_gameVersion;
-		std::string 		_serverMOTD;
-		
-	public:
-		Server();
-		~Server();
+class Server {
+  private:
+	std::unordered_map<int, Player*> _playerLst;
+	std::unordered_map<int, Player*> _tempPlayerLst;
+	json _playerSample;
+	std::mutex _playerLock;
+	std::mutex _tempPlayerLock;
+	int _protocolVersion;
+	int _serverSize;
+	int loadConfig();
+	std::string _gameVersion;
+	std::string _serverMOTD;
+	int _serverPort;
+	std::string _serverAddr;
+	NetworkManager* _networkManager;
 
-		int	start_server(int port);
+  public:
+	Server();
+	~Server();
 
-		int			getProtocolVersion();
-		int			getServerSize();
-		int			getAmountOnline();
-		std::string	getGameVersion();
-		std::string getServerMOTD();
+	int start_server(int port);
 
-		void	addPlayerToSample(const std::string &name);
-		void    removePlayerToSample(const std::string &name);
-		json	getPlayerSample();
+	int getProtocolVersion();
+	int getServerSize();
+	int getAmountOnline();
+	std::string getGameVersion();
+	std::string getServerMOTD();
+	int getServerPort() {
+		return _serverPort;
+	}
+	std::string getServerAddr() {
+		return _serverAddr;
+	}
+	std::unordered_map<int, Player*>& getPlayerLst() {
+		return _playerLst;
+	}
+	std::unordered_map<int, Player*>& getTempPlayerLst() {
+		return _tempPlayerLst;
+	}
+
+	void addPlayerToSample(const std::string& name);
+	void removePlayerToSample(const std::string& name);
+	Player* addPlayer(const std::string& name, const PlayerState state, const int socket);
+	void removePlayer(Player* player);
+	Player* addTempPlayer(const std::string& name, const PlayerState state, const int socket);
+	void removeTempPlayer(Player* player);
+	void promoteTempPlayer(Player* player);
+	void removePlayerFromAnyList(Player* player);
+	json getPlayerSample();
 };
 
 #endif
