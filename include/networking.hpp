@@ -112,9 +112,11 @@ class NetworkManager {
 	void handleIncomingData(int socket);
 };
 
-void packetRouter(Packet& packet, Server& server);
+void packetRouter(Packet* packet, Server& server, ThreadSafeQueue<Packet*>* _outgoingPackets);
 void handleHandshakePacket(Packet& packet, Server& server);
 void handleStatusPacket(Packet& packet, Server& server);
 void handlePingPacket(Packet& packet, Server& server);
+void handleLoginStartPacket(Packet& packet, Server& server);
+void writePlaytPacket(Packet& packet, Server& server);
 
 #endif

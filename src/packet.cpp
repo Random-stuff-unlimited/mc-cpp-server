@@ -19,6 +19,25 @@ using json = nlohmann::json;
 
 Packet::~Packet() {}
 
+Packet::Packet(const Packet& other)
+    : _size(other._size), _id(other._id), _data(other._data), _player(other._player),
+      _socketFd(other._socketFd), _returnPacket(other._returnPacket) {
+	std::cout << "[Packet] Copy constructor called" << std::endl;
+}
+
+Packet& Packet::operator=(const Packet& other) {
+	if (this != &other) {
+		_size         = other._size;
+		_id           = other._id;
+		_data         = other._data;
+		_player       = other._player;
+		_socketFd     = other._socketFd;
+		_returnPacket = other._returnPacket;
+		std::cout << "[Packet] Assignment operator called" << std::endl;
+	}
+	return *this;
+}
+
 Packet::Packet(Player* player) : _player(player), _socketFd(-1), _returnPacket(0) {
 	if (_player == nullptr)
 		throw std::runtime_error("Packet init with null player");
@@ -236,6 +255,6 @@ int Packet::getSocket() const {
 void Packet::setPacketSize(int32_t value) {
 	_size = value;
 }
-void Packet::setPacketId(int32_t value) {
+void Packet::setPacketId(uint32_t value) {
 	_id = value;
 }

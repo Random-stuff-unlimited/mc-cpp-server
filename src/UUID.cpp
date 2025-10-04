@@ -1,5 +1,5 @@
+#include "MD5.hpp"
 #include "UUID.hpp"
-
 #include "buffer.hpp"
 
 #include <cstdint>
@@ -7,6 +7,7 @@
 #include <iostream>
 #include <sstream>
 #include <string>
+#include <vector>
 
 UUID::UUID() : _mostSigBits(0), _leastSigBits(0) {}
 UUID::UUID(uint64_t most, uint64_t least) : _mostSigBits(most), _leastSigBits(least) {}
@@ -32,6 +33,28 @@ std::string UUID::toString() const {
 	   << (_mostSigBits & 0xFFFF) << "-" << std::setw(4) << ((_leastSigBits >> 48) & 0xFFFF) << "-"
 	   << std::setw(12) << (_leastSigBits & 0xFFFFFFFFFFFFULL);
 	return ss.str();
+}
+
+UUID UUID::fromOfflinePlayer(const std::string& name) {
+	std::string source = "OfflinePlayer:" + name;
+
+	std::vector<uint8_t> md = MD5::hash(source);
+
+	uint64_t most  = 0;
+	uint64_t least = 0;
+
+	for (int i = 0; i < 8; ++i)
+		most = (most << 8) | md[i];
+	for (int i = 8; i < 16; ++i)
+		least = (least << 8) | md[i];
+
+	most &= 0xFFFFFFFFFFFF0FFFULL;
+	most |= 0x0000000000003000ULL;
+
+	least &= 0x3FFFFFFFFFFFFFFFULL;
+	least |= 0x8000000000000000ULL;
+
+	return UUID(most, least);
 }
 
 void UUID::readFromBuffer(Buffer& buf) {

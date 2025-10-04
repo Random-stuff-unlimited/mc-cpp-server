@@ -4,6 +4,7 @@
 #include "UUID.hpp"
 
 #include <string>
+class Server;
 
 enum class PlayerState { None, Handshake, Status, Login, Play };
 
@@ -15,10 +16,12 @@ class Player {
 	int x, y, z;
 	int health;
 	UUID _uuid;
+	int _playerId;
+	Server& _server;
 
   public:
-	Player();
-	Player(const std::string& name, PlayerState state, int socket);
+	Player(Server& server);
+	Player(const std::string& name, PlayerState state, int socket, Server& server);
 	Player& operator=(const Player& src);
 	~Player();
 
@@ -28,6 +31,8 @@ class Player {
 	void setPlayerState(PlayerState state);
 	void setSocketFd(int socket);
 	int getSocketFd() const;
+	int getPlayerID() const;
+	void setUUID(UUID uuid);
 };
 
 #endif

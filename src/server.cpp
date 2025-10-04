@@ -36,7 +36,7 @@ int Server::start_server(int port) {
 
 		while (true) {
 			std::cout << "Server is running..." << std::endl;
-			sleep(10);
+			sleep(100);
 			break;
 		}
 	} catch (const std::exception& e) {
@@ -83,7 +83,7 @@ int Server::loadConfig() {
 Player* Server::addPlayer(const std::string& name, const PlayerState state, const int socket) {
 	Player* newPlayer = nullptr;
 	try {
-		newPlayer = new Player(name, state, socket);
+		newPlayer = new Player(name, state, socket, *this);
 	} catch (std::exception& e) {
 		std::cerr << "[Server]: Error adding player: " << e.what() << std::endl;
 		return (nullptr);
@@ -107,7 +107,7 @@ void Server::removePlayer(Player* player) {
 Player* Server::addTempPlayer(const std::string& name, const PlayerState state, const int socket) {
 	Player* newPlayer = nullptr;
 	try {
-		newPlayer = new Player(name, state, socket);
+		newPlayer = new Player(name, state, socket, *this);
 	} catch (std::exception& e) {
 		std::cerr << "[Server]: Error adding temp player: " << e.what() << std::endl;
 		return (nullptr);

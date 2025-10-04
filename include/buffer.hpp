@@ -1,6 +1,8 @@
 #ifndef BUFFER_HPP
 #define BUFFER_HPP
 
+#include "UUID.hpp"
+
 #include <cstddef>
 #include <cstdint>
 #include <string>
@@ -17,6 +19,9 @@ class Buffer {
 
 	int readVarInt();
 	void writeVarInt(int value);
+	void writeInt(int32_t value);
+	void writeIdentifierArray(const std::vector<std::string>& ids);
+	void writeUInt(uint32_t value);
 
 	std::string readString(int maxLength);
 	void writeString(const std::string& str);
@@ -30,6 +35,8 @@ class Buffer {
 	uint8_t readByte();
 	void writeByte(uint8_t byte);
 	void writeBytes(const std::string& data);
+	void writeBytes(const std::vector<uint8_t>& data);
+	void writeUUID(const UUID& uuid);
 };
 
 #endif
