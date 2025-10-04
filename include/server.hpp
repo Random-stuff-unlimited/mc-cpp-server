@@ -35,7 +35,7 @@ class Server {
 	Server();
 	~Server();
 
-	int start_server(int port);
+	int start_server();
 
 	int getProtocolVersion();
 	int getServerSize();

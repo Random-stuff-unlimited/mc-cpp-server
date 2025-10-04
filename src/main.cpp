@@ -3,5 +3,5 @@
 int main() {
 	Server server;
 
-	return (server.start_server(25565));
+	return (server.start_server());
 }

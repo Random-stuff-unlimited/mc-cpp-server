@@ -2,6 +2,7 @@
 #include "packet.hpp"
 #include "player.hpp"
 #include "server.hpp"
+#include "logger.hpp"
 
 #include <chrono>
 #include <exception>
@@ -17,8 +18,9 @@ void NetworkManager::workerThreadLoop() {
 			if (packet == nullptr)
 				break;
 			try {
-				std::cout << "Handling incoming data for player " << std::endl;
-				packetRouter(packet, getServer(), &_outgoingPackets);
+
+				g_logger->logNetwork(INFO, "Handling incoming data for player", "Worker");
+				packetRouter(*packet, getServer(), &_outgoingPackets);
 				if (packet->getReturnPacket() == PACKET_SEND) {
 					_outgoingPackets.push(packet);
 					packet = nullptr;
@@ -28,8 +30,7 @@ void NetworkManager::workerThreadLoop() {
 						getServer().removePlayerFromAnyList(player);
 						epoll_ctl(_epollFd, EPOLL_CTL_DEL, packet->getSocket(), nullptr);
 						close(packet->getSocket());
-						std::cout << "[Worker] Disconnected player socket " << packet->getSocket()
-						          << std::endl;
+						g_logger->logNetwork(INFO, "Disconnected player socket " + std::to_string(packet->getSocket()), "Worker");
 					}
 				}
 			} catch (const std::exception& e) {

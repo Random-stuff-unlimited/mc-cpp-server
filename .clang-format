@@ -6,8 +6,8 @@ UseTab: ForIndentation  # use tabs for indentation, spaces for alignment
 ContinuationIndentWidth: 8
 BreakBeforeBraces: Attach
 ColumnLimit: 100
-AllowShortIfStatementsOnASingleLine: false
-AllowShortFunctionsOnASingleLine: Empty
+AllowShortIfStatementsOnASingleLine: true
+AllowShortFunctionsOnASingleLine: true
 PointerAlignment: Left
 SpaceBeforeParens: ControlStatements
 AlignConsecutiveAssignments: Consecutive

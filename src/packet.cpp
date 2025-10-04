@@ -3,6 +3,7 @@
 #include "packet.hpp"
 #include "player.hpp"
 #include "server.hpp"
+#include "logger.hpp"
 
 #include <cstdint>
 #include <errno.h>
@@ -42,21 +43,20 @@ Packet::Packet(Player* player) : _player(player), _socketFd(-1), _returnPacket(0
 	if (_player == nullptr)
 		throw std::runtime_error("Packet init with null player");
 	_socketFd = _player->getSocketFd();
-	std::cout << "[Packet] Constructor: Socket FD = " << _socketFd << std::endl;
+	g_logger->logNetwork(INFO, "Constructor: Socket FD = " + std::to_string(_socketFd), "Packet");
 
 	_size = readVarint(_socketFd);
 	if (_size == -1)
 		throw std::runtime_error("Failed to read packet size");
-	std::cout << "[Packet] Read size: " << _size << std::endl;
+	g_logger->logNetwork(INFO, "Read size: " + std::to_string(_size), "Packet");
 
 	_id = readVarint(_socketFd);
 	if (_id == -1)
 		throw std::runtime_error("Failed to read packet id");
-	std::cout << "[Packet] Read ID: " << _id << std::endl;
+	g_logger->logNetwork(INFO, "Read ID: " + std::to_string(_id), "Packet");
 
 	int remaining = _size - getVarintSize(_id);
-	std::cout << "[Packet] Calculated remaining: " << remaining << " (size=" << _size
-	          << " - varintSize(" << _id << ")=" << getVarintSize(_id) << ")" << std::endl;
+	g_logger->logNetwork(INFO, "Calculated remaining: " + std::to_string(remaining) + " (size=" + std::to_string(_size) + " - varintSize(" + std::to_string(_id) + ")=" + std::to_string(getVarintSize(_id)) + ")", "Packet");
 
 	if (remaining < 0)
 		throw std::runtime_error("Invalid packet size");
@@ -72,10 +72,10 @@ Packet::Packet(Player* player) : _player(player), _socketFd(-1), _returnPacket(0
 			totalRead += bytesRead;
 		}
 
-		std::cout << "Packet total size: " << _size << std::endl;
-		std::cout << "Packet id: " << _id << std::endl;
-		std::cout << "Data size: " << remaining << std::endl;
-		std::cout << "Read size: " << totalRead << std::endl;
+		g_logger->logNetwork(INFO, "Packet total size: " + std::to_string(_size), "Packet");
+		g_logger->logNetwork(INFO, "Packet id: " + std::to_string(_id), "Packet");
+		g_logger->logNetwork(INFO, "Data size: " + std::to_string(remaining), "Packet");
+		g_logger->logNetwork(INFO, "Read size: " + std::to_string(totalRead), "Packet");
 
 		_data = Buffer(tmp);
 	}
@@ -83,21 +83,20 @@ Packet::Packet(Player* player) : _player(player), _socketFd(-1), _returnPacket(0
 
 Packet::Packet(int socketFd, Server& server)
     : _player(nullptr), _socketFd(socketFd), _returnPacket(0) {
-	std::cout << "[Packet] Constructor (socket): Socket FD = " << _socketFd << std::endl;
+	g_logger->logNetwork(INFO, "Constructor (socket): Socket FD = " + std::to_string(_socketFd), "Packet");
 
 	_size = readVarint(_socketFd);
 	if (_size == -1)
 		throw std::runtime_error("Failed to read packet size");
-	std::cout << "[Packet] Read size: " << _size << std::endl;
+	g_logger->logNetwork(INFO, "Read size: " + std::to_string(_size), "Packet");
 
 	_id = readVarint(_socketFd);
 	if (_id == -1)
 		throw std::runtime_error("Failed to read packet id");
-	std::cout << "[Packet] Read ID: " << _id << std::endl;
+	g_logger->logNetwork(INFO, "Read ID: " + std::to_string(_id), "Packet");
 
 	int remaining = _size - (getVarintSize(_id));
-	std::cout << "[Packet] Calculated remaining: " << remaining << " (size=" << _size
-	          << " - varintSize(" << _id << ")=" << getVarintSize(_id) << ")" << std::endl;
+	g_logger->logNetwork(INFO, "Calculated remaining: " + std::to_string(remaining) + " (size=" + std::to_string(_size) + " - varintSize(" + std::to_string(_id) + ")=" + std::to_string(getVarintSize(_id)) + ")", "Packet");
 
 	if (remaining < 0)
 		throw std::runtime_error("Invalid packet size");
@@ -121,10 +120,10 @@ Packet::Packet(int socketFd, Server& server)
 			totalRead += bytesRead;
 		}
 
-		std::cout << "Packet total size: " << _size << std::endl;
-		std::cout << "Packet id: " << _id << std::endl;
-		std::cout << "Data size: " << remaining << std::endl;
-		std::cout << "Read size: " << totalRead << std::endl;
+		g_logger->logNetwork(INFO, "Packet total size: " + std::to_string(_size), "Packet");
+		g_logger->logNetwork(INFO, "Packet id: " + std::to_string(_id), "Packet");
+		g_logger->logNetwork(INFO, "Data size: " + std::to_string(remaining), "Packet");
+		g_logger->logNetwork(INFO, "Read size: " + std::to_string(totalRead), "Packet");
 
 		_data = Buffer(tmp);
 	}
@@ -142,7 +141,7 @@ int Packet::getVarintSize(int32_t value) {
 		value >>= 7;
 		size++;
 	} while (value != 0);
-	std::cout << "[Packet] getVarintSize(" << original_value << ") = " << size << std::endl;
+	g_logger->logNetwork(INFO, "getVarintSize(" + std::to_string(original_value) + ") = " + std::to_string(size), "Packet");
 	return size;
 }
 
@@ -184,8 +183,7 @@ int Packet::readVarint(int sock) {
 		}
 	}
 
-	std::cout << "readVarint: Successfully read " << value << " (" << bytesRead << " bytes)"
-	          << std::endl;
+	g_logger->logNetwork(INFO, "readVarint: Successfully read " + std::to_string(value) + " (" + std::to_string(bytesRead) + " bytes)", "Packet");
 	return value;
 }
 
