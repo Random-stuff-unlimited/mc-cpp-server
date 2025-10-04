@@ -6,7 +6,6 @@
 #include "server.hpp"
 #include "logger.hpp"
 
-#include <iostream>
 #include <string>
 #include <unistd.h>
 

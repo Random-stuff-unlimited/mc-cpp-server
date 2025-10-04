@@ -1,4 +1,6 @@
 #pragma once
+#ifndef LOGGER_HPP
+# define LOGGER_HPP
 #include <chrono>
 #include <filesystem>
 #include <fstream>
@@ -54,3 +56,4 @@ class LogManager {
 // Global logger instance
 extern std::unique_ptr<LogManager> g_logger;
 void initializeGlobalLogger();
+#endif
