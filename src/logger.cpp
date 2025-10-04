@@ -11,6 +11,7 @@
 #include <string>
 #include <mutex>
 #include <ctime>
+#include <memory>
 
 namespace fs = std::filesystem;
 
@@ -125,8 +126,7 @@ void LogManager::log(LogLevel level,
 		_logQueue.push(entry);
 	}
 
-	// Notify TUI callbacks for GAMEINFO logs
-	if (category == GAMEINFO) {
+	if (category == GAMEINFO || category == NETWORK) { // Remove category == NETWORK on release build
 	    std::string formattedEntry = formatLogEntry(entry);
 	    std::cout << formattedEntry << std::endl;
 	}
@@ -194,10 +194,10 @@ std::string LogManager::formatLogEntry(const LogEntry& entry) {
 		ss << "[DEBUG] ";
 		break;
 	case INFO:
-		ss << "[INFO]  ";
+		ss << "[INFO] ";
 		break;
 	case WARN:
-		ss << "[WARN]  ";
+		ss << "[WARN] ";
 		break;
 	case ERROR:
 		ss << "[ERROR] ";

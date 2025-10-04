@@ -3,6 +3,7 @@
 #include "packet.hpp"
 #include "player.hpp"
 #include "server.hpp"
+#include "logger.hpp"
 
 #include <iostream>
 #include <unistd.h>
@@ -16,7 +17,7 @@ void handlePingPacket(Packet& packet, Server& server) {
 
 	long timestamp = packet.getData().readLong();
 
-	std::cout << "[Ping] Received ping request with timestamp: " << timestamp << std::endl;
+	g_logger->logNetwork(INFO, "Received ping request with timestamp: " + std::to_string(timestamp), "Ping");
 
 	int packetId           = 0x01;
 	int packetIdVarintSize = packet.getVarintSize(packetId);
@@ -32,7 +33,7 @@ void handlePingPacket(Packet& packet, Server& server) {
 	packet.setPacketSize(buf.getData().size());
 	packet.getPlayer()->setPlayerState(PlayerState::None);
 
-	std::cout << "[Ping] Pong response ready - echoing timestamp " << timestamp << std::endl;
+	g_logger->logNetwork(INFO, "Pong response ready - echoing timestamp " + std::to_string(timestamp), "Ping");
 
 	(void)server;
 }

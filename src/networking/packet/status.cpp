@@ -4,6 +4,7 @@
 #include "packet.hpp"
 #include "player.hpp"
 #include "server.hpp"
+#include "logger.hpp"
 
 #include <iostream>
 #include <string>
@@ -44,5 +45,5 @@ void handleStatusPacket(Packet& packet, Server& server) {
 	packet.setPacketSize(buf.getData().size());
 	packet.getPlayer()->setPlayerState(PlayerState::Status);
 
-	std::cout << "[Status] JSON response ready - connection will be closed" << std::endl;
+	g_logger->logNetwork(INFO, "JSON response ready - connection will be closed", "Status");
 }
