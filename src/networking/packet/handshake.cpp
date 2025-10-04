@@ -4,7 +4,6 @@
 #include "logger.hpp"
 
 #include <cstdint>
-#include <iostream>
 #include <string>
 #include <unistd.h>
 

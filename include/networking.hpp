@@ -116,5 +116,5 @@ void packetRouter(Packet& packet, Server& server);
 void handleHandshakePacket(Packet& packet, Server& server);
 void handleStatusPacket(Packet& packet, Server& server);
 void handlePingPacket(Packet& packet, Server& server);
-
+void handleClientInformation(Packet& packet);
 #endif

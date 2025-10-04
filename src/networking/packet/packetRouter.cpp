@@ -29,6 +29,14 @@ void packetRouter(Packet& packet, Server& server) {
 	case PlayerState::Play:
 		// handlePlayPacket(packet, server);
 		break;
+	case PlayerState::Configuration:
+	        if (packet.getId() == 0x00) {
+                handleClientInformation(packet)
+	        } else {
+	            packet.getPlayer()->setPlayerState(PlayerState::None);
+	            packet.setReturnPacket(PACKET_DISCONNECT);
+	        }
+	    break;
 	default:
 		// État inconnu
 		break;

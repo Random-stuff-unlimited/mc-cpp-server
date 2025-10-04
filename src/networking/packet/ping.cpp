@@ -5,7 +5,6 @@
 #include "server.hpp"
 #include "logger.hpp"
 
-#include <iostream>
 #include <unistd.h>
 
 void handlePingPacket(Packet& packet, Server& server) {
