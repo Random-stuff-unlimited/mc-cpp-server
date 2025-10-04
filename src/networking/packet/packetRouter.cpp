@@ -17,13 +17,11 @@ void initConnectionSequence(Packet* packet,
 }
 
 void packetRouter(Packet* packet, Server& server, ThreadSafeQueue<Packet*>* _outgoingPackets) {
-	if (packet == nullptr)
-		return;
+	if (packet == nullptr) return;
 
 	Player* player = packet->getPlayer();
 
-	if (player == nullptr)
-		return;
+	if (player == nullptr) return;
 
 	// Vous pouvez maintenant utiliser incomingPackets dans cette fonction
 	// Par exemple: incomingPackets->push(nouveauPacket);
