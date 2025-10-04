@@ -2,13 +2,11 @@
 #include <chrono>
 #include <filesystem>
 #include <fstream>
-#include <functional>
 #include <memory>
 #include <mutex>
 #include <queue>
 #include <string>
 #include <thread>
-#include <vector>
 
 enum LogLevel { DEBUG, INFO, WARN, ERROR };
 enum LogCategory { NETWORK, GAMEINFO };
