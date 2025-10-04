@@ -1,3 +1,4 @@
+#include "UUID.hpp"
 #include "buffer.hpp"
 
 #include <cstdint>
@@ -19,9 +20,20 @@ void Buffer::writeByte(uint8_t byte) {
 }
 
 void Buffer::writeBytes(const std::string& data) {
-	for (char c : data) {
-		writeByte(static_cast<uint8_t>(c));
-	}
+	_data.insert(_data.end(), data.begin(), data.end());
+}
+
+void Buffer::writeBytes(const std::vector<uint8_t>& data) {
+	_data.insert(_data.end(), data.begin(), data.end());
+}
+
+void Buffer::writeUUID(const UUID& uuid) {
+	uint64_t msb = uuid.getMostSigBits();
+	uint64_t lsb = uuid.getLeastSigBits();
+	for (int i = 7; i >= 0; --i)
+		writeByte((msb >> (i * 8)) & 0xFF);
+	for (int i = 7; i >= 0; --i)
+		writeByte((lsb >> (i * 8)) & 0xFF);
 }
 
 int Buffer::readVarInt() {
@@ -39,6 +51,13 @@ int Buffer::readVarInt() {
 	return value;
 }
 
+void Buffer::writeInt(int32_t value) {
+	writeByte(static_cast<uint8_t>((value >> 24) & 0xFF));
+	writeByte(static_cast<uint8_t>((value >> 16) & 0xFF));
+	writeByte(static_cast<uint8_t>((value >> 8) & 0xFF));
+	writeByte(static_cast<uint8_t>(value & 0xFF));
+}
+
 void Buffer::writeVarInt(int value) {
 	while (true) {
 		if ((value & ~0x7F) == 0) {
@@ -48,6 +67,20 @@ void Buffer::writeVarInt(int value) {
 			writeByte(static_cast<uint8_t>((value & 0x7F) | 0x80));
 			value >>= 7;
 		}
+	}
+}
+
+void Buffer::writeUInt(uint32_t value) {
+	writeByte(static_cast<uint8_t>((value >> 24) & 0xFF));
+	writeByte(static_cast<uint8_t>((value >> 16) & 0xFF));
+	writeByte(static_cast<uint8_t>((value >> 8) & 0xFF));
+	writeByte(static_cast<uint8_t>(value & 0xFF));
+}
+
+void Buffer::writeIdentifierArray(const std::vector<std::string>& ids) {
+	writeVarInt(static_cast<int>(ids.size()));
+	for (const auto& id : ids) {
+		writeString(id);
 	}
 }
 

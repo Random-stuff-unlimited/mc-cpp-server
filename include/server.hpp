@@ -2,6 +2,7 @@
 #define SERVER_HPP
 
 class NetworkManager;
+#include "id_manager.hpp"
 #include "json.hpp"
 #include "player.hpp"
 
@@ -28,6 +29,7 @@ class Server {
 	int _serverPort;
 	std::string _serverAddr;
 	NetworkManager* _networkManager;
+	IdManager _idManager;
 
   public:
 	Server();
@@ -62,6 +64,13 @@ class Server {
 	void promoteTempPlayer(Player* player);
 	void removePlayerFromAnyList(Player* player);
 	json getPlayerSample();
+	IdManager& getIdManager() {
+		return (_idManager);
+	}
+
+	NetworkManager& getNetworkManager() {
+		return *_networkManager;
+	}
 };
 
 #endif

@@ -21,6 +21,8 @@ class Packet {
   public:
 	Packet(Player* player);
 	Packet(int socketFd, Server& server);
+	Packet(const Packet& other);
+	Packet& operator=(const Packet& other);
 	~Packet();
 	static int readVarint(int sock);
 	static void writeVarint(int sock, int value);
@@ -35,7 +37,7 @@ class Packet {
 	int getReturnPacket();
 	int getVarintSize(int32_t value);
 	void setPacketSize(int32_t value);
-	void setPacketId(int32_t value);
+	void setPacketId(uint32_t value);
 };
 
 #endif

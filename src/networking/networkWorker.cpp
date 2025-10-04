@@ -1,8 +1,8 @@
+#include "logger.hpp"
 #include "networking.hpp"
 #include "packet.hpp"
 #include "player.hpp"
 #include "server.hpp"
-#include "logger.hpp"
 
 #include <chrono>
 #include <exception>
@@ -15,11 +15,11 @@ void NetworkManager::workerThreadLoop() {
 		Packet* packet = nullptr;
 
 		if (_incomingPackets.waitAndPopTimeout(packet, std::chrono::milliseconds(100))) {
-			if (packet == nullptr)
-				break;
+			if (packet == nullptr) break;
 			try {
+
 				g_logger->logNetwork(INFO, "Handling incoming data for player", "Worker");
-				packetRouter(*packet, getServer());
+				packetRouter(packet, getServer(), &_outgoingPackets);
 				if (packet->getReturnPacket() == PACKET_SEND) {
 					_outgoingPackets.push(packet);
 					packet = nullptr;
@@ -29,14 +29,16 @@ void NetworkManager::workerThreadLoop() {
 						getServer().removePlayerFromAnyList(player);
 						epoll_ctl(_epollFd, EPOLL_CTL_DEL, packet->getSocket(), nullptr);
 						close(packet->getSocket());
-						g_logger->logNetwork(INFO, "Disconnected player socket " + std::to_string(packet->getSocket()), "Worker");
+						g_logger->logNetwork(INFO,
+						                     "Disconnected player socket " +
+						                             std::to_string(packet->getSocket()),
+						                     "Worker");
 					}
 				}
 			} catch (const std::exception& e) {
 				std::cerr << "Error processing packet: " << e.what() << std::endl;
 			}
 		}
-		if (packet != nullptr)
-			delete packet;
+		if (packet != nullptr) delete packet;
 	}
 }

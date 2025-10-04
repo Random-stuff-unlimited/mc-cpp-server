@@ -1,13 +1,16 @@
+#include "UUID.hpp"
 #include "player.hpp"
+#include "server.hpp"
 
 #include <string>
 
-Player::Player()
+Player::Player(Server& server)
     : _name("Player_entity"), _state(PlayerState::None), _socketFd(-1), x(0), y(0), z(0), health(0),
-      _uuid() {}
+      _uuid(), _playerId(server.getIdManager().allocate()), _server(server) {}
 
-Player::Player(const std::string& name, const PlayerState state, const int socket)
-    : _state(state), _socketFd(socket), x(0), y(0), z(0), health(20) {
+Player::Player(const std::string& name, const PlayerState state, const int socket, Server& server)
+    : _state(state), _socketFd(socket), x(0), y(0), z(0), health(20), _uuid(),
+      _playerId(server.getIdManager().allocate()), _server(server) {
 	if (name.length() > 32)
 		_name = name.substr(0, 31);
 	else
@@ -26,7 +29,9 @@ Player& Player::operator=(const Player& src) {
 	return (*this);
 }
 
-Player::~Player() {}
+Player::~Player() {
+	_server.getIdManager().release(_playerId);
+}
 
 std::string Player::getPlayerName(void) {
 	return (this->_name);
@@ -45,4 +50,12 @@ void Player::setSocketFd(int socket) {
 }
 int Player::getSocketFd() const {
 	return (this->_socketFd);
+}
+
+void Player::setUUID(UUID uuid) {
+	_uuid = uuid;
+}
+
+int Player::getPlayerID() const {
+	return (_playerId);
 }

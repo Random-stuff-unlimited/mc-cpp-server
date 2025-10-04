@@ -26,6 +26,7 @@ class UUID {
 
 	void readFromBuffer(Buffer& buf);
 	void writeToBuffer(Buffer& buf) const;
+	static UUID fromOfflinePlayer(const std::string& name);
 };
 
 #endif
