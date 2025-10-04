@@ -23,7 +23,7 @@ Server::~Server() {
 	}
 }
 
-int Server::start_server(int port) {
+int Server::start_server() {
 	try {
 		Server::loadConfig();
 		size_t workerCount = 4;
@@ -43,7 +43,6 @@ int Server::start_server(int port) {
 		std::cout << "Error: " << e.what() << std::endl;
 		return (1);
 	}
-	(void)port;
 	return (0);
 }
 

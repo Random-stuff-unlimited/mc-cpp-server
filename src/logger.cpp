@@ -8,10 +8,13 @@
 #include <sstream>
 #include <sys/stat.h>
 #include <thread>
+#include <string>
+#include <mutex>
+#include <ctime>
 
 namespace fs = std::filesystem;
 
-LogManager::LogManager() : _running(false), _scrollOffset(0), _autoScroll(true) {
+LogManager::LogManager() : _running(false) {
 	if (initializeLogDirectory()) {
 		_running      = true;
 		_writerThread = std::thread(&LogManager::writerThreadLoop, this);
@@ -124,10 +127,8 @@ void LogManager::log(LogLevel level,
 
 	// Notify TUI callbacks for GAMEINFO logs
 	if (category == GAMEINFO) {
-		std::lock_guard<std::mutex> lock(_callbackMutex);
-		for (const auto& callback : _tuiCallbacks) {
-			callback(entry);
-		}
+	    std::string formattedEntry = formatLogEntry(entry);
+	    std::cout << formattedEntry << std::endl;
 	}
 }
 
@@ -139,17 +140,6 @@ void LogManager::logGameInfo(LogLevel level,
                              const std::string& message,
                              const std::string& source) {
 	log(level, GAMEINFO, message, source);
-}
-
-void LogManager::registerTUICallback(std::function<void(const LogEntry&)> callback) {
-	std::lock_guard<std::mutex> lock(_callbackMutex);
-	_tuiCallbacks.clear(); // Simple implementation: only one callback
-	_tuiCallbacks.push_back(callback);
-}
-
-void LogManager::unregisterTUICallback() {
-	std::lock_guard<std::mutex> lock(_callbackMutex);
-	_tuiCallbacks.clear();
 }
 
 void LogManager::writerThreadLoop() {

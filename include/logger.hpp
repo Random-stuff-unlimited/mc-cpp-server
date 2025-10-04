@@ -32,13 +32,6 @@ class LogManager {
 	std::thread _writerThread;
 	bool _running;
 
-	// TUI integration
-	std::vector<std::function<void(const LogEntry&)>> _tuiCallbacks;
-	std::mutex _callbackMutex;
-
-	// Display settings (for future TUI integration)
-	int _scrollOffset;
-	bool _autoScroll;
 
   public:
 	LogManager();
@@ -51,10 +44,6 @@ class LogManager {
 	         const std::string& source = "");
 	void logNetwork(LogLevel level, const std::string& message, const std::string& source = "");
 	void logGameInfo(LogLevel level, const std::string& message, const std::string& source = "");
-
-	// TUI integration
-	void registerTUICallback(std::function<void(const LogEntry&)> callback);
-	void unregisterTUICallback();
 
   private:
 	bool initializeLogDirectory();
