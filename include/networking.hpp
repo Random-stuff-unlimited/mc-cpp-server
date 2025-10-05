@@ -15,6 +15,8 @@ class Server;
 #include <queue>
 #include <thread>
 #include <unistd.h>
+#include <vector>
+#include <cstddef>
 
 template <typename T> class ThreadSafeQueue {
   private:
@@ -116,7 +118,7 @@ void packetRouter(Packet* packet, Server& server, ThreadSafeQueue<Packet*>* _out
 void handleHandshakePacket(Packet& packet, Server& server);
 void handleStatusPacket(Packet& packet, Server& server);
 void handlePingPacket(Packet& packet, Server& server);
-void handleClientInformation(Packet& packet);
+void handleClientInformation(Packet& packet, Server &server);
 void handleLoginStartPacket(Packet& packet, Server& server);
 void writePlaytPacket(Packet& packet, Server& server);
 
