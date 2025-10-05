@@ -11,8 +11,7 @@
 void handleLoginStartPacket(Packet& packet, Server& server) {
 	std::cout << "=== Login Start Received ===\n";
 	Player* player = packet.getPlayer();
-	if (!player)
-		return;
+	if (!player) return;
 
 	std::string username = packet.getData().readString(16);
 	player->setPlayerName(username);
@@ -33,6 +32,6 @@ void handleLoginStartPacket(Packet& packet, Server& server) {
 	packet.getData() = final;
 	packet.setReturnPacket(PACKET_SEND);
 	packet.setPacketSize(final.getData().size());
-	player->setPlayerState(PlayerState::Play);
+	player->setPlayerState(PlayerState::Configuration);
 	(void)server;
 }
