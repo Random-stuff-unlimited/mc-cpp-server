@@ -6,7 +6,7 @@
 
 void handleClientInformation(Packet& packet, Server &server) {
     PlayerConfig* config = packet.getPlayer()->getPlayerConfig();
-    
+
     config->setLocale(packet.getData().readString(16));
     config->setViewDistance(packet.getData().readByte());
     config->setChatMode(packet.getData().readVarInt());
