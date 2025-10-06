@@ -4,12 +4,13 @@
 #include "packet.hpp"
 #include "player.hpp"
 #include "server.hpp"
+#include "logger.hpp"
 
 #include <iostream>
 #include <string>
 
 void handleLoginStartPacket(Packet& packet, Server& server) {
-	std::cout << "=== Login Start Received ===\n";
+	g_logger->logNetwork(INFO, "=== Login Start Received ===", "Login");
 	Player* player = packet.getPlayer();
 	if (!player) return;
 
@@ -33,6 +34,6 @@ void handleLoginStartPacket(Packet& packet, Server& server) {
 	packet.setReturnPacket(PACKET_SEND);
 	packet.setPacketSize(final.getData().size());
 	// Don't transition to Configuration yet - wait for Login Acknowledged
-	std::cout << "[Login] Login Success sent, waiting for Login Acknowledged\n";
+	g_logger->logNetwork(INFO, "Login Success sent, waiting for Login Acknowledged", "Login");
 	(void)server;
 }

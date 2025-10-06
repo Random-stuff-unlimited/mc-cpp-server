@@ -4,12 +4,13 @@
 #include "packet.hpp"
 #include "player.hpp"
 #include "server.hpp"
+#include "logger.hpp"
 
 #include <iostream>
 #include <string>
 
 void writePlaytPacket(Packet& packet, Server& server) {
-	std::cout << "=== Play packet write init ===\n";
+	g_logger->logNetwork(INFO, "=== Play packet write init ===", "Play");
 	Player* player = packet.getPlayer();
 
 	Buffer buf;

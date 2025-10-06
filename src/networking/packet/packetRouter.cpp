@@ -2,6 +2,7 @@
 #include "packet.hpp"
 #include "player.hpp"
 #include "server.hpp"
+#include "logger.hpp"
 #include <iostream>
 
 void initConnectionSequence(Packet* packet,
@@ -42,12 +43,11 @@ void initConnectionSequence(Packet* packet,
 		// 6. Complete spawn sequence (abilities, health, experience, time, held item)
 		completeSpawnSequence(*packet, server, _outgoingPackets);
 
-		std::cout << "=== Complete connection sequence sent to player: "
-		          << player->getPlayerName() << " ===\n";
+		g_logger->logNetwork(INFO, "Complete connection sequence sent to player: " + player->getPlayerName(), "Connection");
 
 		packet->setReturnPacket(PACKET_OK);
 	} catch (const std::exception& e) {
-		std::cerr << "Error in connection sequence: " << e.what() << std::endl;
+		g_logger->logNetwork(ERROR, "Error in connection sequence: " + std::string(e.what()), "Connection");
 		packet->setReturnPacket(PACKET_ERROR);
 	}
 }
@@ -101,15 +101,14 @@ void packetRouter(Packet* packet, Server& server, ThreadSafeQueue<Packet*>* _out
 		break;
 	case PlayerState::Configuration:
 		if (packet->getId() == 0x02) {
-			std::cout << "[Configuration] Received packet 0x02 - treating as Acknowledge Finish Configuration\n";
-			handleAcknowledgeFinishConfiguration(*packet, server);
-			initConnectionSequence(packet, _outgoingPackets, server);
+			g_logger->logNetwork(INFO, "Received packet 0x02 in Configuration state, data size: " + std::to_string(packet->getSize()) + " bytes", "Configuration");
+			// For now, just acknowledge it - we'll handle proper sequence later
+			packet->setReturnPacket(PACKET_OK);
 		} else if (packet->getId() == 0x03) {
 			handleClientInformation(*packet, server);
 			handleFinishConfiguration(*packet, server);
 		} else {
-			std::cout << "[Configuration] Unknown packet ID: " << packet->getId()
-			          << ", data size: " << packet->getSize() << " bytes\n";
+			g_logger->logNetwork(INFO, "Unknown packet ID: " + std::to_string(packet->getId()) + ", data size: " + std::to_string(packet->getSize()) + " bytes", "Configuration");
 			player->setPlayerState(PlayerState::None);
 			packet->setReturnPacket(PACKET_DISCONNECT);
 		}
