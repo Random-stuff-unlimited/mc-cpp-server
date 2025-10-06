@@ -121,5 +121,25 @@ void handlePingPacket(Packet& packet, Server& server);
 void handleClientInformation(Packet& packet, Server &server);
 void handleLoginStartPacket(Packet& packet, Server& server);
 void writePlaytPacket(Packet& packet, Server& server);
+void writeSetCenterPacket(Packet& packet, Server& server);
+
+// Chunk batch functions
+void sendChunkBatchStart(Packet& packet, Server& server);
+void sendChunkBatchFinished(Packet& packet, Server& server, int batchSize);
+void sendChunkBatchSequence(Packet& packet, Server& server, ThreadSafeQueue<Packet*>* outgoingPackets);
+
+// Chunk data functions
+void sendChunkData(Packet& packet, Server& server, int chunkX, int chunkZ);
+void sendPlayerPositionAndLook(Packet& packet, Server& server);
+void sendSpawnPosition(Packet& packet, Server& server);
+
+// Spawn sequence functions
+void sendPlayerAbilities(Packet& packet, Server& server);
+void sendSetHealth(Packet& packet, Server& server);
+void sendSetExperience(Packet& packet, Server& server);
+void sendUpdateTime(Packet& packet, Server& server);
+void sendSetHeldItem(Packet& packet, Server& server);
+void handleConfirmTeleportation(Packet& packet, Server& server);
+void completeSpawnSequence(Packet& packet, Server& server, ThreadSafeQueue<Packet*>* outgoingPackets);
 
 #endif

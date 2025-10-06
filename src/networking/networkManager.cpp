@@ -46,6 +46,7 @@ void NetworkManager::startThreads() {
 		for (size_t i = 0; i < workerCount; i++) {
 			_workerThreads.emplace_back(&NetworkManager::workerThreadLoop, this);
 		}
+
 	} catch (const std::exception& e) {
 		stopThreads();
 		throw std::runtime_error(std::string("Thread start error: ") + e.what());
