@@ -100,7 +100,10 @@ void packetRouter(Packet* packet, Server& server, ThreadSafeQueue<Packet*>* _out
 		}
 		break;
 	case PlayerState::Configuration:
-		if (packet->getId() == 0x02) {
+		if (packet->getId() == 0x00) {
+			g_logger->logNetwork(INFO, "Received packet 0x00 in Configuration state, data size: " + std::to_string(packet->getSize()) + " bytes", "Configuration");
+			packet->setReturnPacket(PACKET_OK);
+		} else if (packet->getId() == 0x02) {
 			g_logger->logNetwork(INFO, "Received packet 0x02 in Configuration state, data size: " + std::to_string(packet->getSize()) + " bytes", "Configuration");
 			// For now, just acknowledge it - we'll handle proper sequence later
 			packet->setReturnPacket(PACKET_OK);
