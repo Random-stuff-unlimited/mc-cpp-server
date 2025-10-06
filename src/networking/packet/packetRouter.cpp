@@ -100,14 +100,13 @@ void packetRouter(Packet* packet, Server& server, ThreadSafeQueue<Packet*>* _out
 		}
 		break;
 	case PlayerState::Configuration:
-		if (packet->getId() == 0x00) {
+		if (packet->getId() == 0x02) {
+			std::cout << "[Configuration] Received packet 0x02 - treating as Acknowledge Finish Configuration\n";
+			handleAcknowledgeFinishConfiguration(*packet, server);
 			initConnectionSequence(packet, _outgoingPackets, server);
-		} else if (packet->getId() == 0x02) {
-			std::cout << "[Configuration] Received Plugin Message packet (ID 2), data size: "
-			          << packet->getSize() << " bytes\n";
-			packet->setReturnPacket(PACKET_OK);
 		} else if (packet->getId() == 0x03) {
 			handleClientInformation(*packet, server);
+			handleFinishConfiguration(*packet, server);
 		} else {
 			std::cout << "[Configuration] Unknown packet ID: " << packet->getId()
 			          << ", data size: " << packet->getSize() << " bytes\n";

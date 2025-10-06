@@ -121,6 +121,8 @@ void handlePingPacket(Packet& packet, Server& server);
 void handleClientInformation(Packet& packet, Server &server);
 void handleLoginStartPacket(Packet& packet, Server& server);
 void handleLoginAcknowledged(Packet& packet, Server& server);
+void handleFinishConfiguration(Packet& packet, Server& server);
+void handleAcknowledgeFinishConfiguration(Packet& packet, Server& server);
 void writePlaytPacket(Packet& packet, Server& server);
 void writeSetCenterPacket(Packet& packet, Server& server);
 
