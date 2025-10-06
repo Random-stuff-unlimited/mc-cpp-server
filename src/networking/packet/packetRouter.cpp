@@ -102,9 +102,15 @@ void packetRouter(Packet* packet, Server& server, ThreadSafeQueue<Packet*>* _out
 	case PlayerState::Configuration:
 		if (packet->getId() == 0x00) {
 			initConnectionSequence(packet, _outgoingPackets, server);
+		} else if (packet->getId() == 0x02) {
+			std::cout << "[Configuration] Received Plugin Message packet (ID 2), data size: "
+			          << packet->getSize() << " bytes\n";
+			packet->setReturnPacket(PACKET_OK);
 		} else if (packet->getId() == 0x03) {
 			handleClientInformation(*packet, server);
 		} else {
+			std::cout << "[Configuration] Unknown packet ID: " << packet->getId()
+			          << ", data size: " << packet->getSize() << " bytes\n";
 			player->setPlayerState(PlayerState::None);
 			packet->setReturnPacket(PACKET_DISCONNECT);
 		}
