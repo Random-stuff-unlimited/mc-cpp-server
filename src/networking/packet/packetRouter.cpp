@@ -5,16 +5,17 @@
 #include "logger.hpp"
 #include <iostream>
 
-void initConnectionSequence(Packet* packet,
-                            ThreadSafeQueue<Packet*>* _outgoingPackets,
-                            Server& server) {
+void initGameSequence(Packet* packet,
+                      ThreadSafeQueue<Packet*>* _outgoingPackets,
+                      Server& server) {
 	if (packet == nullptr || _outgoingPackets == nullptr)
 		return;
 
 	Player* player = packet->getPlayer();
 	if (player == nullptr) return;
 
-	player->setPlayerState(PlayerState::Play);
+	// Player should already be in Play state at this point
+	g_logger->logNetwork(INFO, "Starting game sequence for player: " + player->getPlayerName(), "Play");
 
 	try {
 		// 1. Send Login (play) packet - 0x2B
@@ -43,11 +44,11 @@ void initConnectionSequence(Packet* packet,
 		// 6. Complete spawn sequence (abilities, health, experience, time, held item)
 		completeSpawnSequence(*packet, server, _outgoingPackets);
 
-		g_logger->logNetwork(INFO, "Complete connection sequence sent to player: " + player->getPlayerName(), "Connection");
+		g_logger->logNetwork(INFO, "Complete game sequence sent to player: " + player->getPlayerName(), "Play");
 
 		packet->setReturnPacket(PACKET_OK);
 	} catch (const std::exception& e) {
-		g_logger->logNetwork(ERROR, "Error in connection sequence: " + std::string(e.what()), "Connection");
+		g_logger->logNetwork(ERROR, "Error in game sequence: " + std::string(e.what()), "Play");
 		packet->setReturnPacket(PACKET_ERROR);
 	}
 }
@@ -83,8 +84,75 @@ void packetRouter(Packet* packet, Server& server, ThreadSafeQueue<Packet*>* _out
 	case PlayerState::Login:
 		if (packet->getId() == 0x00) {
 			handleLoginStartPacket(*packet, server);
+		} else if (packet->getId() == 0x02) {
+			// Login Plugin Response
+			g_logger->logNetwork(INFO, "Received Login Plugin Response", "Login");
+			packet->setReturnPacket(PACKET_OK);
 		} else if (packet->getId() == 0x03) {
 			handleLoginAcknowledged(*packet, server);
+		} else if (packet->getId() == 0x04) {
+			// Cookie Response (login)
+			g_logger->logNetwork(INFO, "Received Login Cookie Response", "Login");
+			packet->setReturnPacket(PACKET_OK);
+		} else {
+			player->setPlayerState(PlayerState::None);
+			packet->setReturnPacket(PACKET_DISCONNECT);
+		}
+		break;
+	case PlayerState::Configuration:
+		if (packet->getId() == 0x00) {
+			// Client Information (configuration)
+			g_logger->logNetwork(INFO, "Received Client Information in Configuration state", "Configuration");
+			handleClientInformation(*packet, server);
+			packet->setReturnPacket(PACKET_OK);
+
+			// After processing client info, tell client we're done configuring
+			Packet* finishPacket = new Packet(*packet);
+			handleFinishConfiguration(*finishPacket, server);
+			_outgoingPackets->push(finishPacket);
+			g_logger->logNetwork(INFO, "Sent Finish Configuration after Client Information", "Configuration");
+
+		} else if (packet->getId() == 0x01) {
+			// Cookie Response (configuration)
+			g_logger->logNetwork(INFO, "Received Cookie Response in Configuration state", "Configuration");
+			packet->setReturnPacket(PACKET_OK);
+
+		} else if (packet->getId() == 0x02) {
+			// Serverbound Plugin Message (configuration)
+			g_logger->logNetwork(INFO, "Received Serverbound Plugin Message in Configuration state (0x02), size: " + std::to_string(packet->getSize()) + " bytes", "Configuration");
+			packet->setReturnPacket(PACKET_OK);
+
+		} else if (packet->getId() == 0x03) {
+			// Acknowledge Finish Configuration -> enter Play
+			g_logger->logNetwork(INFO, "Received Acknowledge Finish Configuration - transitioning to Play state", "Configuration");
+			handleAcknowledgeFinishConfiguration(*packet, server);
+			initGameSequence(packet, _outgoingPackets, server);
+
+		} else if (packet->getId() == 0x04) {
+			// Keep Alive (configuration)
+			g_logger->logNetwork(INFO, "Received Keep Alive in Configuration state", "Configuration");
+			packet->setReturnPacket(PACKET_OK);
+
+		} else if (packet->getId() == 0x05) {
+			// Pong (configuration)
+			g_logger->logNetwork(INFO, "Received Pong in Configuration state", "Configuration");
+			packet->setReturnPacket(PACKET_OK);
+
+		} else if (packet->getId() == 0x06) {
+			// Resource Pack Response (configuration)
+			g_logger->logNetwork(INFO, "Received Resource Pack Response in Configuration state", "Configuration");
+			packet->setReturnPacket(PACKET_OK);
+
+		} else if (packet->getId() == 0x07) {
+			// Serverbound Known Packs (configuration)
+			g_logger->logNetwork(INFO, "Received Serverbound Known Packs in Configuration state", "Configuration");
+			packet->setReturnPacket(PACKET_OK);
+
+		} else if (packet->getId() == 0x08) {
+			// Custom Click Action (configuration)
+			g_logger->logNetwork(INFO, "Received Custom Click Action in Configuration state", "Configuration");
+			packet->setReturnPacket(PACKET_OK);
+
 		} else {
 			player->setPlayerState(PlayerState::None);
 			packet->setReturnPacket(PACKET_DISCONNECT);
@@ -97,22 +165,7 @@ void packetRouter(Packet* packet, Server& server, ThreadSafeQueue<Packet*>* _out
 			//keep_alive
 		} else {
 			// Other play packets would go here
-		}
-		break;
-	case PlayerState::Configuration:
-		if (packet->getId() == 0x00) {
-			handleCookieRequest(*packet, server);
-		} else if (packet->getId() == 0x02) {
-			g_logger->logNetwork(INFO, "Received packet 0x02 in Configuration state, data size: " + std::to_string(packet->getSize()) + " bytes", "Configuration");
-			// For now, just acknowledge it - we'll handle proper sequence later
-			packet->setReturnPacket(PACKET_OK);
-		} else if (packet->getId() == 0x03) {
-			handleClientInformation(*packet, server);
-			handleFinishConfiguration(*packet, server);
-		} else {
-			g_logger->logNetwork(INFO, "Unknown packet ID: " + std::to_string(packet->getId()) + ", data size: " + std::to_string(packet->getSize()) + " bytes", "Configuration");
-			player->setPlayerState(PlayerState::None);
-			packet->setReturnPacket(PACKET_DISCONNECT);
+			g_logger->logNetwork(INFO, "Received packet ID: " + std::to_string(packet->getId()) + " in Play state", "Play");
 		}
 		break;
 	default:

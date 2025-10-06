@@ -49,6 +49,36 @@ void handleCookieRequest(Packet& packet, Server& server) {
     packet.setPacketSize(final.getData().size());
 
     g_logger->logNetwork(INFO, "Sent Cookie Response for identifier: '" + cookieIdentifier + "' (no data), response size: " + std::to_string(final.getData().size()), "Configuration");
+    
+    g_logger->logNetwork(INFO, "Cookie Response sent - now sending Finish Configuration to advance sequence", "Configuration");
 
     (void)server; // Suppress unused parameter warning
+}
+
+void sendFinishConfigurationAfterCookie(Packet& packet, Server& server) {
+    g_logger->logNetwork(INFO, "Sending Finish Configuration to advance sequence", "Configuration");
+    
+    Player* player = packet.getPlayer();
+    if (!player) {
+        g_logger->logNetwork(ERROR, "Error: No player for Finish Configuration", "Configuration");
+        return;
+    }
+
+    // Create Finish Configuration packet (0x03)
+    Buffer payload;
+    payload.writeVarInt(0x03); // Finish Configuration packet ID
+    
+    Buffer final;
+    final.writeVarInt(payload.getData().size());
+    final.writeBytes(payload.getData());
+    
+    // Create a new packet for Finish Configuration
+    Packet* finishPacket = new Packet(packet);
+    finishPacket->getData() = final;
+    finishPacket->setReturnPacket(PACKET_SEND);
+    finishPacket->setPacketSize(final.getData().size());
+    
+    g_logger->logNetwork(INFO, "Finish Configuration packet prepared", "Configuration");
+    
+    (void)server;
 }
