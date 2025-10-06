@@ -81,7 +81,14 @@ void packetRouter(Packet* packet, Server& server, ThreadSafeQueue<Packet*>* _out
 		}
 		break;
 	case PlayerState::Login:
-		handleLoginStartPacket(*packet, server);
+		if (packet->getId() == 0x00) {
+			handleLoginStartPacket(*packet, server);
+		} else if (packet->getId() == 0x03) {
+			handleLoginAcknowledged(*packet, server);
+		} else {
+			player->setPlayerState(PlayerState::None);
+			packet->setReturnPacket(PACKET_DISCONNECT);
+		}
 		break;
 	case PlayerState::Play:
 		if (packet->getId() == 0x00) {

@@ -32,6 +32,7 @@ void handleLoginStartPacket(Packet& packet, Server& server) {
 	packet.getData() = final;
 	packet.setReturnPacket(PACKET_SEND);
 	packet.setPacketSize(final.getData().size());
-	player->setPlayerState(PlayerState::Configuration);
+	// Don't transition to Configuration yet - wait for Login Acknowledged
+	std::cout << "[Login] Login Success sent, waiting for Login Acknowledged\n";
 	(void)server;
 }

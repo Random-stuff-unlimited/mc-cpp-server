@@ -120,6 +120,7 @@ void handleStatusPacket(Packet& packet, Server& server);
 void handlePingPacket(Packet& packet, Server& server);
 void handleClientInformation(Packet& packet, Server &server);
 void handleLoginStartPacket(Packet& packet, Server& server);
+void handleLoginAcknowledged(Packet& packet, Server& server);
 void writePlaytPacket(Packet& packet, Server& server);
 void writeSetCenterPacket(Packet& packet, Server& server);
 
