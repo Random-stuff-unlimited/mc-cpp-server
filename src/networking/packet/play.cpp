@@ -49,7 +49,7 @@ void writePlaytPacket(Packet& packet, Server& server) {
 	buf.writeVarInt(63); // Sea level
 	buf.writeByte(0x00); // Enforces secure chat
 
-	int packetId         = 0x24;
+	int packetId         = 0x2B;
 	int packetIdSize     = packet.getVarintSize(packetId);
 	int totalPayloadSize = packetIdSize + buf.getData().size();
 
