@@ -25,6 +25,7 @@ class Packet {
 	Packet& operator=(const Packet& other);
 	~Packet();
 	static int readVarint(int sock);
+	static int readVarint(int sock, int* bytesRead);
 	static void writeVarint(int sock, int value);
 	static int varintLen(int value);
 	static bool isSocketValid(int sock);

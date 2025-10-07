@@ -10,7 +10,7 @@
 #include <string>
 
 void writePlaytPacket(Packet& packet, Server& server) {
-	g_logger->logNetwork(INFO, "=== Play packet write init ===", "Play");
+	// g_logger->logNetwork(INFO, "=== Play packet write init ===", "Play");
 	Player* player = packet.getPlayer();
 
 	Buffer buf;

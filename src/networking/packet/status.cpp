@@ -44,5 +44,5 @@ void handleStatusPacket(Packet& packet, Server& server) {
 	packet.setPacketSize(buf.getData().size());
 	packet.getPlayer()->setPlayerState(PlayerState::Status);
 
-	g_logger->logNetwork(INFO, "JSON response ready - connection will be closed", "Status");
+	// g_logger->logNetwork(INFO, "JSON response ready - connection will be closed", "Status");
 }

@@ -18,7 +18,7 @@ void NetworkManager::workerThreadLoop() {
 			if (packet == nullptr) break;
 			try {
 
-				g_logger->logNetwork(INFO, "Handling incoming data for player", "Worker");
+				// g_logger->logNetwork(INFO, "Handling incoming data for player", "Worker");
 				packetRouter(packet, getServer(), &_outgoingPackets);
 				if (packet->getReturnPacket() == PACKET_SEND) {
 					_outgoingPackets.push(packet);
@@ -29,10 +29,10 @@ void NetworkManager::workerThreadLoop() {
 						getServer().removePlayerFromAnyList(player);
 						epoll_ctl(_epollFd, EPOLL_CTL_DEL, packet->getSocket(), nullptr);
 						close(packet->getSocket());
-						g_logger->logNetwork(INFO,
-						                     "Disconnected player socket " +
-						                             std::to_string(packet->getSocket()),
-						                     "Worker");
+						// g_logger->logNetwork(INFO,
+						//                      "Disconnected player socket " +
+						//                              std::to_string(packet->getSocket()),
+						//                      "Worker");
 					}
 				}
 			} catch (const std::exception& e) {

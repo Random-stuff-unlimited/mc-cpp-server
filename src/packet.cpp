@@ -43,20 +43,21 @@ Packet::Packet(Player* player) : _player(player), _socketFd(-1), _returnPacket(0
 	if (_player == nullptr)
 		throw std::runtime_error("Packet init with null player");
 	_socketFd = _player->getSocketFd();
-	g_logger->logNetwork(INFO, "Constructor: Socket FD = " + std::to_string(_socketFd), "Packet");
+	// g_logger->logNetwork(INFO, "Constructor: Socket FD = " + std::to_string(_socketFd), "Packet");
 
 	_size = readVarint(_socketFd);
 	if (_size == -1)
 		throw std::runtime_error("Failed to read packet size");
-	g_logger->logNetwork(INFO, "Read size: " + std::to_string(_size), "Packet");
+	// g_logger->logNetwork(INFO, "Read size: " + std::to_string(_size), "Packet");
 
-	_id = readVarint(_socketFd);
+	int idBytesRead = 0;
+	_id = readVarint(_socketFd, &idBytesRead);
 	if (_id == -1)
 		throw std::runtime_error("Failed to read packet id");
-	g_logger->logNetwork(INFO, "Read ID: " + std::to_string(_id), "Packet");
+	// g_logger->logNetwork(INFO, "Read ID: " + std::to_string(_id), "Packet");
 
-	int remaining = _size - getVarintSize(_id);
-	g_logger->logNetwork(INFO, "Calculated remaining: " + std::to_string(remaining) + " (size=" + std::to_string(_size) + " - varintSize(" + std::to_string(_id) + ")=" + std::to_string(getVarintSize(_id)) + ")", "Packet");
+	int remaining = _size - idBytesRead;
+	// g_logger->logNetwork(INFO, "Calculated remaining: " + std::to_string(remaining) + " (size=" + std::to_string(_size) + " - idBytes=" + std::to_string(idBytesRead) + ")", "Packet");
 
 	if (remaining < 0)
 		throw std::runtime_error("Invalid packet size");
@@ -72,10 +73,10 @@ Packet::Packet(Player* player) : _player(player), _socketFd(-1), _returnPacket(0
 			totalRead += bytesRead;
 		}
 
-		g_logger->logNetwork(INFO, "Packet total size: " + std::to_string(_size), "Packet");
-		g_logger->logNetwork(INFO, "Packet id: " + std::to_string(_id), "Packet");
-		g_logger->logNetwork(INFO, "Data size: " + std::to_string(remaining), "Packet");
-		g_logger->logNetwork(INFO, "Read size: " + std::to_string(totalRead), "Packet");
+		// g_logger->logNetwork(INFO, "Packet total size: " + std::to_string(_size), "Packet");
+		// g_logger->logNetwork(INFO, "Packet id: " + std::to_string(_id), "Packet");
+		// g_logger->logNetwork(INFO, "Data size: " + std::to_string(remaining), "Packet");
+		// g_logger->logNetwork(INFO, "Read size: " + std::to_string(totalRead), "Packet");
 
 		_data = Buffer(tmp);
 	}
@@ -83,20 +84,21 @@ Packet::Packet(Player* player) : _player(player), _socketFd(-1), _returnPacket(0
 
 Packet::Packet(int socketFd, Server& server)
     : _player(nullptr), _socketFd(socketFd), _returnPacket(0) {
-	g_logger->logNetwork(INFO, "Constructor (socket): Socket FD = " + std::to_string(_socketFd), "Packet");
+	// g_logger->logNetwork(INFO, "Constructor (socket): Socket FD = " + std::to_string(_socketFd), "Packet");
 
 	_size = readVarint(_socketFd);
 	if (_size == -1)
 		throw std::runtime_error("Failed to read packet size");
-	g_logger->logNetwork(INFO, "Read size: " + std::to_string(_size), "Packet");
+	// g_logger->logNetwork(INFO, "Read size: " + std::to_string(_size), "Packet");
 
-	_id = readVarint(_socketFd);
+	int idBytesRead = 0;
+	_id = readVarint(_socketFd, &idBytesRead);
 	if (_id == -1)
 		throw std::runtime_error("Failed to read packet id");
-	g_logger->logNetwork(INFO, "Read ID: " + std::to_string(_id), "Packet");
+	// g_logger->logNetwork(INFO, "Read ID: " + std::to_string(_id), "Packet");
 
-	int remaining = _size - (getVarintSize(_id));
-	g_logger->logNetwork(INFO, "Calculated remaining: " + std::to_string(remaining) + " (size=" + std::to_string(_size) + " - varintSize(" + std::to_string(_id) + ")=" + std::to_string(getVarintSize(_id)) + ")", "Packet");
+	int remaining = _size - idBytesRead;
+	// g_logger->logNetwork(INFO, "Calculated remaining: " + std::to_string(remaining) + " (size=" + std::to_string(_size) + " - idBytes=" + std::to_string(idBytesRead) + ")", "Packet");
 
 	if (remaining < 0)
 		throw std::runtime_error("Invalid packet size");
@@ -120,10 +122,10 @@ Packet::Packet(int socketFd, Server& server)
 			totalRead += bytesRead;
 		}
 
-		g_logger->logNetwork(INFO, "Packet total size: " + std::to_string(_size), "Packet");
-		g_logger->logNetwork(INFO, "Packet id: " + std::to_string(_id), "Packet");
-		g_logger->logNetwork(INFO, "Data size: " + std::to_string(remaining), "Packet");
-		g_logger->logNetwork(INFO, "Read size: " + std::to_string(totalRead), "Packet");
+		// g_logger->logNetwork(INFO, "Packet total size: " + std::to_string(_size), "Packet");
+		// g_logger->logNetwork(INFO, "Packet id: " + std::to_string(_id), "Packet");
+		// g_logger->logNetwork(INFO, "Data size: " + std::to_string(remaining), "Packet");
+		// g_logger->logNetwork(INFO, "Read size: " + std::to_string(totalRead), "Packet");
 
 		_data = Buffer(tmp);
 	}
@@ -141,28 +143,28 @@ int Packet::getVarintSize(int32_t value) {
 		value >>= 7;
 		size++;
 	} while (value != 0);
-	g_logger->logNetwork(INFO, "getVarintSize(" + std::to_string(original_value) + ") = " + std::to_string(size), "Packet");
+	// g_logger->logNetwork(INFO, "getVarintSize(" + std::to_string(original_value) + ") = " + std::to_string(size), "Packet");
 	return size;
 }
 
-int Packet::readVarint(int sock) {
+int Packet::readVarint(int sock, int* bytesRead) {
 	if (!isSocketValid(sock)) {
 		return -1;
 	}
 
 	int value = 0, position = 0;
 	uint8_t byte;
-	int bytesRead = 0;
+	int localBytesRead = 0;
 
 	while (true) {
 		ssize_t result = ::read(sock, &byte, 1);
 		if (result <= 0) {
-			std::cerr << "readVarint: Failed to read byte " << bytesRead << " from socket " << sock
+			std::cerr << "readVarint: Failed to read byte " << localBytesRead << " from socket " << sock
 			          << " (errno: " << errno << ")" << std::endl;
 			return -1;
 		}
 
-		bytesRead++;
+		localBytesRead++;
 		value |= (byte & 0x7F) << position;
 
 		if (!(byte & 0x80))
@@ -170,21 +172,29 @@ int Packet::readVarint(int sock) {
 
 		position += 7;
 		if (position >= 32) {
-			std::cerr << "readVarint: Varint too long (> 32 bits) after " << bytesRead << " bytes"
+			std::cerr << "readVarint: Varint too long (> 32 bits) after " << localBytesRead << " bytes"
 			          << std::endl;
 			return -1;
 		}
 
 		// Safety check to prevent infinite loops
-		if (bytesRead > 5) {
-			std::cerr << "readVarint: Too many bytes read (" << bytesRead << "), corrupted varint"
+		if (localBytesRead > 5) {
+			std::cerr << "readVarint: Too many bytes read (" << localBytesRead << "), corrupted varint"
 			          << std::endl;
 			return -1;
 		}
 	}
 
-	g_logger->logNetwork(INFO, "readVarint: Successfully read " + std::to_string(value) + " (" + std::to_string(bytesRead) + " bytes)", "Packet");
+	if (bytesRead) {
+		*bytesRead = localBytesRead;
+	}
+
+	// g_logger->logNetwork(INFO, "readVarint: Successfully read " + std::to_string(value) + " (" + std::to_string(localBytesRead) + " bytes)", "Packet");
 	return value;
+}
+
+int Packet::readVarint(int sock) {
+	return readVarint(sock, nullptr);
 }
 
 void Packet::writeVarint(int sock, int value) {

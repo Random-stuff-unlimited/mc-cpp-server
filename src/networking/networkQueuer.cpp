@@ -37,7 +37,7 @@ void NetworkManager::receiverThreadLoop() {
 				socklen_t addr_len = sizeof(client_addr);
 				int client_fd      = accept(_serverSocket, (sockaddr*)&client_addr, &addr_len);
 				if (client_fd != -1) {
-					g_logger->logNetwork(INFO, "New connection accepted on socket " + std::to_string(client_fd), "Network Manager");
+					// g_logger->logNetwork(INFO, "New connection accepted on socket " + std::to_string(client_fd), "Network Manager");
 					epoll_event event;
 					event.events  = EPOLLIN;
 					event.data.fd = client_fd;
@@ -94,10 +94,10 @@ void NetworkManager::senderThreadLoop() {
 				break;
 
 			try {
-				g_logger->logNetwork(INFO, "Sending packet to player", "Network Manager");
+				// g_logger->logNetwork(INFO, "Sending packet to player", "Network Manager");
 				send(p->getSocket(), p->getData().getData().data(), p->getSize(), MSG_NOSIGNAL);
 				if (p->getPlayer() && p->getPlayer()->getPlayerState() == PlayerState::None) {
-					g_logger->logNetwork(INFO, "Closing status connection after response", "Network Manager");
+					// g_logger->logNetwork(INFO, "Closing status connection after response", "Network Manager");
 					getServer().removePlayerFromAnyList(p->getPlayer());
 					epoll_ctl(_epollFd, EPOLL_CTL_DEL, p->getSocket(), nullptr);
 					close(p->getSocket());
@@ -107,7 +107,7 @@ void NetworkManager::senderThreadLoop() {
 			}
 			delete p;
 			p = nullptr;
-			g_logger->logNetwork(INFO, "Packet sent", "Network Manager");
+			// g_logger->logNetwork(INFO, "Packet sent", "Network Manager");
 		}
 		usleep(1000);
 	}
@@ -119,7 +119,7 @@ void NetworkManager::enqueueOutgoingPacket(Packet* p) {
 
 void NetworkManager::handleIncomingData(Player* connection) {
 	Packet* p;
-	g_logger->logNetwork(INFO, "Handling incoming data for player", "Network Manager");
+	// g_logger->logNetwork(INFO, "Handling incoming data for player", "Network Manager");
 	try {
 		p = new Packet(connection);
 		_incomingPackets.push(p);
@@ -131,7 +131,7 @@ void NetworkManager::handleIncomingData(Player* connection) {
 
 void NetworkManager::handleIncomingData(int socket) {
 	Packet* p;
-	g_logger->logNetwork(INFO, "Handling incoming data for socket " + std::to_string(socket), "Network Manager");
+	// g_logger->logNetwork(INFO, "Handling incoming data for socket " + std::to_string(socket), "Network Manager");
 	try {
 		p = new Packet(socket, getServer());
 		_incomingPackets.push(p);

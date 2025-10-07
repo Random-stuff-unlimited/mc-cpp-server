@@ -37,12 +37,12 @@ int Server::start_server() {
 		_networkManager->startThreads();
 
 		while (true) {
-			g_logger->logGameInfo(INFO, "Server is running...", "Server");
+			// g_logger->logGameInfo(INFO, "Server is running...", "Server");
 			sleep(100);
 			break;
 		}
 	} catch (const std::exception& e) {
-		g_logger->logGameInfo(ERROR, std::string("Error: ") + e.what(), "Server");
+		// g_logger->logGameInfo(ERROR, std::string("Error: ") + e.what(), "Server");
 		return (1);
 	}
 	return (0);
@@ -61,19 +61,19 @@ int Server::loadConfig() {
 	try {
 		inputFile >> j;
 
-		g_logger->logGameInfo(INFO, "Successfully parsed " + std::string(ConfigFileName) + "!", "Server");
+		// g_logger->logGameInfo(INFO, "Successfully parsed " + std::string(ConfigFileName) + "!", "Server");
 		_gameVersion = j["version"]["name"];
-		g_logger->logGameInfo(INFO, "Game version: " + _gameVersion, "Server");
+		// g_logger->logGameInfo(INFO, "Game version: " + _gameVersion, "Server");
 		_protocolVersion = j["version"]["protocol"];
-		g_logger->logGameInfo(INFO, "Protocol version: " + std::to_string(_protocolVersion), "Server");
+		// g_logger->logGameInfo(INFO, "Protocol version: " + std::to_string(_protocolVersion), "Server");
 		_serverSize = j["server"]["max-players"];
-		g_logger->logGameInfo(INFO, "Server size: " + std::to_string(_serverSize), "Server");
+		// g_logger->logGameInfo(INFO, "Server size: " + std::to_string(_serverSize), "Server");
 		_serverMOTD = j["server"]["motd"];
-		g_logger->logGameInfo(INFO, "Server MOTD: " + _serverMOTD, "Server");
+		// g_logger->logGameInfo(INFO, "Server MOTD: " + _serverMOTD, "Server");
 		_serverAddr = j["server"]["ip-address"];
-		g_logger->logGameInfo(INFO, "Server IP address : " + _serverAddr, "Server");
+		// g_logger->logGameInfo(INFO, "Server IP address : " + _serverAddr, "Server");
 		_serverPort = j["server"]["port"];
-		g_logger->logGameInfo(INFO, "Server port: " + std::to_string(_serverPort), "Server");
+		// g_logger->logGameInfo(INFO, "Server port: " + std::to_string(_serverPort), "Server");
 	} catch (json::parse_error& e) {
 		std::cerr << "[Server]: Json parse error: " << e.what() << std::endl;
 		return (1);
@@ -119,7 +119,7 @@ Player* Server::addTempPlayer(const std::string& name, const PlayerState state, 
 
 	std::lock_guard<std::mutex> lock(_tempPlayerLock);
 	_tempPlayerLst[socket] = newPlayer;
-	g_logger->logGameInfo(INFO, "Added temp player on socket " + std::to_string(socket), "Server");
+	// g_logger->logGameInfo(INFO, "Added temp player on socket " + std::to_string(socket), "Server");
 	return (newPlayer);
 }
 
@@ -131,7 +131,7 @@ void Server::removeTempPlayer(Player* player) {
 	std::lock_guard<std::mutex> lock(_tempPlayerLock);
 	_tempPlayerLst.erase(socket);
 	delete player;
-	g_logger->logGameInfo(INFO, "Removed temp player from socket " + std::to_string(socket), "Server");
+	// g_logger->logGameInfo(INFO, "Removed temp player from socket " + std::to_string(socket), "Server");
 }
 
 void Server::promoteTempPlayer(Player* player) {
@@ -145,7 +145,7 @@ void Server::promoteTempPlayer(Player* player) {
 	std::lock_guard<std::mutex> lockPlayer(_playerLock);
 	_playerLst[socket] = player;
 
-	g_logger->logGameInfo(INFO, "Promoted temp player to main list on socket " + std::to_string(socket), "Server");
+	// g_logger->logGameInfo(INFO, "Promoted temp player to main list on socket " + std::to_string(socket), "Server");
 }
 
 void Server::removePlayerFromAnyList(Player* player) {
@@ -160,7 +160,7 @@ void Server::removePlayerFromAnyList(Player* player) {
 		if (temp_it != _tempPlayerLst.end()) {
 			_tempPlayerLst.erase(socket);
 			delete player;
-			g_logger->logGameInfo(INFO, "Removed temp player from socket " + std::to_string(socket), "Server");
+			// g_logger->logGameInfo(INFO, "Removed temp player from socket " + std::to_string(socket), "Server");
 			return;
 		}
 	}
@@ -171,12 +171,12 @@ void Server::removePlayerFromAnyList(Player* player) {
 		if (main_it != _playerLst.end()) {
 			_playerLst.erase(socket);
 			delete player;
-			g_logger->logGameInfo(INFO, "Removed main player from socket " + std::to_string(socket), "Server");
+			// g_logger->logGameInfo(INFO, "Removed main player from socket " + std::to_string(socket), "Server");
 			return;
 		}
 	}
 	delete player;
-	g_logger->logGameInfo(INFO, "Deleted orphaned player from socket " + std::to_string(socket), "Server");
+	// g_logger->logGameInfo(INFO, "Deleted orphaned player from socket " + std::to_string(socket), "Server");
 }
 
 void Server::addPlayerToSample(const std::string& name) {
