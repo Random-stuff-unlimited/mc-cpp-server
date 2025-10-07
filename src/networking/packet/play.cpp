@@ -1,67 +1,139 @@
-#include "UUID.hpp"
-#include "buffer.hpp"
-#include "networking.hpp"
-#include "packet.hpp"
-#include "player.hpp"
-#include "server.hpp"
-#include "logger.hpp"
+// #include "networking.hpp"
+// #include "packet.hpp"
+// #include "player.hpp"
+// #include "server.hpp"
+// #include "buffer.hpp"
+// #include <vector>
+// #include <string>
+// #include <sstream>
+// #include "nbt.hpp"
 
-#include <iostream>
-#include <string>
+// void writePlayPacket(Packet& packet, Server& server) {
+//     Player* player = packet.getPlayer();
+//     if (!player) return;
 
-void writePlaytPacket(Packet& packet, Server& server) {
-	// g_logger->logNetwork(INFO, "=== Play packet write init ===", "Play");
-	Player* player = packet.getPlayer();
+//     Buffer buf;
 
-	Buffer buf;
-	buf.writeInt(player->getPlayerID());
-	buf.writeByte(0x00);
+//     // 1. Entity ID
+//     buf.writeInt(player->getPlayerID());
 
-	std::vector<std::string> dimensionNames = {"minecraft:overworld"};
-	buf.writeIdentifierArray(dimensionNames);
+//     // 2. Is Hardcore (false)
+//     buf.writeBool(false);
 
-	buf.writeVarInt(server.getServerSize());
+//     // 3. Gamemode (0 = survival)
+//     buf.writeByte(0x00);
 
-	// server render distance and simulation distance
-	buf.writeVarInt(5);
-	buf.writeVarInt(5);
+//     // 4. Previous Gamemode (-1 = none)
+//     buf.writeByte(0xFF);
 
-	buf.writeByte(0x00); // debug
-	buf.writeByte(0x00); // respawn screen
-	buf.writeByte(0x00);
-	buf.writeVarInt(0);                     // Overworld
-	buf.writeLong(0);                       // hashed seed
-	buf.writeByte(static_cast<uint8_t>(0)); // gamemode
-	buf.writeByte(static_cast<uint8_t>(0)); // previus gamemode
+//     // 5. World Names (array of identifiers)
+//     std::vector<std::string> worlds = {"minecraft:overworld"};
+//     buf.writeIdentifierArray(worlds);
 
-	// Fin du Join Game packet
-	buf.writeByte(0x00); // Is Debug
-	buf.writeByte(0x00); // Is Flat
+//     // 6. Dimension Codec (NBT binaire)
+//     nbt::TagCompound dimensionTypeElement = {
+//         {"name", nbt::TagString("minecraft:overworld")},
+//         {"id", nbt::TagInt(0)},
+//         {"element", nbt::TagCompound{
+//             {"piglin_safe", nbt::TagByte(0)},
+//             {"natural", nbt::TagByte(1)},
+//             {"ambient_light", nbt::TagFloat(0.0f)},
+//             {"infiniburn", nbt::TagString("minecraft:infiniburn_overworld")},
+//             {"respawn_anchor_works", nbt::TagByte(0)},
+//             {"has_skylight", nbt::TagByte(1)},
+//             {"bed_works", nbt::TagByte(1)},
+//             {"effects", nbt::TagString("minecraft:overworld")},
+//             {"has_raids", nbt::TagByte(1)},
+//             {"logical_height", nbt::TagInt(256)},
+//             {"coordinate_scale", nbt::TagDouble(1.0)},
+//             {"ultrawarm", nbt::TagByte(0)},
+//             {"has_ceiling", nbt::TagByte(0)}
+//         }}
+//     };
+//     nbt::TagCompound dimensionType = {
+//         {"type", nbt::TagString("minecraft:dimension_type")},
+//         {"value", nbt::TagList{std::vector<nbt::TagCompound>{dimensionTypeElement}}}
+//     };
+//     nbt::TagCompound codec = {
+//         {"minecraft:dimension_type", dimensionType}
+//     };
+//     std::stringstream codec_ss;
+//     codec.encode(codec_ss);
+//     std::string codec_nbt = codec_ss.str();
+//     buf.writeNBT(codec_nbt);
 
-	// Has death location
-	buf.writeByte(0x00); // false = pas de dimension/position envoyée ensuite
-	/*
-	buf.writeBool(0x01);
-	buf.writeString("minecraft:overworld"); // Death dimension
-	buf.writeLong(encodePosition(x, y, z)); // Death position
-	*/
+//     // 7. Dimension (NBT binaire)
+//     nbt::TagCompound dimension = {
+//         {"piglin_safe", nbt::TagByte(0)},
+//         {"natural", nbt::TagByte(1)},
+//         {"ambient_light", nbt::TagFloat(0.0f)},
+//         {"infiniburn", nbt::TagString("minecraft:infiniburn_overworld")},
+//         {"respawn_anchor_works", nbt::TagByte(0)},
+//         {"has_skylight", nbt::TagByte(1)},
+//         {"bed_works", nbt::TagByte(1)},
+//         {"effects", nbt::TagString("minecraft:overworld")},
+//         {"has_raids", nbt::TagByte(1)},
+//         {"logical_height", nbt::TagInt(256)},
+//         {"coordinate_scale", nbt::TagDouble(1.0)},
+//         {"ultrawarm", nbt::TagByte(0)},
+//         {"has_ceiling", nbt::TagByte(0)}
+//     };
+//     std::stringstream dim_ss;
+//     dimension.encode(dim_ss);
+//     std::string dim_nbt = dim_ss.str();
+//     buf.writeNBT(dim_nbt);
 
-	buf.writeVarInt(0);  // Portal cooldown
-	buf.writeVarInt(63); // Sea level
-	buf.writeByte(0x00); // Enforces secure chat
+//     // 8. World Name
+//     buf.writeIdentifier("minecraft:overworld");
 
-	int packetId         = 0x2B;
-	int packetIdSize     = packet.getVarintSize(packetId);
-	int totalPayloadSize = packetIdSize + buf.getData().size();
+//     // 9. Hashed Seed
+//     buf.writeLong(0);
 
-	Buffer finalBuf;
-	finalBuf.writeVarInt(totalPayloadSize);
-	finalBuf.writeVarInt(packetId);
-	finalBuf.writeBytes(buf.getData());
+//     // 10. Max Players (ignored)
+//     buf.writeVarInt(0);
 
-	packet.getData() = finalBuf;
-	packet.setPacketSize(finalBuf.getData().size());
-	packet.setReturnPacket(PACKET_SEND);
+//     // 11. View Distance
+//     buf.writeVarInt(10);
 
-	(void)server;
-}
+//     // 12. Simulation Distance
+//     buf.writeVarInt(10);
+
+//     // 13. Reduced Debug Info
+//     buf.writeBool(false);
+
+//     // 14. Enable Respawn Screen
+//     buf.writeBool(false);
+
+//     // 15. Is Debug
+//     buf.writeBool(false);
+
+//     // 16. Is Flat
+//     buf.writeBool(false);
+
+//     // 17. Portal cooldown
+//     buf.writeVarInt(0);
+
+//     // 18. Sea level
+//     buf.writeVarInt(63);
+
+//     // 19. Enforce secure chat
+//     buf.writeBool(false);
+
+//     // 20. Has death location
+//     buf.writeBool(false);
+
+//     // 21. Préparer le packet final
+//     int packetId = 0x2B; // Join Game
+//     Buffer finalBuf;
+//     finalBuf.writeVarInt(packetId);
+//     finalBuf.writeBytes(buf.getData());
+
+//     // Taille du packet
+//     Buffer outBuf;
+//     outBuf.writeVarInt(finalBuf.getData().size());
+//     outBuf.writeBytes(finalBuf.getData());
+
+//     packet.getData() = outBuf;
+//     packet.setPacketSize(outBuf.getData().size());
+//     packet.setReturnPacket(PACKET_SEND);
+// }

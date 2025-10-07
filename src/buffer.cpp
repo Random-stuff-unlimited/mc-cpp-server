@@ -139,3 +139,44 @@ void Buffer::writeLong(long value) {
 		writeByte(static_cast<uint8_t>((value >> (i * 8)) & 0xFF));
 	}
 }
+
+void Buffer::writeBool(bool value) {
+    writeByte(value ? 0x01 : 0x00);
+}
+
+void Buffer::writeNBT(const std::string& nbtData) {
+    writeBytes(nbtData);
+}
+
+void Buffer::writePosition(int32_t x, int32_t y, int32_t z) {
+    int64_t packed = ((int64_t)(x & 0x3FFFFFF) << 38) | ((int64_t)(y & 0xFFF) << 26) | (int64_t)(z & 0x3FFFFFF);
+    writeLong(packed);
+}
+
+void Buffer::writeFloat(float value) {
+    union { float f; uint32_t i; } u;
+    u.f = value;
+    writeUInt(u.i);
+}
+
+void Buffer::writeDouble(double value) {
+    union { double d; uint64_t i; } u;
+    u.d = value;
+    writeLong(u.i);
+}
+
+void Buffer::writeVarLong(int64_t value) {
+    while (true) {
+        if ((value & ~0x7FL) == 0) {
+            writeByte((uint8_t)value);
+            return;
+        } else {
+            writeByte((uint8_t)((value & 0x7F) | 0x80));
+            value >>= 7;
+        }
+    }
+}
+
+void Buffer::writeIdentifier(const std::string& id) {
+    writeString(id);
+}
