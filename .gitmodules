@@ -1,0 +1,3 @@
+[submodule "external/nbt"]
+	path = external/nbt
+	url = https://github.com/SpockBotMC/cpp-nbt.git
