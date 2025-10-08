@@ -1,9 +1,9 @@
-#include "networking.hpp"
-#include "packet.hpp"
+#include "network/networking.hpp"
+#include "network/packet.hpp"
 #include "player.hpp"
-#include "server.hpp"
+#include "network/server.hpp"
 #include "logger.hpp"
-#include "buffer.hpp"
+#include "network/buffer.hpp"
 #include <iostream>
 
 void handleCookieRequest(Packet& packet, Server& server) {

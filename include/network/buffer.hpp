@@ -1,7 +1,7 @@
 #ifndef BUFFER_HPP
 #define BUFFER_HPP
 
-#include "UUID.hpp"
+#include "lib/UUID.hpp"
 
 #include <cstddef>
 #include <cstdint>

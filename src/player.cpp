@@ -1,6 +1,6 @@
-#include "UUID.hpp"
+#include "lib/UUID.hpp"
 #include "player.hpp"
-#include "server.hpp"
+#include "network/server.hpp"
 
 #include <string>
 

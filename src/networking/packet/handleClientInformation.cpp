@@ -1,6 +1,6 @@
 #include "logger.hpp"
-#include "packet.hpp"
-#include "server.hpp"
+#include "network/packet.hpp"
+#include "network/server.hpp"
 
 #include <string>
 

@@ -1,6 +1,6 @@
-#include "MD5.hpp"
-#include "UUID.hpp"
-#include "buffer.hpp"
+#include "lib/MD5.hpp"
+#include "lib/UUID.hpp"
+#include "network/buffer.hpp"
 
 #include <cstdint>
 #include <iomanip>

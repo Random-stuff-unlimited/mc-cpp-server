@@ -1,7 +1,7 @@
 #ifndef PLAYER_HPP
 #define PLAYER_HPP
 
-#include "UUID.hpp"
+#include "lib/UUID.hpp"
 
 #include <string>
 #include <cstdint>

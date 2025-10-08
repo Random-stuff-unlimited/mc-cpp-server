@@ -2,7 +2,7 @@
 #define PACKET_HPP
 
 #include "buffer.hpp"
-#include "player.hpp"
+#include "../player.hpp"
 #include "server.hpp"
 
 #include <cstdint>

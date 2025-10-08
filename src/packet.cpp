@@ -1,8 +1,8 @@
-#include "buffer.hpp"
-#include "json.hpp"
-#include "packet.hpp"
+#include "network/buffer.hpp"
+#include "lib/json.hpp"
+#include "network/packet.hpp"
 #include "player.hpp"
-#include "server.hpp"
+#include "network/server.hpp"
 #include "logger.hpp"
 
 #include <cstdint>

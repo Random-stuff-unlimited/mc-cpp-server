@@ -1,5 +1,5 @@
-#include "UUID.hpp"
-#include "buffer.hpp"
+#include "lib/UUID.hpp"
+#include "network/buffer.hpp"
 
 #include <cstdint>
 #include <stdexcept>

@@ -1,12 +1,12 @@
-// #include "networking.hpp"
-// #include "packet.hpp"
+// #include "network/networking.hpp"
+// #include "network/packet.hpp"
 // #include "player.hpp"
-// #include "server.hpp"
-// #include "buffer.hpp"
+// #include "network/server.hpp"
+// #include "network/buffer.hpp"
 // #include <vector>
 // #include <string>
 // #include <sstream>
-// #include "nbt.hpp"
+// #include "lib/nbt.hpp"
 
 // void writePlayPacket(Packet& packet, Server& server) {
 //     Player* player = packet.getPlayer();

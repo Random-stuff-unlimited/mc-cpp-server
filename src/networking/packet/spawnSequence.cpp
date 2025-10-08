@@ -1,9 +1,9 @@
-#include "UUID.hpp"
-#include "buffer.hpp"
-#include "networking.hpp"
-#include "packet.hpp"
+#include "lib/UUID.hpp"
+#include "network/buffer.hpp"
+#include "network/networking.hpp"
+#include "network/packet.hpp"
 #include "player.hpp"
-#include "server.hpp"
+#include "network/server.hpp"
 
 #include <iostream>
 

@@ -1,6 +1,6 @@
-#include "packet.hpp"
+#include "network/packet.hpp"
 #include "player.hpp"
-#include "server.hpp"
+#include "network/server.hpp"
 #include "logger.hpp"
 
 #include <cstdint>

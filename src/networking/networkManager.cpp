@@ -1,5 +1,5 @@
-#include "networking.hpp"
-#include "server.hpp"
+#include "network/networking.hpp"
+#include "network/server.hpp"
 
 #include <arpa/inet.h>
 #include <cstring>

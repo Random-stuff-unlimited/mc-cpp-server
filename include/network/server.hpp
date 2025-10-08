@@ -3,8 +3,8 @@
 
 class NetworkManager;
 #include "id_manager.hpp"
-#include "json.hpp"
-#include "player.hpp"
+#include "lib/json.hpp"
+#include "../player.hpp"
 
 #include <mutex>
 #include <netinet/in.h>
