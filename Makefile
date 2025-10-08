@@ -15,7 +15,7 @@ TARGET          := $(BUILD_DIR)/$(TARGET_NAME)
 
 # Compiler and flags
 CXX             := g++
-CXXFLAGS        := -std=c++17 -Wall -Wextra -Wpedantic -O2
+CXXFLAGS        := -std=c++23 -Wall -Wextra -Wpedantic -O2
 DEBUG_FLAGS     := -g -DDEBUG -O0
 RELEASE_FLAGS   := -DNDEBUG -O3
 INCLUDE_FLAGS   := -I$(INCLUDE_DIR)
