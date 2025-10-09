@@ -35,7 +35,7 @@ void Buffer::writeUUID(const UUID& uuid) {
 }
 
 int Buffer::readVarInt() {
-	int value = 0, position = 0;
+	int		value = 0, position = 0;
 	uint8_t currentByte;
 
 	do {
@@ -145,7 +145,7 @@ void Buffer::writePosition(int32_t x, int32_t y, int32_t z) {
 
 void Buffer::writeFloat(float value) {
 	union {
-		float f;
+		float	 f;
 		uint32_t i;
 	} u;
 	u.f = value;
@@ -154,7 +154,7 @@ void Buffer::writeFloat(float value) {
 
 void Buffer::writeDouble(double value) {
 	union {
-		double d;
+		double	 d;
 		uint64_t i;
 	} u;
 	u.d = value;

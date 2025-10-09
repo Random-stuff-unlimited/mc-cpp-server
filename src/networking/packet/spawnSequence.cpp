@@ -176,7 +176,7 @@ void handleConfirmTeleportation(Packet& packet, Server& server) {
 }
 
 void completeSpawnSequence(Packet& packet, Server& server) {
-	Player* player							  = packet.getPlayer();
+	Player*					  player		  = packet.getPlayer();
 	ThreadSafeQueue<Packet*>* outgoingPackets = server.getNetworkManager().getOutgoingQueue();
 	if (!player || !outgoingPackets) return;
 

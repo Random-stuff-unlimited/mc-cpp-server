@@ -6,7 +6,7 @@
 #include <unistd.h>
 
 std::filesystem::path getPath() {
-	char buffer[PATH_MAX];
+	char	buffer[PATH_MAX];
 	ssize_t len = readlink("/proc/self/exe", buffer, sizeof(buffer) - 1);
 	if (len != -1) {
 		buffer[len] = '\0';

@@ -20,8 +20,8 @@ class Server;
 
 template <typename T> class ThreadSafeQueue {
   private:
-	std::queue<T> _queue;
-	mutable std::mutex _mutex;
+	std::queue<T>			_queue;
+	mutable std::mutex		_mutex;
 	std::condition_variable _condition;
 
   public:
@@ -71,17 +71,17 @@ class NetworkManager {
 	ThreadSafeQueue<Packet*> _outgoingPackets;
 
 	std::vector<std::thread> _workerThreads;
-	std::atomic<bool> _shutdownFlag;
-	std::thread _receiverThread;
-	std::thread _senderThread;
-	char _receiverThreadInit;
-	char _senderThreadInit;
-	Server& _server;
-	int _epollFd;
-	int _serverSocket;
+	std::atomic<bool>		 _shutdownFlag;
+	std::thread				 _receiverThread;
+	std::thread				 _senderThread;
+	char					 _receiverThreadInit;
+	char					 _senderThreadInit;
+	Server&					 _server;
+	int						 _epollFd;
+	int						 _serverSocket;
 
   public:
-	NetworkManager(size_t worker_count,
+	NetworkManager(size_t  worker_count,
 				   Server& s); // Could use std::thread::hardware_concurrency() for the worker size;
 	~NetworkManager() {
 		if (_epollFd != -1) {
@@ -94,8 +94,8 @@ class NetworkManager {
 	void stopThreads();
 	void shutdown();
 
-	void addPlayerConnection(std::shared_ptr<Player> connection);
-	void removePlayerConnection(UUID id);
+	void					  addPlayerConnection(std::shared_ptr<Player> connection);
+	void					  removePlayerConnection(UUID id);
 	ThreadSafeQueue<Packet*>* getOutgoingQueue() { return &_outgoingPackets; }
 
 	Server& getServer() { return _server; }

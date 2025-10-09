@@ -64,7 +64,7 @@ std::vector<uint8_t> MD5::hash(const std::string& input) {
 
 	// résultat en octets (little-endian)
 	std::vector<uint8_t> digest(16);
-	uint32_t state[4] = {A, B, C, D};
+	uint32_t			 state[4] = {A, B, C, D};
 	for (int i = 0; i < 4; i++) {
 		digest[i * 4]	  = state[i] & 0xFF;
 		digest[i * 4 + 1] = (state[i] >> 8) & 0xFF;

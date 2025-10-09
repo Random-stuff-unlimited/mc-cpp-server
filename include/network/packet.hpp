@@ -14,10 +14,10 @@ class Packet {
   private:
 	int32_t _size;
 	int32_t _id;
-	Buffer _data;
+	Buffer	_data;
 	Player* _player;
-	int _socketFd;
-	int _returnPacket;
+	int		_socketFd;
+	int		_returnPacket;
 
   public:
 	Packet(Player* player);
@@ -25,21 +25,21 @@ class Packet {
 	Packet(const Packet& other);
 	Packet& operator=(const Packet& other);
 	~Packet();
-	static int readVarint(int sock);
-	static int readVarint(int sock, int* bytesRead);
+	static int	readVarint(int sock);
+	static int	readVarint(int sock, int* bytesRead);
 	static void writeVarint(int sock, int value);
-	static int varintLen(int value);
+	static int	varintLen(int value);
 	static bool isSocketValid(int sock);
-	Player* getPlayer() const;
-	uint32_t getSize();
-	uint32_t getId();
-	Buffer& getData();
-	int getSocket() const;
-	void setReturnPacket(int value);
-	int getReturnPacket();
-	int getVarintSize(int32_t value);
-	void setPacketSize(int32_t value);
-	void setPacketId(uint32_t value);
+	Player*		getPlayer() const;
+	uint32_t	getSize();
+	uint32_t	getId();
+	Buffer&		getData();
+	int			getSocket() const;
+	void		setReturnPacket(int value);
+	int			getReturnPacket();
+	int			getVarintSize(int32_t value);
+	void		setPacketSize(int32_t value);
+	void		setPacketId(uint32_t value);
 };
 
 #endif

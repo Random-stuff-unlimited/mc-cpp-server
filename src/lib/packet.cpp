@@ -62,7 +62,7 @@ Packet::Packet(Player* player) : _player(player), _socketFd(-1), _returnPacket(0
 	if (remaining < 0) throw std::runtime_error("Invalid packet size");
 	if (remaining > 0) {
 		std::vector<uint8_t> tmp(remaining);
-		ssize_t totalRead = 0;
+		ssize_t				 totalRead = 0;
 
 		while (totalRead < remaining) {
 			ssize_t bytesRead = ::read(_socketFd, tmp.data() + totalRead, remaining - totalRead);
@@ -110,7 +110,7 @@ Packet::Packet(int socketFd, Server& server)
 
 	if (remaining > 0) {
 		std::vector<uint8_t> tmp(remaining);
-		ssize_t totalRead = 0;
+		ssize_t				 totalRead = 0;
 
 		while (totalRead < remaining) {
 			ssize_t bytesRead = ::read(_socketFd, tmp.data() + totalRead, remaining - totalRead);
@@ -151,9 +151,9 @@ int Packet::readVarint(int sock, int* bytesRead) {
 		return -1;
 	}
 
-	int value = 0, position = 0;
+	int		value = 0, position = 0;
 	uint8_t byte;
-	int localBytesRead = 0;
+	int		localBytesRead = 0;
 
 	while (true) {
 		ssize_t result = ::read(sock, &byte, 1);
@@ -196,7 +196,7 @@ int Packet::readVarint(int sock) { return readVarint(sock, nullptr); }
 
 void Packet::writeVarint(int sock, int value) {
 	std::vector<uint8_t> tmp;
-	Buffer buf(tmp);
+	Buffer				 buf(tmp);
 	buf.writeVarInt(value);
 	(void)!::write(sock, buf.getData().data(), buf.getData().size());
 }
@@ -227,7 +227,7 @@ bool Packet::isSocketValid(int sock) {
 }
 
 void Packet::setReturnPacket(int value) { this->_returnPacket = value; }
-int Packet::getReturnPacket() { return (this->_returnPacket); }
+int	 Packet::getReturnPacket() { return (this->_returnPacket); }
 
 int Packet::varintLen(int value) {
 	int len = 0;
@@ -238,10 +238,10 @@ int Packet::varintLen(int value) {
 	return (len);
 }
 
-Player* Packet::getPlayer() const { return (_player); }
+Player*	 Packet::getPlayer() const { return (_player); }
 uint32_t Packet::getSize() { return (_size); }
 uint32_t Packet::getId() { return (_id); }
-Buffer& Packet::getData() { return (_data); }
-int Packet::getSocket() const { return (_socketFd); };
-void Packet::setPacketSize(int32_t value) { _size = value; }
-void Packet::setPacketId(uint32_t value) { _id = value; }
+Buffer&	 Packet::getData() { return (_data); }
+int		 Packet::getSocket() const { return (_socketFd); };
+void	 Packet::setPacketSize(int32_t value) { _size = value; }
+void	 Packet::setPacketId(uint32_t value) { _id = value; }

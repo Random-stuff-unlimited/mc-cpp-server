@@ -16,7 +16,7 @@
 #include <unistd.h>
 
 void NetworkManager::receiverThreadLoop() {
-	const int MaxEvent = 256;
+	const int	MaxEvent = 256;
 	epoll_event events[MaxEvent];
 
 	while (!_shutdownFlag.load()) {
@@ -28,13 +28,13 @@ void NetworkManager::receiverThreadLoop() {
 		}
 
 		for (int i = 0; i < eventCount; i++) {
-			int fd				= events[i].data.fd;
+			int		 fd			= events[i].data.fd;
 			uint32_t eventFlags = events[i].events;
 
 			if (fd == _serverSocket) {
 				sockaddr_in client_addr{};
-				socklen_t addr_len = sizeof(client_addr);
-				int client_fd	   = accept(_serverSocket, (sockaddr*)&client_addr, &addr_len);
+				socklen_t	addr_len  = sizeof(client_addr);
+				int			client_fd = accept(_serverSocket, (sockaddr*)&client_addr, &addr_len);
 				if (client_fd != -1) {
 					// g_logger->logNetwork(INFO, "New connection accepted on socket " +
 					// std::to_string(client_fd), "Network Manager");
@@ -50,8 +50,8 @@ void NetworkManager::receiverThreadLoop() {
 				continue;
 			}
 
-			auto it	  = getServer().getPlayerLst().find(fd);
-			Player* p = nullptr;
+			auto	it = getServer().getPlayerLst().find(fd);
+			Player* p  = nullptr;
 			if (it != getServer().getPlayerLst().end()) {
 				p = it->second;
 			} else {

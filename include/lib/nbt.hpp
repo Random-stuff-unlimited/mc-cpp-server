@@ -58,16 +58,16 @@ namespace std {
 namespace nbt {
 
 	// Basic NBT types
-	typedef std::nullptr_t TagEnd;
-	typedef std::int8_t TagByte;
-	typedef std::int16_t TagShort;
-	typedef std::int32_t TagInt;
-	typedef std::int64_t TagLong;
-	typedef float TagFloat;
-	typedef double TagDouble;
-	typedef std::string TagString;
+	typedef std::nullptr_t		 TagEnd;
+	typedef std::int8_t			 TagByte;
+	typedef std::int16_t		 TagShort;
+	typedef std::int32_t		 TagInt;
+	typedef std::int64_t		 TagLong;
+	typedef float				 TagFloat;
+	typedef double				 TagDouble;
+	typedef std::string			 TagString;
 	typedef std::vector<TagByte> TagByteArray;
-	typedef std::vector<TagInt> TagIntArray;
+	typedef std::vector<TagInt>	 TagIntArray;
 	typedef std::vector<TagLong> TagLongArray;
 
 	// Forward declaration for recursive types
@@ -166,11 +166,11 @@ namespace nbt {
 	};
 
 	// Helper functions for creating tags
-	inline TagByte createByte(std::int8_t value) { return value; }
-	inline TagShort createShort(std::int16_t value) { return value; }
-	inline TagInt createInt(std::int32_t value) { return value; }
-	inline TagLong createLong(std::int64_t value) { return value; }
-	inline TagFloat createFloat(float value) { return value; }
+	inline TagByte	 createByte(std::int8_t value) { return value; }
+	inline TagShort	 createShort(std::int16_t value) { return value; }
+	inline TagInt	 createInt(std::int32_t value) { return value; }
+	inline TagLong	 createLong(std::int64_t value) { return value; }
+	inline TagFloat	 createFloat(float value) { return value; }
 	inline TagDouble createDouble(double value) { return value; }
 	inline TagString createString(const std::string& value) { return value; }
 
@@ -185,10 +185,10 @@ namespace nbt {
 		NBT(const std::string& name) : name(name) {}
 		NBT(const std::string& name, const TagCompound& tags) : name(name), root(tags) {}
 
-		void setName(const std::string& n) { name = n; }
+		void		setName(const std::string& n) { name = n; }
 		std::string getName() const { return name; }
 
-		TagCompound& getRoot() { return root; }
+		TagCompound&	   getRoot() { return root; }
 		const TagCompound& getRoot() const { return root; }
 
 		void encode(std::ostream& os) const { root.encode(os); }

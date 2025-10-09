@@ -55,7 +55,7 @@ void sendChunkBatchFinished(Packet& packet, Server& server, int batchSize) {
 }
 
 void sendChunkBatchSequence(Packet& packet, Server& server) {
-	Player* player							  = packet.getPlayer();
+	Player*					  player		  = packet.getPlayer();
 	ThreadSafeQueue<Packet*>* outgoingPackets = server.getNetworkManager().getOutgoingQueue();
 	if (!player || !outgoingPackets) return;
 

@@ -16,8 +16,8 @@ UUID::~UUID() {}
 
 uint64_t UUID::getMostSigBits() const { return _mostSigBits; }
 uint64_t UUID::getLeastSigBits() const { return _leastSigBits; }
-void UUID::setMostSigBits(uint64_t val) { _mostSigBits = val; }
-void UUID::setLeastSigBits(uint64_t val) { _leastSigBits = val; }
+void	 UUID::setMostSigBits(uint64_t val) { _mostSigBits = val; }
+void	 UUID::setLeastSigBits(uint64_t val) { _leastSigBits = val; }
 
 std::string UUID::toString() const {
 	std::stringstream ss;

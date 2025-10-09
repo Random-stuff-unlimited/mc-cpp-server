@@ -13,10 +13,10 @@ void handleHandshakePacket(Packet& packet, Server& server) {
 		packet.setReturnPacket(PACKET_DISCONNECT);
 		return;
 	}
-	int protocolVersion	   = packet.getData().readVarInt();
-	std::string serverAddr = packet.getData().readString(255);
-	uint16_t port		   = packet.getData().readUShort();
-	int nextState		   = packet.getData().readVarInt();
+	int			protocolVersion = packet.getData().readVarInt();
+	std::string serverAddr		= packet.getData().readString(255);
+	uint16_t	port			= packet.getData().readUShort();
+	int			nextState		= packet.getData().readVarInt();
 	// g_logger->logNetwork(INFO, "Protocol=" + std::to_string(protocolVersion) + ", Addr=" +
 	// serverAddr + ", State=" + std::to_string(nextState), "Handshake");
 	if (nextState == 1) {

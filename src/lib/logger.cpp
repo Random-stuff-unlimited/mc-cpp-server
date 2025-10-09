@@ -109,8 +109,8 @@ bool LogManager::initializeLogDirectory() {
 	return true;
 }
 
-void LogManager::log(LogLevel level,
-					 LogCategory category,
+void LogManager::log(LogLevel			level,
+					 LogCategory		category,
 					 const std::string& message,
 					 const std::string& source) {
 	LogEntry entry;
@@ -137,7 +137,7 @@ void LogManager::logNetwork(LogLevel level, const std::string& message, const st
 	log(level, NETWORK, message, source);
 }
 
-void LogManager::logGameInfo(LogLevel level,
+void LogManager::logGameInfo(LogLevel			level,
 							 const std::string& message,
 							 const std::string& source) {
 	log(level, GAMEINFO, message, source);
@@ -146,7 +146,7 @@ void LogManager::logGameInfo(LogLevel level,
 void LogManager::writerThreadLoop() {
 	while (_running || !_logQueue.empty()) {
 		LogEntry entry;
-		bool hasEntry = false;
+		bool	 hasEntry = false;
 
 		// Get entry from queue
 		{
@@ -161,7 +161,7 @@ void LogManager::writerThreadLoop() {
 		if (hasEntry) {
 			// Write to appropriate file
 			std::lock_guard<std::mutex> fileLock(_fileMutex);
-			std::string formattedEntry = formatLogEntry(entry);
+			std::string					formattedEntry = formatLogEntry(entry);
 
 			if (entry.category == NETWORK && _networkFile.is_open()) {
 				_networkFile << formattedEntry << std::endl;
