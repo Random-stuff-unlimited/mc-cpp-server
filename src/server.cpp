@@ -1,22 +1,19 @@
-#include "network/server.hpp"
-
+#include "config.hpp"
 #include "lib/json.hpp"
 #include "logger.hpp"
 #include "network/networking.hpp"
+#include "network/server.hpp"
 #include "player.hpp"
 
 #include <cstddef>
 #include <exception>
-#include <fstream>
 #include <iostream>
 #include <string>
 #include <unistd.h>
 
 using json = nlohmann::json;
 
-Server::Server()
-	: _playerLst(), _protocolVersion(770), _serverSize(-100000000), _gameVersion("1.12.5"),
-	  _serverMOTD(), _serverPort(25565), _serverAddr("0.0.0.0"), _networkManager(nullptr) {}
+Server::Server() : _playerLst(), _config(), _networkManager(nullptr) {}
 
 Server::~Server() {
 	if (_networkManager) {
@@ -28,7 +25,10 @@ Server::~Server() {
 int Server::start_server() {
 	try {
 		initializeGlobalLogger();
-		Server::loadConfig();
+		if (_config.loadConfig()) {
+			g_logger->logGameInfo(ERROR, "Failed to load config", "SERVER");
+			return 1;
+		}
 		size_t workerCount = 4;
 		if (workerCount == 0) workerCount = 4; // fallback
 
@@ -43,41 +43,6 @@ int Server::start_server() {
 		}
 	} catch (const std::exception& e) {
 		// g_logger->logGameInfo(ERROR, std::string("Error: ") + e.what(), "Server");
-		return (1);
-	}
-	return (0);
-}
-
-int Server::loadConfig() {
-	std::ifstream inputFile(ConfigFileName);
-
-	if (!inputFile.is_open()) {
-		std::cerr << "[Server] Error: Could not open " << ConfigFileName << std::endl;
-		return 1;
-	}
-
-	json j;
-
-	try {
-		inputFile >> j;
-
-		// g_logger->logGameInfo(INFO, "Successfully parsed " + std::string(ConfigFileName) + "!",
-		// "Server");
-		_gameVersion = j["version"]["name"];
-		// g_logger->logGameInfo(INFO, "Game version: " + _gameVersion, "Server");
-		_protocolVersion = j["version"]["protocol"];
-		// g_logger->logGameInfo(INFO, "Protocol version: " + std::to_string(_protocolVersion),
-		// "Server");
-		_serverSize = j["server"]["max-players"];
-		// g_logger->logGameInfo(INFO, "Server size: " + std::to_string(_serverSize), "Server");
-		_serverMOTD = j["server"]["motd"];
-		// g_logger->logGameInfo(INFO, "Server MOTD: " + _serverMOTD, "Server");
-		_serverAddr = j["server"]["ip-address"];
-		// g_logger->logGameInfo(INFO, "Server IP address : " + _serverAddr, "Server");
-		_serverPort = j["server"]["port"];
-		// g_logger->logGameInfo(INFO, "Server port: " + std::to_string(_serverPort), "Server");
-	} catch (json::parse_error& e) {
-		std::cerr << "[Server]: Json parse error: " << e.what() << std::endl;
 		return (1);
 	}
 	return (0);
@@ -130,7 +95,7 @@ void Server::removeTempPlayer(Player* player) {
 	if (!player) {
 		return;
 	}
-	int socket = player->getSocketFd();
+	int							socket = player->getSocketFd();
 	std::lock_guard<std::mutex> lock(_tempPlayerLock);
 	_tempPlayerLst.erase(socket);
 	delete player;
@@ -160,7 +125,7 @@ void Server::removePlayerFromAnyList(Player* player) {
 
 	{
 		std::lock_guard<std::mutex> lock(_tempPlayerLock);
-		auto temp_it = _tempPlayerLst.find(socket);
+		auto						temp_it = _tempPlayerLst.find(socket);
 		if (temp_it != _tempPlayerLst.end()) {
 			_tempPlayerLst.erase(socket);
 			delete player;
@@ -172,7 +137,7 @@ void Server::removePlayerFromAnyList(Player* player) {
 
 	{
 		std::lock_guard<std::mutex> lock(_playerLock);
-		auto main_it = _playerLst.find(socket);
+		auto						main_it = _playerLst.find(socket);
 		if (main_it != _playerLst.end()) {
 			_playerLst.erase(socket);
 			delete player;
@@ -196,9 +161,5 @@ void Server::removePlayerToSample(const std::string& name) {
 		}
 }
 
-std::string Server::getGameVersion() { return _gameVersion; }
-std::string Server::getServerMOTD() { return _serverMOTD; }
-int Server::getProtocolVersion() { return _protocolVersion; }
-int Server::getServerSize() { return _serverSize; }
-int Server::getAmountOnline() { return _playerLst.size(); }
+int	 Server::getAmountOnline() { return _playerLst.size(); }
 json Server::getPlayerSample() { return _playerSample; }

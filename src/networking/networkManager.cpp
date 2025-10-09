@@ -96,12 +96,13 @@ void NetworkManager::start() {
 
 	struct sockaddr_in serverAddr;
 	serverAddr.sin_family = AF_INET;
-	serverAddr.sin_port	  = htons(getServer().getServerPort());
+	serverAddr.sin_port	  = htons(getServer().getConfig().getServerPort());
 
-	if (strcmp(getServer().getServerAddr().c_str(), "0.0.0.0") == 0) {
+	if (strcmp(getServer().getConfig().getServerAddress().c_str(), "0.0.0.0") == 0) {
 		serverAddr.sin_addr.s_addr = INADDR_ANY;
 	} else {
-		if (inet_aton(getServer().getServerAddr().c_str(), &serverAddr.sin_addr) == 0) {
+		if (inet_aton(getServer().getConfig().getServerAddress().c_str(), &serverAddr.sin_addr) ==
+			0) {
 			close(_serverSocket);
 			throw std::runtime_error("Invalid IP address");
 		}
@@ -110,8 +111,8 @@ void NetworkManager::start() {
 	if (bind(_serverSocket, (struct sockaddr*)&serverAddr, sizeof(serverAddr)) < 0) {
 		close(_serverSocket);
 		throw std::runtime_error("Failed to bind socket to " +
-								 std::string(getServer().getServerAddr()) + ":" +
-								 std::to_string(getServer().getServerPort()));
+								 std::string(getServer().getConfig().getServerAddress()) + ":" +
+								 std::to_string(getServer().getConfig().getServerPort()));
 	}
 
 	if (listen(_serverSocket, SOMAXCONN) < 0) {

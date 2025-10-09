@@ -1,5 +1,4 @@
 #include "lib/json.hpp"
-#include "logger.hpp"
 #include "network/buffer.hpp"
 #include "network/networking.hpp"
 #include "network/packet.hpp"
@@ -18,13 +17,14 @@ void handleStatusPacket(Packet& packet, Server& server) {
 		return;
 	}
 
-	json jres			= {{"version",
-							{{"name", server.getGameVersion()}, {"protocol", server.getProtocolVersion()}}},
+	json		jres	= {{"version",
+							{{"name", server.getConfig().getVersion()},
+							 {"protocol", server.getConfig().getProtocolVersion()}}},
 						   {"players",
-							{{"max", server.getServerSize()},
+							{{"max", server.getConfig().getServerSize()},
 							 {"online", server.getAmountOnline()},
 							 {"sample", server.getPlayerSample()}}},
-						   {"description", {{"text", server.getServerMOTD()}}}};
+						   {"description", {{"text", server.getConfig().getServerMotd()}}}};
 	std::string payload = jres.dump();
 
 	int jsonLen	 = payload.size();

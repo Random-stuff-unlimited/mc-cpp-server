@@ -10,8 +10,9 @@ AllowShortIfStatementsOnASingleLine: true
 AllowShortFunctionsOnASingleLine: true
 PointerAlignment: Left
 SpaceBeforeParens: ControlStatements
-AlignConsecutiveAssignments: Consecutive
-AlignConsecutiveDeclarations: None
+AlignConsecutiveAssignments: true
+AlignConsecutiveDeclarations: true
+AlignConsecutiveMacros: true
 BinPackArguments: false
 BinPackParameters: false
 Cpp11BracedListStyle: true
