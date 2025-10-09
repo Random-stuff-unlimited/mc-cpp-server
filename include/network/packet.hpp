@@ -4,7 +4,7 @@
 #include "buffer.hpp"
 #include "../player.hpp"
 #include "server.hpp"
-
+#include <string>
 #include <cstdint>
 
 enum PacketResult { PACKET_OK = 0, PACKET_SEND = 1, PACKET_DISCONNECT = 2, PACKET_ERROR = -1 };

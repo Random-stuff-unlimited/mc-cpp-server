@@ -19,7 +19,7 @@ void NetworkManager::workerThreadLoop() {
 			try {
 
 				// g_logger->logNetwork(INFO, "Handling incoming data for player", "Worker");
-				packetRouter(packet, getServer(), &_outgoingPackets);
+				packetRouter(packet, getServer());
 				if (packet->getReturnPacket() == PACKET_SEND) {
 					_outgoingPackets.push(packet);
 					packet = nullptr;

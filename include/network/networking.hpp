@@ -97,6 +97,7 @@ class NetworkManager {
 
 	void addPlayerConnection(std::shared_ptr<Player> connection);
 	void removePlayerConnection(UUID id);
+	ThreadSafeQueue<Packet*>* getOutgoingQueue() { return &_outgoingPackets; }
 
 	Server& getServer() {
 		return _server;
@@ -114,7 +115,7 @@ class NetworkManager {
 	void handleIncomingData(int socket);
 };
 
-void packetRouter(Packet* packet, Server& server, ThreadSafeQueue<Packet*>* _outgoingPackets);
+void packetRouter(Packet* packet, Server& server);
 void handleHandshakePacket(Packet& packet, Server& server);
 void handleStatusPacket(Packet& packet, Server& server);
 void handlePingPacket(Packet& packet, Server& server);
@@ -124,13 +125,13 @@ void handleLoginAcknowledged(Packet& packet, Server& server);
 void handleCookieRequest(Packet& packet, Server& server);
 void handleFinishConfiguration(Packet& packet, Server& server);
 void handleAcknowledgeFinishConfiguration(Packet& packet, Server& server);
-void writePlayPacket(Packet& packet, Server& server);
+void writePlayPacket(Packet& packet);
 void writeSetCenterPacket(Packet& packet, Server& server);
 
 // Chunk batch functions
 void sendChunkBatchStart(Packet& packet, Server& server);
 void sendChunkBatchFinished(Packet& packet, Server& server, int batchSize);
-void sendChunkBatchSequence(Packet& packet, Server& server, ThreadSafeQueue<Packet*>* outgoingPackets);
+void sendChunkBatchSequence(Packet& packet, Server& server);
 
 // Chunk data functions
 void sendChunkData(Packet& packet, Server& server, int chunkX, int chunkZ);
@@ -144,6 +145,7 @@ void sendSetExperience(Packet& packet, Server& server);
 void sendUpdateTime(Packet& packet, Server& server);
 void sendSetHeldItem(Packet& packet, Server& server);
 void handleConfirmTeleportation(Packet& packet, Server& server);
-void completeSpawnSequence(Packet& packet, Server& server, ThreadSafeQueue<Packet*>* outgoingPackets);
+void completeSpawnSequence(Packet& packet, Server& server);
+void sendDisconnectPacket(Packet* packet, const std::string& reason, Server& server);
 
 #endif

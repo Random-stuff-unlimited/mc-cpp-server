@@ -175,8 +175,9 @@ void handleConfirmTeleportation(Packet& packet, Server& server) {
     (void)server;
 }
 
-void completeSpawnSequence(Packet& packet, Server& server, ThreadSafeQueue<Packet*>* outgoingPackets) {
+void completeSpawnSequence(Packet& packet, Server& server) {
     Player* player = packet.getPlayer();
+    ThreadSafeQueue<Packet*>* outgoingPackets = server.getNetworkManager().getOutgoingQueue();
     if (!player || !outgoingPackets) return;
 
     // std::cout << "=== Completing spawn sequence for player: " << player->getPlayerName() << " ===\n";

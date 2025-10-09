@@ -1,15 +1,10 @@
-#include "network/networking.hpp"
 #include "network/packet.hpp"
 #include "player.hpp"
-#include "network/server.hpp"
 #include "network/buffer.hpp"
-#include <vector>
 #include <string>
-#include <sstream>
-#include "lib/nbt.hpp"
 
 
-void writePlayPacket(Packet& packet, Server& server) {
+void writePlayPacket(Packet& packet) {
     Player* player = packet.getPlayer();
     if (!player) return;
 

@@ -54,8 +54,9 @@ void sendChunkBatchFinished(Packet& packet, Server& server, int batchSize) {
     (void)server;
 }
 
-void sendChunkBatchSequence(Packet& packet, Server& server, ThreadSafeQueue<Packet*>* outgoingPackets) {
+void sendChunkBatchSequence(Packet& packet, Server& server) {
     Player* player = packet.getPlayer();
+    ThreadSafeQueue<Packet*>* outgoingPackets = server.getNetworkManager().getOutgoingQueue();
     if (!player || !outgoingPackets) return;
 
     // Player spawn position (you should get this from player data)

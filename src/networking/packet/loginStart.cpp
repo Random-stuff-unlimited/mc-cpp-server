@@ -6,7 +6,6 @@
 #include "network/server.hpp"
 #include "logger.hpp"
 
-#include <iostream>
 #include <string>
 
 void handleLoginStartPacket(Packet& packet, Server& server) {
@@ -25,7 +24,7 @@ void handleLoginStartPacket(Packet& packet, Server& server) {
 	payload.writeUUID(uuid);
 	payload.writeString(username);
 	payload.writeVarInt(0); // properties length (no properties)
-	
+
 	// Debug: Log the raw payload bytes
 	std::string payloadHex = "";
 	for (size_t i = 0; i < payload.getData().size(); i++) {
@@ -50,7 +49,7 @@ void handleLoginStartPacket(Packet& packet, Server& server) {
 	packet.getData() = final;
 	packet.setReturnPacket(PACKET_SEND);
 	packet.setPacketSize(final.getData().size());
-	
+
 	// Debug: Log the complete packet bytes
 	std::string finalHex = "";
 	for (size_t i = 0; i < final.getData().size(); i++) {
@@ -60,7 +59,7 @@ void handleLoginStartPacket(Packet& packet, Server& server) {
 		if (i < final.getData().size() - 1) finalHex += " ";
 	}
 	g_logger->logNetwork(INFO, "Complete Login Success packet bytes: " + finalHex, "Login");
-	
+
 	// Don't transition to Configuration yet - wait for Login Acknowledged
 	g_logger->logNetwork(INFO, "Login Success sent for user: " + username + ", UUID: " + uuid.toString() + ", packet size: " + std::to_string(final.getData().size()), "Login");
 	(void)server;
