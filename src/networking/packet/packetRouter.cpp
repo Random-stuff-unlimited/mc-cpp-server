@@ -1,17 +1,8 @@
-<<<<<<< HEAD
 #include "network/networking.hpp"
 #include "network/packet.hpp"
 #include "player.hpp"
 #include "network/server.hpp"
 #include "logger.hpp"
-=======
-#include "logger.hpp"
-#include "networking.hpp"
-#include "packet.hpp"
-#include "player.hpp"
-#include "server.hpp"
-
->>>>>>> main
 #include <iostream>
 
 // Forward declarations of state handlers
