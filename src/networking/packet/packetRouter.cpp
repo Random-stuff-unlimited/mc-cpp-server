@@ -307,26 +307,26 @@ void initGameSequence(Packet* packet, ThreadSafeQueue<Packet*>* _outgoingPackets
 		writePlayPacket(*playPacket, server);
 		_outgoingPackets->push(playPacket);
 
-		// // 2. Send Set Center Chunk - 0x57
-		// Packet* setCenterPacket = new Packet(*packet);
-		// writeSetCenterPacket(*setCenterPacket, server);
-		// _outgoingPackets->push(setCenterPacket);
+		// 2. Send Set Center Chunk - 0x57
+		Packet* setCenterPacket = new Packet(*packet);
+		writeSetCenterPacket(*setCenterPacket, server);
+		_outgoingPackets->push(setCenterPacket);
 
-		// // 3. Send complete chunk batch sequence (Start -> Chunks -> Finished)
-		// sendChunkBatchSequence(*packet, server, _outgoingPackets);
+		// 3. Send complete chunk batch sequence (Start -> Chunks -> Finished)
+		sendChunkBatchSequence(*packet, server, _outgoingPackets);
 
-		// // 4. Send player position and look - 0x41
-		// Packet* positionPacket = new Packet(*packet);
-		// sendPlayerPositionAndLook(*positionPacket, server);
-		// _outgoingPackets->push(positionPacket);
+		// 4. Send player position and look - 0x41
+		Packet* positionPacket = new Packet(*packet);
+		sendPlayerPositionAndLook(*positionPacket, server);
+		_outgoingPackets->push(positionPacket);
 
-		// // 5. Send spawn position - 0x5A
-		// Packet* spawnPacket = new Packet(*packet);
-		// sendSpawnPosition(*spawnPacket, server);
-		// _outgoingPackets->push(spawnPacket);
+		// 5. Send spawn position - 0x5A
+		Packet* spawnPacket = new Packet(*packet);
+		sendSpawnPosition(*spawnPacket, server);
+		_outgoingPackets->push(spawnPacket);
 
 		// // 6. Complete spawn sequence (abilities, health, experience, time, held item)
-		// completeSpawnSequence(*packet, server, _outgoingPackets);
+		completeSpawnSequence(*packet, server, _outgoingPackets);
 
 		g_logger->logNetwork(INFO, "Complete game sequence sent to player: ", "PacketRouter");
 

@@ -6,6 +6,13 @@ Compatible with older C++ compilers
 #ifndef NBT_HPP
 #define NBT_HPP
 
+#ifndef NBT_MAP_TYPE
+#include <map>
+#define NBT_MAP_TYPE std::map
+#endif
+
+#include <bit>
+#include <concepts>
 #include <cstdint>
 #include <iostream>
 #include <map>
@@ -13,6 +20,40 @@ Compatible with older C++ compilers
 #include <string>
 #include <variant>
 #include <vector>
+#include <cstring>
+
+// Compatibility implementations for GCC 10.5
+#if __cpp_lib_byteswap < 202110L
+namespace std {
+  template<typename T>
+  constexpr T byteswap(T value) noexcept {
+    static_assert(std::is_integral_v<T>, "byteswap requires integral type");
+    if constexpr (sizeof(T) == 1) {
+      return value;
+    } else if constexpr (sizeof(T) == 2) {
+      return __builtin_bswap16(value);
+    } else if constexpr (sizeof(T) == 4) {
+      return __builtin_bswap32(value);
+    } else if constexpr (sizeof(T) == 8) {
+      return __builtin_bswap64(value);
+    }
+  }
+}
+#endif
+
+#if __cpp_lib_bit_cast < 201806L
+namespace std {
+  template<typename To, typename From>
+  constexpr To bit_cast(const From& src) noexcept {
+    static_assert(sizeof(To) == sizeof(From), "bit_cast requires same size types");
+    static_assert(std::is_trivially_copyable_v<To>, "bit_cast requires trivially copyable To type");
+    static_assert(std::is_trivially_copyable_v<From>, "bit_cast requires trivially copyable From type");
+    To dst;
+    std::memcpy(&dst, &src, sizeof(To));
+    return dst;
+  }
+}
+#endif
 
 namespace nbt {
 
