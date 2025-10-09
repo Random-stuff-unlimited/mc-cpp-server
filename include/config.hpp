@@ -7,12 +7,21 @@
 class Config {
   private:
 	std::filesystem::path _execPath;
-	std::string			  _gameVersion;
-	std::string			  _serverMotd;
-	std::string			  _serverAddress;
-	int					  _serverPort;
-	int					  _protocolVersion;
-	int					  _serverSize;
+
+	// Version Config
+	std::string _gameVersion;
+	int			_protocolVersion;
+
+	// Server Config
+	std::string _serverMotd;
+	std::string _serverAddress;
+	int			_serverPort;
+	int			_serverSize;
+
+	// World Config
+	std::string _worldName;
+	std::string _gamemode;
+	std::string _difficulty;
 
   public:
 	Config();
@@ -26,6 +35,9 @@ class Config {
 	std::string getVersion();
 	std::string getServerMotd();
 	std::string getServerAddress();
+	std::string getWorldName();
+	std::string getGamemode();
+	std::string getDifficulty();
 
 	void setProtocolVersion(int ProtoVersion);
 	void setServerSize(int ServerSize);
@@ -33,6 +45,9 @@ class Config {
 	void setServerMotd(std::string ServerMotd);
 	void setServerVersion(std::string ServerVersion);
 	void setServerAddress(std::string ServerAddress);
+	void setWorldName(std::string WorldName);
+	void setGamemode(std::string Gamemode);
+	void setDifficulty(std::string Difficulty);
 };
 
 #endif

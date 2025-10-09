@@ -1,9 +1,8 @@
-#include "network/server.hpp"
-
 #include "config.hpp"
 #include "lib/json.hpp"
 #include "logger.hpp"
 #include "network/networking.hpp"
+#include "network/server.hpp"
 #include "player.hpp"
 
 #include <cstddef>
@@ -162,5 +161,11 @@ void Server::removePlayerToSample(const std::string& name) {
 		}
 }
 
-int	 Server::getAmountOnline() { return _playerLst.size(); }
-json Server::getPlayerSample() { return _playerSample; }
+std::string Server::getGameVersion() { return _config.getVersion(); }
+std::string Server::getServerMOTD() { return _config.getServerMotd(); }
+std::string Server::getServerAddr() { return _config.getServerAddress(); }
+int			Server::getServerPort() { return _config.getServerPort(); }
+int			Server::getProtocolVersion() { return _config.getProtocolVersion(); }
+int			Server::getServerSize() { return _config.getServerSize(); }
+int			Server::getAmountOnline() { return _playerLst.size(); }
+json		Server::getPlayerSample() { return _playerSample; }
