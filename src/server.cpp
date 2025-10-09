@@ -1,8 +1,9 @@
+#include "network/server.hpp"
+
 #include "config.hpp"
 #include "lib/json.hpp"
 #include "logger.hpp"
 #include "network/networking.hpp"
-#include "network/server.hpp"
 #include "player.hpp"
 
 #include <cstddef>
