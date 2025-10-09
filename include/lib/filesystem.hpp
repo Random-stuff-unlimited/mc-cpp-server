@@ -1,5 +1,8 @@
 #ifndef FS_H
 # define FS_H
 
+#include <filesystem>
 
-#endif FS_H
+std::filesystem::path getPath();
+
+#endif
