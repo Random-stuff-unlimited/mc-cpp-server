@@ -1,10 +1,10 @@
 #include "lib/UUID.hpp"
+#include "logger.hpp"
 #include "network/buffer.hpp"
 #include "network/networking.hpp"
 #include "network/packet.hpp"
-#include "player.hpp"
 #include "network/server.hpp"
-#include "logger.hpp"
+#include "player.hpp"
 
 #include <string>
 
@@ -36,15 +36,15 @@ void handleLoginStartPacket(Packet& packet, Server& server) {
 	g_logger->logNetwork(INFO, "Login Success payload bytes: " + payloadHex, "Login");
 
 	// Calculate total packet size (packet ID + payload)
-	int packetId = 0x02;
-	int payloadSize = payload.getData().size();
+	int packetId		   = 0x02;
+	int payloadSize		   = payload.getData().size();
 	int packetIdVarintSize = packet.getVarintSize(packetId);
-	int totalPayloadSize = packetIdVarintSize + payloadSize;
+	int totalPayloadSize   = packetIdVarintSize + payloadSize;
 
 	Buffer final;
-	final.writeVarInt(totalPayloadSize);  // Total packet size
-	final.writeVarInt(packetId);          // Login Success packet ID (0x02)
-	final.writeBytes(payload.getData());  // UUID + username + properties
+	final.writeVarInt(totalPayloadSize); // Total packet size
+	final.writeVarInt(packetId);		 // Login Success packet ID (0x02)
+	final.writeBytes(payload.getData()); // UUID + username + properties
 
 	packet.getData() = final;
 	packet.setReturnPacket(PACKET_SEND);
@@ -61,6 +61,9 @@ void handleLoginStartPacket(Packet& packet, Server& server) {
 	g_logger->logNetwork(INFO, "Complete Login Success packet bytes: " + finalHex, "Login");
 
 	// Don't transition to Configuration yet - wait for Login Acknowledged
-	g_logger->logNetwork(INFO, "Login Success sent for user: " + username + ", UUID: " + uuid.toString() + ", packet size: " + std::to_string(final.getData().size()), "Login");
+	g_logger->logNetwork(INFO,
+						 "Login Success sent for user: " + username + ", UUID: " + uuid.toString() +
+								 ", packet size: " + std::to_string(final.getData().size()),
+						 "Login");
 	(void)server;
 }

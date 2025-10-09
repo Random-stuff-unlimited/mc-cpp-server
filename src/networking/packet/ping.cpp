@@ -1,9 +1,9 @@
+#include "logger.hpp"
 #include "network/buffer.hpp"
 #include "network/networking.hpp"
 #include "network/packet.hpp"
-#include "player.hpp"
 #include "network/server.hpp"
-#include "logger.hpp"
+#include "player.hpp"
 
 #include <unistd.h>
 
@@ -16,9 +16,10 @@ void handlePingPacket(Packet& packet, Server& server) {
 
 	long timestamp = packet.getData().readLong();
 
-	// g_logger->logNetwork(INFO, "Received ping request with timestamp: " + std::to_string(timestamp), "Ping");
+	// g_logger->logNetwork(INFO, "Received ping request with timestamp: " +
+	// std::to_string(timestamp), "Ping");
 
-	int packetId           = 0x01;
+	int packetId		   = 0x01;
 	int packetIdVarintSize = packet.getVarintSize(packetId);
 	int totalPayloadSize   = packetIdVarintSize + 8;
 
@@ -32,7 +33,8 @@ void handlePingPacket(Packet& packet, Server& server) {
 	packet.setPacketSize(buf.getData().size());
 	packet.getPlayer()->setPlayerState(PlayerState::None);
 
-	// g_logger->logNetwork(INFO, "Pong response ready - echoing timestamp " + std::to_string(timestamp), "Ping");
+	// g_logger->logNetwork(INFO, "Pong response ready - echoing timestamp " +
+	// std::to_string(timestamp), "Ping");
 
 	(void)server;
 }

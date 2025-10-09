@@ -1,8 +1,9 @@
+#include "network/server.hpp"
+
 #include "lib/json.hpp"
 #include "logger.hpp"
 #include "network/networking.hpp"
 #include "player.hpp"
-#include "network/server.hpp"
 
 #include <cstddef>
 #include <exception>
@@ -14,8 +15,8 @@
 using json = nlohmann::json;
 
 Server::Server()
-    : _playerLst(), _protocolVersion(770), _serverSize(-100000000), _gameVersion("1.12.5"),
-      _serverMOTD(), _serverPort(25565), _serverAddr("0.0.0.0"), _networkManager(nullptr) {}
+	: _playerLst(), _protocolVersion(770), _serverSize(-100000000), _gameVersion("1.12.5"),
+	  _serverMOTD(), _serverPort(25565), _serverAddr("0.0.0.0"), _networkManager(nullptr) {}
 
 Server::~Server() {
 	if (_networkManager) {
@@ -26,11 +27,10 @@ Server::~Server() {
 
 int Server::start_server() {
 	try {
-	    initializeGlobalLogger();
+		initializeGlobalLogger();
 		Server::loadConfig();
 		size_t workerCount = 4;
-		if (workerCount == 0)
-			workerCount = 4; // fallback
+		if (workerCount == 0) workerCount = 4; // fallback
 
 		// Create NetworkManager with BOTH required parameters
 		_networkManager = new NetworkManager(workerCount, *this);
@@ -61,11 +61,13 @@ int Server::loadConfig() {
 	try {
 		inputFile >> j;
 
-		// g_logger->logGameInfo(INFO, "Successfully parsed " + std::string(ConfigFileName) + "!", "Server");
+		// g_logger->logGameInfo(INFO, "Successfully parsed " + std::string(ConfigFileName) + "!",
+		// "Server");
 		_gameVersion = j["version"]["name"];
 		// g_logger->logGameInfo(INFO, "Game version: " + _gameVersion, "Server");
 		_protocolVersion = j["version"]["protocol"];
-		// g_logger->logGameInfo(INFO, "Protocol version: " + std::to_string(_protocolVersion), "Server");
+		// g_logger->logGameInfo(INFO, "Protocol version: " + std::to_string(_protocolVersion),
+		// "Server");
 		_serverSize = j["server"]["max-players"];
 		// g_logger->logGameInfo(INFO, "Server size: " + std::to_string(_serverSize), "Server");
 		_serverMOTD = j["server"]["motd"];
@@ -119,7 +121,8 @@ Player* Server::addTempPlayer(const std::string& name, const PlayerState state, 
 
 	std::lock_guard<std::mutex> lock(_tempPlayerLock);
 	_tempPlayerLst[socket] = newPlayer;
-	// g_logger->logGameInfo(INFO, "Added temp player on socket " + std::to_string(socket), "Server");
+	// g_logger->logGameInfo(INFO, "Added temp player on socket " + std::to_string(socket),
+	// "Server");
 	return (newPlayer);
 }
 
@@ -131,12 +134,12 @@ void Server::removeTempPlayer(Player* player) {
 	std::lock_guard<std::mutex> lock(_tempPlayerLock);
 	_tempPlayerLst.erase(socket);
 	delete player;
-	// g_logger->logGameInfo(INFO, "Removed temp player from socket " + std::to_string(socket), "Server");
+	// g_logger->logGameInfo(INFO, "Removed temp player from socket " + std::to_string(socket),
+	// "Server");
 }
 
 void Server::promoteTempPlayer(Player* player) {
-	if (!player)
-		return;
+	if (!player) return;
 	int socket = player->getSocketFd();
 
 	std::lock_guard<std::mutex> lockTemp(_tempPlayerLock);
@@ -145,7 +148,8 @@ void Server::promoteTempPlayer(Player* player) {
 	std::lock_guard<std::mutex> lockPlayer(_playerLock);
 	_playerLst[socket] = player;
 
-	// g_logger->logGameInfo(INFO, "Promoted temp player to main list on socket " + std::to_string(socket), "Server");
+	// g_logger->logGameInfo(INFO, "Promoted temp player to main list on socket " +
+	// std::to_string(socket), "Server");
 }
 
 void Server::removePlayerFromAnyList(Player* player) {
@@ -160,7 +164,8 @@ void Server::removePlayerFromAnyList(Player* player) {
 		if (temp_it != _tempPlayerLst.end()) {
 			_tempPlayerLst.erase(socket);
 			delete player;
-			// g_logger->logGameInfo(INFO, "Removed temp player from socket " + std::to_string(socket), "Server");
+			// g_logger->logGameInfo(INFO, "Removed temp player from socket " +
+			// std::to_string(socket), "Server");
 			return;
 		}
 	}
@@ -171,17 +176,17 @@ void Server::removePlayerFromAnyList(Player* player) {
 		if (main_it != _playerLst.end()) {
 			_playerLst.erase(socket);
 			delete player;
-			// g_logger->logGameInfo(INFO, "Removed main player from socket " + std::to_string(socket), "Server");
+			// g_logger->logGameInfo(INFO, "Removed main player from socket " +
+			// std::to_string(socket), "Server");
 			return;
 		}
 	}
 	delete player;
-	// g_logger->logGameInfo(INFO, "Deleted orphaned player from socket " + std::to_string(socket), "Server");
+	// g_logger->logGameInfo(INFO, "Deleted orphaned player from socket " + std::to_string(socket),
+	// "Server");
 }
 
-void Server::addPlayerToSample(const std::string& name) {
-	_playerSample.push_back(name);
-}
+void Server::addPlayerToSample(const std::string& name) { _playerSample.push_back(name); }
 
 void Server::removePlayerToSample(const std::string& name) {
 	for (size_t i = 0; i < _playerLst.size(); i++)
@@ -191,21 +196,9 @@ void Server::removePlayerToSample(const std::string& name) {
 		}
 }
 
-std::string Server::getGameVersion() {
-	return _gameVersion;
-}
-std::string Server::getServerMOTD() {
-	return _serverMOTD;
-}
-int Server::getProtocolVersion() {
-	return _protocolVersion;
-}
-int Server::getServerSize() {
-	return _serverSize;
-}
-int Server::getAmountOnline() {
-	return _playerLst.size();
-}
-json Server::getPlayerSample() {
-	return _playerSample;
-}
+std::string Server::getGameVersion() { return _gameVersion; }
+std::string Server::getServerMOTD() { return _serverMOTD; }
+int Server::getProtocolVersion() { return _protocolVersion; }
+int Server::getServerSize() { return _serverSize; }
+int Server::getAmountOnline() { return _playerLst.size(); }
+json Server::getPlayerSample() { return _playerSample; }

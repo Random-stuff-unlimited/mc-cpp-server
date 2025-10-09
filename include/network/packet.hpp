@@ -1,11 +1,12 @@
 #ifndef PACKET_HPP
 #define PACKET_HPP
 
-#include "buffer.hpp"
 #include "../player.hpp"
+#include "buffer.hpp"
 #include "server.hpp"
-#include <string>
+
 #include <cstdint>
+#include <string>
 
 enum PacketResult { PACKET_OK = 0, PACKET_SEND = 1, PACKET_DISCONNECT = 2, PACKET_ERROR = -1 };
 

@@ -1,23 +1,23 @@
 #include "logger.hpp"
 
 #include <chrono>
+#include <ctime>
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <memory>
+#include <mutex>
 #include <sstream>
+#include <string>
 #include <sys/stat.h>
 #include <thread>
-#include <string>
-#include <mutex>
-#include <ctime>
-#include <memory>
 
 namespace fs = std::filesystem;
 
 LogManager::LogManager() : _running(false) {
 	if (initializeLogDirectory()) {
-		_running      = true;
+		_running	  = true;
 		_writerThread = std::thread(&LogManager::writerThreadLoop, this);
 		// Logger initialized - using console for initialization message
 		std::cout << "Logger initialized successfully in directory: " << _logDir << std::endl;
@@ -43,7 +43,7 @@ LogManager::~LogManager() {
 }
 
 std::string LogManager::getCurrentTimestamp() {
-	auto now    = std::chrono::system_clock::now();
+	auto now	= std::chrono::system_clock::now();
 	auto time_t = std::chrono::system_clock::to_time_t(now);
 
 	std::stringstream ss;
@@ -52,7 +52,7 @@ std::string LogManager::getCurrentTimestamp() {
 }
 
 std::string LogManager::getDetailedTimestamp() {
-	auto now    = std::chrono::system_clock::now();
+	auto now	= std::chrono::system_clock::now();
 	auto time_t = std::chrono::system_clock::to_time_t(now);
 	auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()) % 1000;
 
@@ -110,15 +110,15 @@ bool LogManager::initializeLogDirectory() {
 }
 
 void LogManager::log(LogLevel level,
-                     LogCategory category,
-                     const std::string& message,
-                     const std::string& source) {
+					 LogCategory category,
+					 const std::string& message,
+					 const std::string& source) {
 	LogEntry entry;
 	entry.timestamp = std::chrono::system_clock::now();
-	entry.level     = level;
-	entry.category  = category;
-	entry.message   = message;
-	entry.source    = source;
+	entry.level		= level;
+	entry.category	= category;
+	entry.message	= message;
+	entry.source	= source;
 
 	// Add to queue for file writing
 	{
@@ -126,9 +126,10 @@ void LogManager::log(LogLevel level,
 		_logQueue.push(entry);
 	}
 
-	if (category == GAMEINFO || category == NETWORK) { // Remove category == NETWORK on release build
-	    std::string formattedEntry = formatLogEntry(entry);
-	    std::cout << formattedEntry << std::endl;
+	if (category == GAMEINFO ||
+		category == NETWORK) { // Remove category == NETWORK on release build
+		std::string formattedEntry = formatLogEntry(entry);
+		std::cout << formattedEntry << std::endl;
 	}
 }
 
@@ -137,8 +138,8 @@ void LogManager::logNetwork(LogLevel level, const std::string& message, const st
 }
 
 void LogManager::logGameInfo(LogLevel level,
-                             const std::string& message,
-                             const std::string& source) {
+							 const std::string& message,
+							 const std::string& source) {
 	log(level, GAMEINFO, message, source);
 }
 
@@ -181,9 +182,9 @@ std::string LogManager::formatLogEntry(const LogEntry& entry) {
 
 	// Add timestamp
 	auto time_t = std::chrono::system_clock::to_time_t(entry.timestamp);
-	auto ms     = std::chrono::duration_cast<std::chrono::milliseconds>(
-                      entry.timestamp.time_since_epoch()) %
-	          1000;
+	auto ms		= std::chrono::duration_cast<std::chrono::milliseconds>(
+					  entry.timestamp.time_since_epoch()) %
+			  1000;
 
 	ss << "[" << std::put_time(std::localtime(&time_t), "%H:%M:%S");
 	ss << "." << std::setfill('0') << std::setw(3) << ms.count() << "] ";

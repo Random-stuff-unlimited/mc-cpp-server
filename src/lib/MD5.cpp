@@ -12,22 +12,12 @@ namespace {
 	constexpr uint32_t initC = 0x98badcfe;
 	constexpr uint32_t initD = 0x10325476;
 
-	inline uint32_t F(uint32_t x, uint32_t y, uint32_t z) {
-		return (x & y) | (~x & z);
-	}
-	inline uint32_t G(uint32_t x, uint32_t y, uint32_t z) {
-		return (x & z) | (y & ~z);
-	}
-	inline uint32_t H(uint32_t x, uint32_t y, uint32_t z) {
-		return x ^ y ^ z;
-	}
-	inline uint32_t I(uint32_t x, uint32_t y, uint32_t z) {
-		return y ^ (x | ~z);
-	}
+	inline uint32_t F(uint32_t x, uint32_t y, uint32_t z) { return (x & y) | (~x & z); }
+	inline uint32_t G(uint32_t x, uint32_t y, uint32_t z) { return (x & z) | (y & ~z); }
+	inline uint32_t H(uint32_t x, uint32_t y, uint32_t z) { return x ^ y ^ z; }
+	inline uint32_t I(uint32_t x, uint32_t y, uint32_t z) { return y ^ (x | ~z); }
 
-	inline uint32_t rotate_left(uint32_t x, int n) {
-		return (x << n) | (x >> (32 - n));
-	}
+	inline uint32_t rotate_left(uint32_t x, int n) { return (x << n) | (x >> (32 - n)); }
 } // namespace
 
 // petite implémentation brute de MD5
@@ -56,7 +46,7 @@ std::vector<uint8_t> MD5::hash(const std::string& input) {
 		uint32_t M[16];
 		for (int i = 0; i < 16; ++i) {
 			M[i] = (data[offset + i * 4]) | (data[offset + i * 4 + 1] << 8) |
-			       (data[offset + i * 4 + 2] << 16) | (data[offset + i * 4 + 3] << 24);
+				   (data[offset + i * 4 + 2] << 16) | (data[offset + i * 4 + 3] << 24);
 		}
 
 		uint32_t a = A, b = B, c = C, d = D;
@@ -76,7 +66,7 @@ std::vector<uint8_t> MD5::hash(const std::string& input) {
 	std::vector<uint8_t> digest(16);
 	uint32_t state[4] = {A, B, C, D};
 	for (int i = 0; i < 4; i++) {
-		digest[i * 4]     = state[i] & 0xFF;
+		digest[i * 4]	  = state[i] & 0xFF;
 		digest[i * 4 + 1] = (state[i] >> 8) & 0xFF;
 		digest[i * 4 + 2] = (state[i] >> 16) & 0xFF;
 		digest[i * 4 + 3] = (state[i] >> 24) & 0xFF;

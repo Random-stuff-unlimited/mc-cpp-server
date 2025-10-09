@@ -31,11 +31,11 @@ void handleClientInformation(Packet& packet, Server& server) {
 	// g_logger->logGameInfo(
 	//         INFO, "Main Hand: " + std::to_string(config->getMainHand()), "ClientInfo");
 	// g_logger->logGameInfo(INFO,
-	//                       "Enabled Text Filtering: " + std::to_string(config->getTextFiltering()),
-	//                       "ClientInfo");
+	//                       "Enabled Text Filtering: " +
+	//                       std::to_string(config->getTextFiltering()), "ClientInfo");
 	// g_logger->logGameInfo(INFO,
-	//                       "Allow Server Listings: " + std::to_string(config->getServerListings()),
-	//                       "ClientInfo");
+	//                       "Allow Server Listings: " +
+	//                       std::to_string(config->getServerListings()), "ClientInfo");
 	packet.setReturnPacket(PACKET_OK);
 	(void)server;
 }

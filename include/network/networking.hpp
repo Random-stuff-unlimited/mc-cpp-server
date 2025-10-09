@@ -1,22 +1,22 @@
 #ifndef NETWORKING_HPP
 #define NETWORKING_HPP
 
+#include "../player.hpp"
 #include "lib/UUID.hpp"
 #include "packet.hpp"
-#include "../player.hpp"
 
 // Forward declaration to avoid circular dependency
 class Server;
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
+#include <cstddef>
 #include <memory>
 #include <mutex>
 #include <queue>
 #include <thread>
 #include <unistd.h>
 #include <vector>
-#include <cstddef>
 
 template <typename T> class ThreadSafeQueue {
   private:
@@ -33,8 +33,7 @@ template <typename T> class ThreadSafeQueue {
 
 	bool tryPop(T& item) {
 		std::lock_guard<std::mutex> lock(_mutex);
-		if (_queue.empty())
-			return false;
+		if (_queue.empty()) return false;
 
 		item = std::move(_queue.front());
 		_queue.pop();
@@ -83,7 +82,7 @@ class NetworkManager {
 
   public:
 	NetworkManager(size_t worker_count,
-	               Server& s); // Could use std::thread::hardware_concurrency() for the worker size;
+				   Server& s); // Could use std::thread::hardware_concurrency() for the worker size;
 	~NetworkManager() {
 		if (_epollFd != -1) {
 			close(_epollFd);
@@ -99,9 +98,7 @@ class NetworkManager {
 	void removePlayerConnection(UUID id);
 	ThreadSafeQueue<Packet*>* getOutgoingQueue() { return &_outgoingPackets; }
 
-	Server& getServer() {
-		return _server;
-	}
+	Server& getServer() { return _server; }
 
 	void enqueueOutgoingPacket(Packet* p);
 
@@ -119,7 +116,7 @@ void packetRouter(Packet* packet, Server& server);
 void handleHandshakePacket(Packet& packet, Server& server);
 void handleStatusPacket(Packet& packet, Server& server);
 void handlePingPacket(Packet& packet, Server& server);
-void handleClientInformation(Packet& packet, Server &server);
+void handleClientInformation(Packet& packet, Server& server);
 void handleLoginStartPacket(Packet& packet, Server& server);
 void handleLoginAcknowledged(Packet& packet, Server& server);
 void handleCookieRequest(Packet& packet, Server& server);

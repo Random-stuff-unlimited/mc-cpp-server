@@ -3,11 +3,11 @@
 
 #include "lib/UUID.hpp"
 
-#include <string>
 #include <cstdint>
+#include <string>
 class Server;
 
-enum class PlayerState { None, Configuration ,Handshake, Status, Login, Play };
+enum class PlayerState { None, Configuration, Handshake, Status, Login, Play };
 
 class PlayerConfig {
   private:

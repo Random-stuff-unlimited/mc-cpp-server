@@ -2,9 +2,9 @@
 #define SERVER_HPP
 
 class NetworkManager;
+#include "../player.hpp"
 #include "id_manager.hpp"
 #include "lib/json.hpp"
-#include "../player.hpp"
 
 #include <mutex>
 #include <netinet/in.h>
@@ -42,18 +42,10 @@ class Server {
 	int getAmountOnline();
 	std::string getGameVersion();
 	std::string getServerMOTD();
-	int getServerPort() {
-		return _serverPort;
-	}
-	std::string getServerAddr() {
-		return _serverAddr;
-	}
-	std::unordered_map<int, Player*>& getPlayerLst() {
-		return _playerLst;
-	}
-	std::unordered_map<int, Player*>& getTempPlayerLst() {
-		return _tempPlayerLst;
-	}
+	int getServerPort() { return _serverPort; }
+	std::string getServerAddr() { return _serverAddr; }
+	std::unordered_map<int, Player*>& getPlayerLst() { return _playerLst; }
+	std::unordered_map<int, Player*>& getTempPlayerLst() { return _tempPlayerLst; }
 
 	void addPlayerToSample(const std::string& name);
 	void removePlayerToSample(const std::string& name);
@@ -64,13 +56,9 @@ class Server {
 	void promoteTempPlayer(Player* player);
 	void removePlayerFromAnyList(Player* player);
 	json getPlayerSample();
-	IdManager& getIdManager() {
-		return (_idManager);
-	}
+	IdManager& getIdManager() { return (_idManager); }
 
-	NetworkManager& getNetworkManager() {
-		return *_networkManager;
-	}
+	NetworkManager& getNetworkManager() { return *_networkManager; }
 };
 
 #endif

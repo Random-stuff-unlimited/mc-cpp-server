@@ -1,7 +1,7 @@
-#include "network/packet.hpp"
-#include "player.hpp"
-#include "network/server.hpp"
 #include "logger.hpp"
+#include "network/packet.hpp"
+#include "network/server.hpp"
+#include "player.hpp"
 
 #include <cstdint>
 #include <string>
@@ -13,14 +13,15 @@ void handleHandshakePacket(Packet& packet, Server& server) {
 		packet.setReturnPacket(PACKET_DISCONNECT);
 		return;
 	}
-	int protocolVersion    = packet.getData().readVarInt();
+	int protocolVersion	   = packet.getData().readVarInt();
 	std::string serverAddr = packet.getData().readString(255);
-	uint16_t port          = packet.getData().readUShort();
-	int nextState          = packet.getData().readVarInt();
-	//g_logger->logNetwork(INFO, "Protocol=" + std::to_string(protocolVersion) + ", Addr=" + serverAddr + ", State=" + std::to_string(nextState), "Handshake");
+	uint16_t port		   = packet.getData().readUShort();
+	int nextState		   = packet.getData().readVarInt();
+	// g_logger->logNetwork(INFO, "Protocol=" + std::to_string(protocolVersion) + ", Addr=" +
+	// serverAddr + ", State=" + std::to_string(nextState), "Handshake");
 	if (nextState == 1) {
 		packet.getPlayer()->setPlayerState(PlayerState::Status);
-		//g_logger->logNetwork(INFO, "Status request - keeping in temp list", "Handshake");
+		// g_logger->logNetwork(INFO, "Status request - keeping in temp list", "Handshake");
 	} else if (nextState == 2) {
 		packet.getPlayer()->setPlayerState(PlayerState::Login);
 		server.promoteTempPlayer(packet.getPlayer());

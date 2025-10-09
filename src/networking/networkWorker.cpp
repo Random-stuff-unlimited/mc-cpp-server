@@ -1,8 +1,8 @@
 #include "logger.hpp"
 #include "network/networking.hpp"
 #include "network/packet.hpp"
-#include "player.hpp"
 #include "network/server.hpp"
+#include "player.hpp"
 
 #include <chrono>
 #include <exception>

@@ -1,5 +1,6 @@
-#include "lib/MD5.hpp"
 #include "lib/UUID.hpp"
+
+#include "lib/MD5.hpp"
 #include "network/buffer.hpp"
 
 #include <cstdint>
@@ -13,18 +14,10 @@ UUID::UUID() : _mostSigBits(0), _leastSigBits(0) {}
 UUID::UUID(uint64_t most, uint64_t least) : _mostSigBits(most), _leastSigBits(least) {}
 UUID::~UUID() {}
 
-uint64_t UUID::getMostSigBits() const {
-	return _mostSigBits;
-}
-uint64_t UUID::getLeastSigBits() const {
-	return _leastSigBits;
-}
-void UUID::setMostSigBits(uint64_t val) {
-	_mostSigBits = val;
-}
-void UUID::setLeastSigBits(uint64_t val) {
-	_leastSigBits = val;
-}
+uint64_t UUID::getMostSigBits() const { return _mostSigBits; }
+uint64_t UUID::getLeastSigBits() const { return _leastSigBits; }
+void UUID::setMostSigBits(uint64_t val) { _mostSigBits = val; }
+void UUID::setLeastSigBits(uint64_t val) { _leastSigBits = val; }
 
 std::string UUID::toString() const {
 	std::stringstream ss;

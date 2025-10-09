@@ -14,45 +14,45 @@ Compatible with older C++ compilers
 #include <bit>
 #include <concepts>
 #include <cstdint>
+#include <cstring>
 #include <iostream>
 #include <map>
 #include <memory>
 #include <string>
 #include <variant>
 #include <vector>
-#include <cstring>
 
 // Compatibility implementations for GCC 10.5
 #if __cpp_lib_byteswap < 202110L
 namespace std {
-  template<typename T>
-  constexpr T byteswap(T value) noexcept {
-    static_assert(std::is_integral_v<T>, "byteswap requires integral type");
-    if constexpr (sizeof(T) == 1) {
-      return value;
-    } else if constexpr (sizeof(T) == 2) {
-      return __builtin_bswap16(value);
-    } else if constexpr (sizeof(T) == 4) {
-      return __builtin_bswap32(value);
-    } else if constexpr (sizeof(T) == 8) {
-      return __builtin_bswap64(value);
-    }
-  }
-}
+	template <typename T> constexpr T byteswap(T value) noexcept {
+		static_assert(std::is_integral_v<T>, "byteswap requires integral type");
+		if constexpr (sizeof(T) == 1) {
+			return value;
+		} else if constexpr (sizeof(T) == 2) {
+			return __builtin_bswap16(value);
+		} else if constexpr (sizeof(T) == 4) {
+			return __builtin_bswap32(value);
+		} else if constexpr (sizeof(T) == 8) {
+			return __builtin_bswap64(value);
+		}
+	}
+} // namespace std
 #endif
 
 #if __cpp_lib_bit_cast < 201806L
 namespace std {
-  template<typename To, typename From>
-  constexpr To bit_cast(const From& src) noexcept {
-    static_assert(sizeof(To) == sizeof(From), "bit_cast requires same size types");
-    static_assert(std::is_trivially_copyable_v<To>, "bit_cast requires trivially copyable To type");
-    static_assert(std::is_trivially_copyable_v<From>, "bit_cast requires trivially copyable From type");
-    To dst;
-    std::memcpy(&dst, &src, sizeof(To));
-    return dst;
-  }
-}
+	template <typename To, typename From> constexpr To bit_cast(const From& src) noexcept {
+		static_assert(sizeof(To) == sizeof(From), "bit_cast requires same size types");
+		static_assert(std::is_trivially_copyable_v<To>,
+					  "bit_cast requires trivially copyable To type");
+		static_assert(std::is_trivially_copyable_v<From>,
+					  "bit_cast requires trivially copyable From type");
+		To dst;
+		std::memcpy(&dst, &src, sizeof(To));
+		return dst;
+	}
+} // namespace std
 #endif
 
 namespace nbt {
@@ -78,19 +78,19 @@ namespace nbt {
 	// Tag variant - using struct to avoid forward declaration issues
 	struct Tag {
 		std::variant<TagEnd,
-		             TagByte,
-		             TagShort,
-		             TagInt,
-		             TagLong,
-		             TagFloat,
-		             TagDouble,
-		             TagByteArray,
-		             TagString,
-		             std::shared_ptr<TagList>,
-		             std::shared_ptr<TagCompound>,
-		             TagIntArray,
-		             TagLongArray>
-		        data;
+					 TagByte,
+					 TagShort,
+					 TagInt,
+					 TagLong,
+					 TagFloat,
+					 TagDouble,
+					 TagByteArray,
+					 TagString,
+					 std::shared_ptr<TagList>,
+					 std::shared_ptr<TagCompound>,
+					 TagIntArray,
+					 TagLongArray>
+				data;
 
 		// Constructors
 		Tag() : data(TagEnd{}) {}

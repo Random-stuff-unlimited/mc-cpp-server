@@ -1,6 +1,6 @@
 #pragma once
 #ifndef LOGGER_HPP
-# define LOGGER_HPP
+#define LOGGER_HPP
 #include <chrono>
 #include <filesystem>
 #include <fstream>
@@ -32,16 +32,15 @@ class LogManager {
 	std::thread _writerThread;
 	bool _running;
 
-
   public:
 	LogManager();
 	~LogManager();
 
 	// Core logging methods
 	void log(LogLevel level,
-	         LogCategory category,
-	         const std::string& message,
-	         const std::string& source = "");
+			 LogCategory category,
+			 const std::string& message,
+			 const std::string& source = "");
 	void logNetwork(LogLevel level, const std::string& message, const std::string& source = "");
 	void logGameInfo(LogLevel level, const std::string& message, const std::string& source = "");
 

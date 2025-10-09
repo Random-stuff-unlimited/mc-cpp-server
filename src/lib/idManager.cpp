@@ -26,7 +26,7 @@ void IdManager::release(uint32_t id) {
 	std::lock_guard<std::mutex> lock(_mutex);
 	if (id >= _nextId) {
 		std::cerr << "[IdManager] WARNING: Trying to release invalid ID " << id
-		          << " (nextId: " << _nextId << ")" << std::endl;
+				  << " (nextId: " << _nextId << ")" << std::endl;
 		return;
 	}
 	if (_freedIds.find(id) != _freedIds.end()) {
@@ -36,7 +36,7 @@ void IdManager::release(uint32_t id) {
 
 	_freedIds.insert(id);
 	std::cout << "[IdManager] Released ID: " << id << " (freed count: " << _freedIds.size() << ")"
-	          << std::endl;
+			  << std::endl;
 }
 
 size_t IdManager::getAllocatedCount() const {
