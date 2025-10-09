@@ -1,139 +1,86 @@
-// #include "networking.hpp"
-// #include "packet.hpp"
-// #include "player.hpp"
-// #include "server.hpp"
-// #include "buffer.hpp"
-// #include <vector>
-// #include <string>
-// #include <sstream>
-// #include "nbt.hpp"
+#include <iostream>
+#include <sstream>
+#include <vector>
+#include <map>
+#include <string>
 
-// void writePlayPacket(Packet& packet, Server& server) {
-//     Player* player = packet.getPlayer();
-//     if (!player) return;
+#include "networking.hpp"
+#include "server.hpp"
+#include "packet.hpp"
+#include "buffer.hpp"
 
-//     Buffer buf;
+void writePlayPacket(Packet& packet, Server& server) {
+    Player* player = packet.getPlayer();
+    if (!player) return;
 
-//     // 1. Entity ID
-//     buf.writeInt(player->getPlayerID());
+    Buffer buf;
 
-//     // 2. Is Hardcore (false)
-//     buf.writeBool(false);
+    // 1. Entity ID
+    buf.writeInt(player->getPlayerID());
 
-//     // 3. Gamemode (0 = survival)
-//     buf.writeByte(0x00);
+    // 2. Is Hardcore (false)
+    buf.writeBool(false);
 
-//     // 4. Previous Gamemode (-1 = none)
-//     buf.writeByte(0xFF);
+    // 3. Game mode (survival = 0)
+    buf.writeByte(0);
 
-//     // 5. World Names (array of identifiers)
-//     std::vector<std::string> worlds = {"minecraft:overworld"};
-//     buf.writeIdentifierArray(worlds);
+    // 4. Previous game mode (-1 = not set)
+    buf.writeByte(-1);
 
-//     // 6. Dimension Codec (NBT binaire)
-//     nbt::TagCompound dimensionTypeElement = {
-//         {"name", nbt::TagString("minecraft:overworld")},
-//         {"id", nbt::TagInt(0)},
-//         {"element", nbt::TagCompound{
-//             {"piglin_safe", nbt::TagByte(0)},
-//             {"natural", nbt::TagByte(1)},
-//             {"ambient_light", nbt::TagFloat(0.0f)},
-//             {"infiniburn", nbt::TagString("minecraft:infiniburn_overworld")},
-//             {"respawn_anchor_works", nbt::TagByte(0)},
-//             {"has_skylight", nbt::TagByte(1)},
-//             {"bed_works", nbt::TagByte(1)},
-//             {"effects", nbt::TagString("minecraft:overworld")},
-//             {"has_raids", nbt::TagByte(1)},
-//             {"logical_height", nbt::TagInt(256)},
-//             {"coordinate_scale", nbt::TagDouble(1.0)},
-//             {"ultrawarm", nbt::TagByte(0)},
-//             {"has_ceiling", nbt::TagByte(0)}
-//         }}
-//     };
-//     nbt::TagCompound dimensionType = {
-//         {"type", nbt::TagString("minecraft:dimension_type")},
-//         {"value", nbt::TagList{std::vector<nbt::TagCompound>{dimensionTypeElement}}}
-//     };
-//     nbt::TagCompound codec = {
-//         {"minecraft:dimension_type", dimensionType}
-//     };
-//     std::stringstream codec_ss;
-//     codec.encode(codec_ss);
-//     std::string codec_nbt = codec_ss.str();
-//     buf.writeNBT(codec_nbt);
+    // 5. World names (just overworld for now)
+    buf.writeVarInt(1); // Number of worlds
+    buf.writeString("minecraft:overworld");
 
-//     // 7. Dimension (NBT binaire)
-//     nbt::TagCompound dimension = {
-//         {"piglin_safe", nbt::TagByte(0)},
-//         {"natural", nbt::TagByte(1)},
-//         {"ambient_light", nbt::TagFloat(0.0f)},
-//         {"infiniburn", nbt::TagString("minecraft:infiniburn_overworld")},
-//         {"respawn_anchor_works", nbt::TagByte(0)},
-//         {"has_skylight", nbt::TagByte(1)},
-//         {"bed_works", nbt::TagByte(1)},
-//         {"effects", nbt::TagString("minecraft:overworld")},
-//         {"has_raids", nbt::TagByte(1)},
-//         {"logical_height", nbt::TagInt(256)},
-//         {"coordinate_scale", nbt::TagDouble(1.0)},
-//         {"ultrawarm", nbt::TagByte(0)},
-//         {"has_ceiling", nbt::TagByte(0)}
-//     };
-//     std::stringstream dim_ss;
-//     dimension.encode(dim_ss);
-//     std::string dim_nbt = dim_ss.str();
-//     buf.writeNBT(dim_nbt);
+    // 6. Registry codec (empty/minimal for now)
+    // We'll write a minimal empty NBT structure
+    buf.writeByte(0x0A); // TAG_Compound
+    buf.writeByte(0);     // Short value (high byte)
+    buf.writeByte(0);     // Short value (low byte)
+    buf.writeByte(0x00); // TAG_End
 
-//     // 8. World Name
-//     buf.writeIdentifier("minecraft:overworld");
+    // 7. Dimension (empty/minimal for now)
+    // We'll write a minimal empty NBT structure  
+    buf.writeByte(0x0A); // TAG_Compound
+    buf.writeByte(0);     // Short value (high byte)
+    buf.writeByte(0);     // Short value (low byte)
+    buf.writeByte(0x00); // TAG_End
 
-//     // 9. Hashed Seed
-//     buf.writeLong(0);
+    // 8. World name
+    buf.writeString("minecraft:overworld");
 
-//     // 10. Max Players (ignored)
-//     buf.writeVarInt(0);
+    // 9. Hashed seed
+    buf.writeLong(12345678L);
 
-//     // 11. View Distance
-//     buf.writeVarInt(10);
+    // 10. Max players
+    buf.writeVarInt(20);
 
-//     // 12. Simulation Distance
-//     buf.writeVarInt(10);
+    // 11. View distance
+    buf.writeVarInt(10);
 
-//     // 13. Reduced Debug Info
-//     buf.writeBool(false);
+    // 12. Simulation distance
+    buf.writeVarInt(10);
 
-//     // 14. Enable Respawn Screen
-//     buf.writeBool(false);
+    // 13. Reduced debug info
+    buf.writeBool(false);
 
-//     // 15. Is Debug
-//     buf.writeBool(false);
+    // 14. Enable respawn screen
+    buf.writeBool(true);
 
-//     // 16. Is Flat
-//     buf.writeBool(false);
+    // 15. Do limited crafting
+    buf.writeBool(false);
 
-//     // 17. Portal cooldown
-//     buf.writeVarInt(0);
+    // 16. Dimension type
+    buf.writeString("minecraft:overworld");
 
-//     // 18. Sea level
-//     buf.writeVarInt(63);
+    // 17. Dimension name
+    buf.writeString("minecraft:overworld");
 
-//     // 19. Enforce secure chat
-//     buf.writeBool(false);
+    // 18. Portal cooldown
+    buf.writeVarInt(0);
 
-//     // 20. Has death location
-//     buf.writeBool(false);
+    // 19. Enforces secure chat
+    buf.writeBool(false);
 
-//     // 21. Préparer le packet final
-//     int packetId = 0x2B; // Join Game
-//     Buffer finalBuf;
-//     finalBuf.writeVarInt(packetId);
-//     finalBuf.writeBytes(buf.getData());
-
-//     // Taille du packet
-//     Buffer outBuf;
-//     outBuf.writeVarInt(finalBuf.getData().size());
-//     outBuf.writeBytes(finalBuf.getData());
-
-//     packet.getData() = outBuf;
-//     packet.setPacketSize(outBuf.getData().size());
-//     packet.setReturnPacket(PACKET_SEND);
-// }
+    packet.setPacketId(0x2B); // Login (play) packet ID
+    packet.getData() = buf;
+}
