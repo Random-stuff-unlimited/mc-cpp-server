@@ -12,7 +12,6 @@ Compatible with older C++ compilers
 #endif
 
 #include <bit>
-#include <concepts>
 #include <cstdint>
 #include <cstring>
 #include <iostream>
