@@ -1,13 +1,11 @@
 #include "world/worldManager.hpp"
 
-#include <algorithm>
 #include <bit>
 #include <climits>
 #include <cstdint>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
-#include <functional>
 #include <ios>
 #include <iostream>
 #include <iterator>

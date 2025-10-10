@@ -1,13 +1,15 @@
-#include "network/server.hpp"
-
 #include "config.hpp"
+#include "lib/filesystem.hpp"
 #include "lib/json.hpp"
 #include "logger.hpp"
 #include "network/networking.hpp"
+#include "network/server.hpp"
 #include "player.hpp"
+#include "world/worldManager.hpp"
 
 #include <cstddef>
 #include <exception>
+#include <filesystem>
 #include <iostream>
 #include <string>
 #include <unistd.h>
@@ -30,6 +32,61 @@ int Server::start_server() {
 			g_logger->logGameInfo(ERROR, "Failed to load config", "SERVER");
 			return 1;
 		}
+
+		// Load world data
+		g_logger->logGameInfo(INFO, "Loading world...", "SERVER");
+		try {
+			std::string			  worldName	   = _config.getWorldName();
+			std::filesystem::path levelDatPath = getPath().parent_path() / worldName / "level.dat";
+
+			if (!std::filesystem::exists(levelDatPath)) {
+				g_logger->logGameInfo(
+						ERROR, "level.dat not found at: " + levelDatPath.string(), "SERVER");
+				return 1;
+			}
+
+			_worldData = _worldManager.loadLevelDat(levelDatPath);
+
+			// Log world information
+			g_logger->logGameInfo(
+					INFO, "World loaded successfully: " + _worldData.LevelName, "SERVER");
+			g_logger->logGameInfo(INFO,
+								  "Spawn Point: X=" + std::to_string(_worldData.SpawnX) +
+										  " Y=" + std::to_string(_worldData.SpawnY) +
+										  " Z=" + std::to_string(_worldData.SpawnZ),
+								  "SERVER");
+			g_logger->logGameInfo(
+					INFO, "Random Seed: " + std::to_string(_worldData.RandomSeed), "SERVER");
+			g_logger->logGameInfo(
+					INFO, "Game Type: " + std::to_string(_worldData.GameType), "SERVER");
+			g_logger->logGameInfo(
+					INFO, "Data Version: " + std::to_string(_worldData.DataVersion), "SERVER");
+			g_logger->logGameInfo(INFO,
+								  "Difficulty: " +
+										  std::to_string(static_cast<int>(_worldData.Difficulty)),
+								  "SERVER");
+			g_logger->logGameInfo(INFO,
+								  "Hardcore: " +
+										  std::string(_worldData.hardcore ? "true" : "false"),
+								  "SERVER");
+			g_logger->logGameInfo(INFO, "Time: " + std::to_string(_worldData.Time), "SERVER");
+			g_logger->logGameInfo(
+					INFO, "Day Time: " + std::to_string(_worldData.DayTime), "SERVER");
+			g_logger->logGameInfo(INFO, "Generator: " + _worldData.generatorName, "SERVER");
+			g_logger->logGameInfo(INFO,
+								  "Raining: " + std::string(_worldData.raining ? "true" : "false"),
+								  "SERVER");
+			g_logger->logGameInfo(INFO,
+								  "Thundering: " +
+										  std::string(_worldData.thundering ? "true" : "false"),
+								  "SERVER");
+
+		} catch (const std::exception& e) {
+			g_logger->logGameInfo(
+					ERROR, "Failed to load world: " + std::string(e.what()), "SERVER");
+			return 1;
+		}
+
 		size_t workerCount = 4;
 		if (workerCount == 0) workerCount = 4; // fallback
 

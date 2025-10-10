@@ -55,7 +55,6 @@ class WorldManager {
   public:
 	// Decompresses a Gzip file into a byte vector
 	std::vector<uint8_t> decompressGzip(std::filesystem::path compressedFilePath);
-
 	// Loads and parses the level.dat file
 	Data loadLevelDat(std::filesystem::path levelDatPath);
 
@@ -67,6 +66,9 @@ class WorldManager {
 	nbt::TagList	 parseList(const std::vector<uint8_t>& data, size_t& cursor);
 
 	template <typename T> T read(const std::vector<uint8_t>& data, size_t& cursor);
+
+  private:
+	Data _LevelDat;
 };
 
 #endif
