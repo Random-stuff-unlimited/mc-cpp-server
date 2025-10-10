@@ -8,7 +8,7 @@
 
 class IdManager {
   private:
-	uint32_t _nextId;
+	uint32_t		   _nextId;
 	std::set<uint32_t> _freedIds;
 	mutable std::mutex _mutex;
 
@@ -17,10 +17,10 @@ class IdManager {
 	~IdManager();
 
 	uint32_t allocate();
-	void release(uint32_t id);
-	size_t getAllocatedCount() const;
-	size_t getFreedCount() const;
-	void reset();
+	void	 release(uint32_t id);
+	size_t	 getAllocatedCount() const;
+	size_t	 getFreedCount() const;
+	void	 reset();
 };
 
 #endif

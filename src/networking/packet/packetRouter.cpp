@@ -1,33 +1,27 @@
 #include "logger.hpp"
-#include "networking.hpp"
-#include "packet.hpp"
+#include "network/networking.hpp"
+#include "network/packet.hpp"
+#include "network/server.hpp"
 #include "player.hpp"
-#include "server.hpp"
 
-#include <iostream>
+#include <string>
 
-// Forward declarations of state handlers
-void handleHandshakeState(Packet* packet,
-                          Server& server,
-                          ThreadSafeQueue<Packet*>* outgoingPackets);
-void handleStatusState(Packet* packet, Server& server, ThreadSafeQueue<Packet*>* outgoingPackets);
-void handleLoginState(Packet* packet, Server& server, ThreadSafeQueue<Packet*>* outgoingPackets);
-void handleConfigurationState(Packet* packet,
-                              Server& server,
-                              ThreadSafeQueue<Packet*>* outgoingPackets);
-void handlePlayState(Packet* packet, Server& server, ThreadSafeQueue<Packet*>* outgoingPackets);
-void sendDisconnectPacket(Packet* packet,
-                          const std::string& reason,
-                          ThreadSafeQueue<Packet*>* outgoingPackets);
-void initGameSequence(Packet* packet, ThreadSafeQueue<Packet*>* _outgoingPackets, Server& server);
+void handleHandshakeState(Packet* packet, Server& server);
+void handleStatusState(Packet* packet, Server& server);
+void handleLoginState(Packet* packet, Server& server);
+void handleConfigurationState(Packet* packet, Server& server);
+void handlePlayState(Packet* packet, Server& server);
+void sendDisconnectPacket(Packet* packet, const std::string& reason, Server& server);
+void initGameSequence(Packet* packet, Server& server);
 
 // ========================================
 // Main Packet Router
 // ========================================
 
-void packetRouter(Packet* packet, Server& server, ThreadSafeQueue<Packet*>* _outgoingPackets) {
+void packetRouter(Packet* packet, Server& server) {
+
 	if (packet == nullptr) return;
-	if (_outgoingPackets == nullptr) return;
+	if (server.getNetworkManager().getOutgoingQueue() == nullptr) return;
 
 	Player* player = packet->getPlayer();
 
@@ -37,33 +31,33 @@ void packetRouter(Packet* packet, Server& server, ThreadSafeQueue<Packet*>* _out
 	}
 
 	g_logger->logNetwork(INFO,
-	                     "Routing packet ID: 0x" + std::to_string(packet->getId()) +
-	                             " (size: " + std::to_string(packet->getSize()) + ") for state: " +
-	                             std::to_string(static_cast<int>(player->getPlayerState())),
-	                     "PacketRouter");
+						 "Routing packet ID: 0x" + std::to_string(packet->getId()) +
+								 " (size: " + std::to_string(packet->getSize()) + ") for state: " +
+								 std::to_string(static_cast<int>(player->getPlayerState())),
+						 "PacketRouter");
 
 	switch (player->getPlayerState()) {
 	case PlayerState::Handshake:
-		handleHandshakeState(packet, server, _outgoingPackets);
+		handleHandshakeState(packet, server);
 		break;
 	case PlayerState::Status:
-		handleStatusState(packet, server, _outgoingPackets);
+		handleStatusState(packet, server);
 		break;
 	case PlayerState::Login:
-		handleLoginState(packet, server, _outgoingPackets);
+		handleLoginState(packet, server);
 		break;
 	case PlayerState::Configuration:
-		handleConfigurationState(packet, server, _outgoingPackets);
+		handleConfigurationState(packet, server);
 		break;
 	case PlayerState::Play:
-		handlePlayState(packet, server, _outgoingPackets);
+		handlePlayState(packet, server);
 		break;
 	default:
 		g_logger->logNetwork(WARN,
-		                     "Unknown player state: " +
-		                             std::to_string(static_cast<int>(player->getPlayerState())) +
-		                             ", disconnecting",
-		                     "PacketRouter");
+							 "Unknown player state: " +
+									 std::to_string(static_cast<int>(player->getPlayerState())) +
+									 ", disconnecting",
+							 "PacketRouter");
 		packet->setReturnPacket(PACKET_DISCONNECT);
 		break;
 	}
@@ -73,9 +67,7 @@ void packetRouter(Packet* packet, Server& server, ThreadSafeQueue<Packet*>* _out
 // Handshake State Handler
 // ========================================
 
-void handleHandshakeState(Packet* packet,
-                          Server& server,
-                          ThreadSafeQueue<Packet*>* outgoingPackets) {
+void handleHandshakeState(Packet* packet, Server& server) {
 	handleHandshakePacket(*packet, server);
 }
 
@@ -83,16 +75,16 @@ void handleHandshakeState(Packet* packet,
 // Status State Handler
 // ========================================
 
-void handleStatusState(Packet* packet, Server& server, ThreadSafeQueue<Packet*>* outgoingPackets) {
+void handleStatusState(Packet* packet, Server& server) {
 	if (packet->getId() == 0x00) {
 		handleStatusPacket(*packet, server);
 	} else if (packet->getId() == 0x01) {
 		handlePingPacket(*packet, server);
 	} else {
 		g_logger->logNetwork(WARN,
-		                     "Unknown packet ID in Status state: 0x" +
-		                             std::to_string(packet->getId()),
-		                     "PacketRouter");
+							 "Unknown packet ID in Status state: 0x" +
+									 std::to_string(packet->getId()),
+							 "PacketRouter");
 		packet->getPlayer()->setPlayerState(PlayerState::None);
 		packet->setReturnPacket(PACKET_DISCONNECT);
 	}
@@ -102,12 +94,12 @@ void handleStatusState(Packet* packet, Server& server, ThreadSafeQueue<Packet*>*
 // Login State Handler
 // ========================================
 
-void handleLoginState(Packet* packet, Server& server, ThreadSafeQueue<Packet*>* outgoingPackets) {
+void handleLoginState(Packet* packet, Server& server) {
 	// Add safety check for packet data integrity
 	if (packet->getSize() > 32767) { // Max packet size
 		g_logger->logNetwork(ERROR,
-		                     "Packet size too large: " + std::to_string(packet->getSize()),
-		                     "PacketRouter");
+							 "Packet size too large: " + std::to_string(packet->getSize()),
+							 "PacketRouter");
 		packet->setReturnPacket(PACKET_DISCONNECT);
 		return;
 	}
@@ -119,7 +111,7 @@ void handleLoginState(Packet* packet, Server& server, ThreadSafeQueue<Packet*>* 
 	} else if (packet->getId() == 0x02) {
 		// Login Plugin Response - safe to ignore most of the time
 		g_logger->logNetwork(
-		        INFO, "Received Login Plugin Response (0x02) - acknowledging", "PacketRouter");
+				INFO, "Received Login Plugin Response (0x02) - acknowledging", "PacketRouter");
 		packet->setReturnPacket(PACKET_OK);
 	} else if (packet->getId() == 0x03) {
 		// Login Acknowledged
@@ -128,13 +120,13 @@ void handleLoginState(Packet* packet, Server& server, ThreadSafeQueue<Packet*>* 
 	} else if (packet->getId() == 0x04) {
 		// Cookie Response (login)
 		g_logger->logNetwork(
-		        INFO, "Received Login Cookie Response (0x04) - acknowledging", "PacketRouter");
+				INFO, "Received Login Cookie Response (0x04) - acknowledging", "PacketRouter");
 		packet->setReturnPacket(PACKET_OK);
 	} else {
 		g_logger->logNetwork(WARN,
-		                     "Unknown packet ID in Login state: 0x" +
-		                             std::to_string(packet->getId()),
-		                     "PacketRouter");
+							 "Unknown packet ID in Login state: 0x" +
+									 std::to_string(packet->getId()),
+							 "PacketRouter");
 		packet->getPlayer()->setPlayerState(PlayerState::None);
 		packet->setReturnPacket(PACKET_DISCONNECT);
 	}
@@ -144,9 +136,7 @@ void handleLoginState(Packet* packet, Server& server, ThreadSafeQueue<Packet*>* 
 // Configuration State Handler
 // ========================================
 
-void handleConfigurationState(Packet* packet,
-                              Server& server,
-                              ThreadSafeQueue<Packet*>* outgoingPackets) {
+void handleConfigurationState(Packet* packet, Server& server) {
 	if (packet->getId() == 0x00) {
 		// Client Information (configuration)
 		// g_logger->logNetwork(INFO, "Received Client Information in Configuration state",
@@ -157,7 +147,7 @@ void handleConfigurationState(Packet* packet,
 		// After processing client info, tell client we're done configuring
 		Packet* finishPacket = new Packet(*packet);
 		handleFinishConfiguration(*finishPacket, server);
-		outgoingPackets->push(finishPacket);
+		server.getNetworkManager().getOutgoingQueue()->push(finishPacket);
 		// g_logger->logNetwork(INFO, "Sent Finish Configuration after Client Information",
 		// "Configuration");
 
@@ -170,19 +160,19 @@ void handleConfigurationState(Packet* packet,
 	} else if (packet->getId() == 0x02) {
 		// Serverbound Plugin Message (configuration)
 		g_logger->logNetwork(INFO,
-		                     "Received Serverbound Plugin Message (0x02), size: " +
-		                             std::to_string(packet->getSize()) + " bytes",
-		                     "PacketRouter");
+							 "Received Serverbound Plugin Message (0x02), size: " +
+									 std::to_string(packet->getSize()) + " bytes",
+							 "PacketRouter");
 		packet->setReturnPacket(PACKET_OK);
 
 	} else if (packet->getId() == 0x03) {
 		// Acknowledge Finish Configuration -> enter Play
 		g_logger->logNetwork(
-		        INFO,
-		        "Received Acknowledge Finish Configuration - transitioning to Play state",
-		        "PacketRouter");
+				INFO,
+				"Received Acknowledge Finish Configuration - transitioning to Play state",
+				"PacketRouter");
 		handleAcknowledgeFinishConfiguration(*packet, server);
-		initGameSequence(packet, outgoingPackets, server);
+		initGameSequence(packet, server);
 
 	} else if (packet->getId() == 0x04) {
 		// Keep Alive (configuration)
@@ -215,10 +205,10 @@ void handleConfigurationState(Packet* packet,
 
 	} else {
 		g_logger->logNetwork(WARN,
-		                     "Unknown packet ID in Configuration state: 0x" +
-		                             std::to_string(packet->getId()),
-		                     "PacketRouter");
-		sendDisconnectPacket(packet, "Unknown packet in Configuration state", outgoingPackets);
+							 "Unknown packet ID in Configuration state: 0x" +
+									 std::to_string(packet->getId()),
+							 "PacketRouter");
+		sendDisconnectPacket(packet, "Unknown packet in Configuration state", server);
 		packet->getPlayer()->setPlayerState(PlayerState::None);
 		packet->setReturnPacket(PACKET_DISCONNECT);
 	}
@@ -228,7 +218,7 @@ void handleConfigurationState(Packet* packet,
 // Play State Handler
 // ========================================
 
-void handlePlayState(Packet* packet, Server& server, ThreadSafeQueue<Packet*>* outgoingPackets) {
+void handlePlayState(Packet* packet, Server& server) {
 	if (packet->getId() == 0x00) {
 		// Confirm Teleportation
 		handleConfirmTeleportation(*packet, server);
@@ -247,16 +237,15 @@ void handlePlayState(Packet* packet, Server& server, ThreadSafeQueue<Packet*>* o
 // Disconnect Packet Creation
 // ========================================
 
-void sendDisconnectPacket(Packet* packet,
-                          const std::string& reason,
-                          ThreadSafeQueue<Packet*>* outgoingPackets) {
+void sendDisconnectPacket(Packet* packet, const std::string& reason, Server& server) {
+	ThreadSafeQueue<Packet*>* outgoingPackets = server.getNetworkManager().getOutgoingQueue();
 	if (!packet || !outgoingPackets) return;
 
 	Player* player = packet->getPlayer();
 	if (!player) return;
 
 	g_logger->logNetwork(
-	        INFO, "Sending disconnect packet to player with reason: " + reason, "PacketRouter");
+			INFO, "Sending disconnect packet to player with reason: " + reason, "PacketRouter");
 
 	try {
 		// Create Disconnect packet (0x02 in Configuration state)
@@ -272,7 +261,7 @@ void sendDisconnectPacket(Packet* packet,
 		final.writeBytes(payload.getData());
 
 		// Create new packet for disconnect
-		Packet* disconnectPacket    = new Packet(*packet);
+		Packet* disconnectPacket	= new Packet(*packet);
 		disconnectPacket->getData() = final;
 		disconnectPacket->setReturnPacket(PACKET_SEND);
 		disconnectPacket->setPacketSize(final.getData().size());
@@ -282,8 +271,8 @@ void sendDisconnectPacket(Packet* packet,
 		g_logger->logNetwork(INFO, "Disconnect packet queued for sending", "PacketRouter");
 	} catch (const std::exception& e) {
 		g_logger->logNetwork(ERROR,
-		                     "Error creating disconnect packet: " + std::string(e.what()),
-		                     "PacketRouter");
+							 "Error creating disconnect packet: " + std::string(e.what()),
+							 "PacketRouter");
 	}
 }
 
@@ -291,50 +280,50 @@ void sendDisconnectPacket(Packet* packet,
 // Game Initialization Sequence
 // ========================================
 
-void initGameSequence(Packet* packet, ThreadSafeQueue<Packet*>* _outgoingPackets, Server& server) {
-	if (packet == nullptr || _outgoingPackets == nullptr) return;
+void initGameSequence(Packet* packet, Server& server) {
+	if (packet == nullptr || server.getNetworkManager().getOutgoingQueue() == nullptr) return;
 
 	Player* player = packet->getPlayer();
 	if (player == nullptr) return;
 
 	// Player should already be in Play state at this point
 	g_logger->logNetwork(
-	        INFO, "Starting game sequence for player: " + player->getPlayerName(), "PacketRouter");
+			INFO, "Starting game sequence for player: " + player->getPlayerName(), "PacketRouter");
 
 	try {
 		// 1. Send Login (play) packet - 0x2B
 		g_logger->logNetwork(INFO, "Sending Login (play) packet", "PacketRouter");
 		Packet* playPacket = new Packet(*packet);
-		writePlayPacket(*playPacket, server);
-		_outgoingPackets->push(playPacket);
+		writePlayPacket(*playPacket);
+		server.getNetworkManager().getOutgoingQueue()->push(playPacket);
 
 		// 2. Send Set Center Chunk - 0x57
 		Packet* setCenterPacket = new Packet(*packet);
 		writeSetCenterPacket(*setCenterPacket, server);
-		_outgoingPackets->push(setCenterPacket);
+		server.getNetworkManager().getOutgoingQueue()->push(setCenterPacket);
 
 		// 3. Send complete chunk batch sequence (Start -> Chunks -> Finished)
-		sendChunkBatchSequence(*packet, server, _outgoingPackets);
+		sendChunkBatchSequence(*packet, server);
 
 		// 4. Send player position and look - 0x41
 		Packet* positionPacket = new Packet(*packet);
 		sendPlayerPositionAndLook(*positionPacket, server);
-		_outgoingPackets->push(positionPacket);
+		server.getNetworkManager().getOutgoingQueue()->push(positionPacket);
 
 		// 5. Send spawn position - 0x5A
 		Packet* spawnPacket = new Packet(*packet);
 		sendSpawnPosition(*spawnPacket, server);
-		_outgoingPackets->push(spawnPacket);
+		server.getNetworkManager().getOutgoingQueue()->push(spawnPacket);
 
 		// // 6. Complete spawn sequence (abilities, health, experience, time, held item)
-		completeSpawnSequence(*packet, server, _outgoingPackets);
+		completeSpawnSequence(*packet, server);
 
 		g_logger->logNetwork(INFO, "Complete game sequence sent to player: ", "PacketRouter");
 
 		packet->setReturnPacket(PACKET_OK);
 	} catch (const std::exception& e) {
 		g_logger->logNetwork(
-		        ERROR, "Error in game sequence: " + std::string(e.what()), "PacketRouter");
+				ERROR, "Error in game sequence: " + std::string(e.what()), "PacketRouter");
 		packet->setReturnPacket(PACKET_ERROR);
 	}
 }

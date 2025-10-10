@@ -1,8 +1,8 @@
 #include "logger.hpp"
-#include "networking.hpp"
-#include "packet.hpp"
+#include "network/networking.hpp"
+#include "network/packet.hpp"
+#include "network/server.hpp"
 #include "player.hpp"
-#include "server.hpp"
 
 #include <chrono>
 #include <exception>
@@ -19,7 +19,7 @@ void NetworkManager::workerThreadLoop() {
 			try {
 
 				// g_logger->logNetwork(INFO, "Handling incoming data for player", "Worker");
-				packetRouter(packet, getServer(), &_outgoingPackets);
+				packetRouter(packet, getServer());
 				if (packet->getReturnPacket() == PACKET_SEND) {
 					_outgoingPackets.push(packet);
 					packet = nullptr;

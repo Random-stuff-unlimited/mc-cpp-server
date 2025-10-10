@@ -1,9 +1,9 @@
-#include "UUID.hpp"
-#include "buffer.hpp"
-#include "networking.hpp"
-#include "packet.hpp"
+#include "lib/UUID.hpp"
+#include "network/buffer.hpp"
+#include "network/networking.hpp"
+#include "network/packet.hpp"
+#include "network/server.hpp"
 #include "player.hpp"
-#include "server.hpp"
 
 #include <iostream>
 
@@ -14,8 +14,8 @@ void writeSetCenterPacket(Packet& packet, Server& server) {
 	buf.writeVarInt(0);
 	buf.writeVarInt(0);
 
-	int packetId         = 0x57;
-	int packetIdSize     = packet.getVarintSize(packetId);
+	int packetId		 = 0x57;
+	int packetIdSize	 = packet.getVarintSize(packetId);
 	int totalPayloadSize = packetIdSize + buf.getData().size();
 
 	Buffer finalBuf;

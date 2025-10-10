@@ -19,13 +19,13 @@ class UUID {
 
 	uint64_t getMostSigBits() const;
 	uint64_t getLeastSigBits() const;
-	void setMostSigBits(uint64_t val);
-	void setLeastSigBits(uint64_t val);
+	void	 setMostSigBits(uint64_t val);
+	void	 setLeastSigBits(uint64_t val);
 
 	std::string toString() const;
 
-	void readFromBuffer(Buffer& buf);
-	void writeToBuffer(Buffer& buf) const;
+	void		readFromBuffer(Buffer& buf);
+	void		writeToBuffer(Buffer& buf) const;
 	static UUID fromOfflinePlayer(const std::string& name);
 };
 

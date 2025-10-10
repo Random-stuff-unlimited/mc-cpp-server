@@ -1,10 +1,9 @@
-#include "buffer.hpp"
-#include "json.hpp"
-#include "networking.hpp"
-#include "packet.hpp"
+#include "lib/json.hpp"
+#include "network/buffer.hpp"
+#include "network/networking.hpp"
+#include "network/packet.hpp"
+#include "network/server.hpp"
 #include "player.hpp"
-#include "server.hpp"
-#include "logger.hpp"
 
 #include <string>
 #include <unistd.h>
@@ -18,16 +17,17 @@ void handleStatusPacket(Packet& packet, Server& server) {
 		return;
 	}
 
-	json jres           = {{"version",
-	                        {{"name", server.getGameVersion()}, {"protocol", server.getProtocolVersion()}}},
-	                       {"players",
-	                        {{"max", server.getServerSize()},
-	                         {"online", server.getAmountOnline()},
-	                         {"sample", server.getPlayerSample()}}},
-	                       {"description", {{"text", server.getServerMOTD()}}}};
+	json		jres	= {{"version",
+							{{"name", server.getConfig().getVersion()},
+							 {"protocol", server.getConfig().getProtocolVersion()}}},
+						   {"players",
+							{{"max", server.getConfig().getServerSize()},
+							 {"online", server.getAmountOnline()},
+							 {"sample", server.getPlayerSample()}}},
+						   {"description", {{"text", server.getConfig().getServerMotd()}}}};
 	std::string payload = jres.dump();
 
-	int jsonLen  = payload.size();
+	int jsonLen	 = payload.size();
 	int packetId = 0x00;
 
 	int packetIdVarintSize = packet.getVarintSize(packetId);
