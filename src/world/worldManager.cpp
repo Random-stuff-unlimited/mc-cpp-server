@@ -1,7 +1,8 @@
+#include "world/worldManager.hpp"
+
 #include "lib/filesystem.hpp"
 #include "lib/nbtParser.hpp"
 #include "logger.hpp"
-#include "world/worldManager.hpp"
 
 #include <cstddef>
 #include <cstdint>
