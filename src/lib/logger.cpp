@@ -1,5 +1,6 @@
-#include "lib/filesystem.hpp"
 #include "logger.hpp"
+
+#include "lib/filesystem.hpp"
 
 #include <chrono>
 #include <ctime>
