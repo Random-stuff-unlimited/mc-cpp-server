@@ -22,7 +22,7 @@ INCLUDE_FLAGS   := -I$(INCLUDE_DIR)
 
 # Linker flags (add your libraries here)
 LDFLAGS         :=
-LIBS            :=
+LIBS            := -lz
 
 # ================================ COLOR SETUP ===============================
 # ANSI color codes for beautiful output
@@ -82,7 +82,7 @@ else
 endif
 
 # ================================= TARGETS ==================================
-.PHONY: all clean debug release info help run install uninstall compile_commands
+.PHONY: all clean distclean debug release info help run install uninstall compile_commands
 
 # Default target
 all: info $(TARGET)
@@ -129,8 +129,18 @@ $(DEPS_DIR):
 # Clean build artifacts
 clean:
 	@printf "$(BOLD)$(BRIGHT_RED)🧹 Cleaning build artifacts...$(RESET)\n"
+	@find $(BUILD_DIR) -type f -name "*.o" -delete 2>/dev/null || true
+	@find $(BUILD_DIR) -name "$(TARGET_NAME)" -delete 2>/dev/null || true
+	@find $(BUILD_DIR) -type d -empty -delete 2>/dev/null || true
+	@find $(DEPS_DIR) -type f -name "*.d" -delete 2>/dev/null || true
+	@find $(DEPS_DIR) -type d -empty -delete 2>/dev/null || true
+	@printf "$(BOLD)$(BRIGHT_GREEN)✨ Clean completed! (Preserved directories and config.json)$(RESET)\n"
+
+# Complete clean - removes everything including directories
+distclean:
+	@printf "$(BOLD)$(BRIGHT_RED)🧹 Complete cleanup (removing all build artifacts and directories)...$(RESET)\n"
 	@rm -rf $(BUILD_DIR) $(DEPS_DIR)
-	@printf "$(BOLD)$(BRIGHT_GREEN)✨ Clean completed!$(RESET)\n"
+	@printf "$(BOLD)$(BRIGHT_GREEN)✨ Complete cleanup finished!$(RESET)\n"
 
 # Run the executable
 run: $(TARGET)
@@ -190,7 +200,8 @@ help:
 	@printf "$(BOLD)$(BRIGHT_CYAN)║$(RESET) $(BRIGHT_GREEN)%-10s$(RESET) %-39s $(BOLD)$(BRIGHT_CYAN)    ║$(RESET)\n" "all" "Build the project (default: release mode)"
 	@printf "$(BOLD)$(BRIGHT_CYAN)║$(RESET) $(BRIGHT_GREEN)%-10s$(RESET) %-39s $(BOLD)$(BRIGHT_CYAN)      ║$(RESET)\n" "debug" "Build in debug mode"
 	@printf "$(BOLD)$(BRIGHT_CYAN)║$(RESET) $(BRIGHT_GREEN)%-10s$(RESET) %-39s $(BOLD)$(BRIGHT_CYAN)      ║$(RESET)\n" "release" "Build in release mode"
-	@printf "$(BOLD)$(BRIGHT_CYAN)║$(RESET) $(BRIGHT_GREEN)%-10s$(RESET) %-39s $(BOLD)$(BRIGHT_CYAN)      ║$(RESET)\n" "clean" "Remove all build artifacts"
+	@printf "$(BOLD)$(BRIGHT_CYAN)║$(RESET) $(BRIGHT_GREEN)%-10s$(RESET) %-39s $(BOLD)$(BRIGHT_CYAN)      ║$(RESET)\n" "clean" "Remove build artifacts (preserve dirs)"
+	@printf "$(BOLD)$(BRIGHT_CYAN)║$(RESET) $(BRIGHT_GREEN)%-10s$(RESET) %-39s $(BOLD)$(BRIGHT_CYAN)      ║$(RESET)\n" "distclean" "Remove all build artifacts and dirs"
 	@printf "$(BOLD)$(BRIGHT_CYAN)║$(RESET) $(BRIGHT_GREEN)%-10s$(RESET) %-39s $(BOLD)$(BRIGHT_CYAN)      ║$(RESET)\n" "run" "Build and run the executable"
 	@printf "$(BOLD)$(BRIGHT_CYAN)║$(RESET) $(BRIGHT_GREEN)%-10s$(RESET) %-39s $(BOLD)$(BRIGHT_CYAN)      ║$(RESET)\n" "compile_commands" "Generate compile_commands.json for LSP"
 	@printf "$(BOLD)$(BRIGHT_CYAN)║$(RESET) $(BRIGHT_GREEN)%-10s$(RESET) %-39s $(BOLD)$(BRIGHT_CYAN)      ║$(RESET)\n" "install" "Install the executable to system"

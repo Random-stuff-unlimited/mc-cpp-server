@@ -1,40 +1,57 @@
 #include "world/worldManager.hpp"
 
+#include <climits>
 #include <cstdint>
+#include <cstring>
+#include <filesystem>
+#include <fstream>
+#include <ios>
+#include <iostream>
+#include <iterator>
 #include <stdexcept>
+#include <string>
 #include <vector>
 #include <zconf.h>
 #include <zlib.h>
 
-std::vector<uint8_t> WorldManager::decompressGzip(const std::vector<uint8_t>& compressed) {
-	z_stream stream{};
-	stream.avail_in = compressed.size();
-	stream.next_in	= reinterpret_cast<Bytef*>(const_cast<uint8_t*>(compressed.data()));
-	stream.zalloc	= Z_NULL;
-	stream.zfree	= Z_NULL;
-	stream.opaque	= Z_NULL;
-
-	int ret = inflateInit2(&stream, 15 + 32);
-	if (ret != Z_OK) {
-		throw std::runtime_error("Failed to initialize zlib");
+std::vector<uint8_t> WorldManager::decompressGzip(std::filesystem::path compressedFilePath) {
+	// Read file into memory
+	std::ifstream file(compressedFilePath, std::ios::binary);
+	if (!file) {
+		throw std::runtime_error("Could not open file: " + compressedFilePath.string());
 	}
 
-	std::vector<uint8_t> decompressed;
-	decompressed.resize(compressed.size() * 2);
+	std::vector<uint8_t> compressed((std::istreambuf_iterator<char>(file)),
+									std::istreambuf_iterator<char>());
+	file.close();
 
-	do {
-		stream.avail_out = decompressed.size();
-		stream.next_out	 = reinterpret_cast<Bytef*>(decompressed.data());
+	// Initialize zlib stream
+	z_stream stream;
+	std::memset(&stream, 0, sizeof(stream));
 
-		ret = inflate(&stream, Z_NO_FLUSH);
-		if (ret == Z_NEED_DICT || ret == Z_DATA_ERROR || ret == Z_MEM_ERROR) {
-			inflateEnd(&stream);
-			throw std::runtime_error("Failed to decompress data");
-		}
+	// 16 + MAX_WBITS tells zlib to decode gzip format
+	if (inflateInit2(&stream, 16 + MAX_WBITS) != Z_OK) {
+		throw std::runtime_error("Failed to initialize gzip decompression");
+	}
 
-		decompressed.resize(stream.total_out);
-	} while (ret == Z_OK);
+	// Allocate output buffer (level.dat is usually < 10MB)
+	std::vector<uint8_t> decompressed(10 * 1024 * 1024);
 
+	stream.avail_in	 = compressed.size();
+	stream.next_in	 = compressed.data();
+	stream.avail_out = decompressed.size();
+	stream.next_out	 = decompressed.data();
+
+	int ret = inflate(&stream, Z_FINISH);
+
+	if (ret != Z_STREAM_END) {
+		inflateEnd(&stream);
+		throw std::runtime_error("Decompression failed: " + std::to_string(ret));
+	}
+
+	// Resize to actual decompressed size
+	decompressed.resize(stream.total_out);
 	inflateEnd(&stream);
+
 	return decompressed;
 }

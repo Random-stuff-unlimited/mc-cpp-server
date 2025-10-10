@@ -1,3 +1,4 @@
+#include "lib/filesystem.hpp"
 #include "logger.hpp"
 
 #include <chrono>
@@ -66,7 +67,7 @@ bool LogManager::initializeLogDirectory() {
 	std::string timestamp = getCurrentTimestamp();
 
 	// Create base logs directory
-	fs::path baseLogsDir = "logs";
+	fs::path baseLogsDir = getPath().parent_path() / "logs";
 	if (!fs::exists(baseLogsDir)) {
 		if (!fs::create_directories(baseLogsDir)) {
 			std::cerr << "Failed to create base logs directory: " << baseLogsDir << std::endl;

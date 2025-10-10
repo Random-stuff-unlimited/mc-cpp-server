@@ -1,5 +1,4 @@
 #include "config.hpp"
-
 #include "lib/filesystem.hpp"
 #include "lib/json.hpp"
 #include "logger.hpp"
@@ -15,7 +14,7 @@ Config::Config()
 	  _serverSize(20), _worldName("world"), _gamemode("survival"), _difficulty("normal") {}
 
 bool Config::loadConfig() {
-	std::ifstream inputFile(_execPath.root_directory() /
+	std::ifstream inputFile(_execPath.parent_path() /
 							"config.json"); // Should change the config path later if needed
 
 	if (!inputFile.is_open()) {
