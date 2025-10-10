@@ -1,5 +1,6 @@
-#include "lib/nbtParser.hpp"
 #include "world/worldManager.hpp"
+
+#include "lib/nbtParser.hpp"
 
 #include <cstdint>
 #include <cstring>
