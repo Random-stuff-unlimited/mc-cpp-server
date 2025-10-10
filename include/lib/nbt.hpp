@@ -43,10 +43,8 @@ namespace std {
 namespace std {
 	template <typename To, typename From> constexpr To bit_cast(const From& src) noexcept {
 		static_assert(sizeof(To) == sizeof(From), "bit_cast requires same size types");
-		static_assert(std::is_trivially_copyable_v<To>,
-					  "bit_cast requires trivially copyable To type");
-		static_assert(std::is_trivially_copyable_v<From>,
-					  "bit_cast requires trivially copyable From type");
+		static_assert(std::is_trivially_copyable_v<To>, "bit_cast requires trivially copyable To type");
+		static_assert(std::is_trivially_copyable_v<From>, "bit_cast requires trivially copyable From type");
 		To dst;
 		std::memcpy(&dst, &src, sizeof(To));
 		return dst;

@@ -22,8 +22,7 @@ using json = nlohmann::json;
 Packet::~Packet() {}
 
 Packet::Packet(const Packet& other)
-	: _size(other._size), _id(other._id), _data(other._data), _player(other._player),
-	  _socketFd(other._socketFd), _returnPacket(other._returnPacket) {
+	: _size(other._size), _id(other._id), _data(other._data), _player(other._player), _socketFd(other._socketFd), _returnPacket(other._returnPacket) {
 	std::cout << "[Packet] Copy constructor called" << std::endl;
 }
 
@@ -81,8 +80,7 @@ Packet::Packet(Player* player) : _player(player), _socketFd(-1), _returnPacket(0
 	}
 }
 
-Packet::Packet(int socketFd, Server& server)
-	: _player(nullptr), _socketFd(socketFd), _returnPacket(0) {
+Packet::Packet(int socketFd, Server& server) : _player(nullptr), _socketFd(socketFd), _returnPacket(0) {
 	// g_logger->logNetwork(INFO, "Constructor (socket): Socket FD = " + std::to_string(_socketFd),
 	// "Packet");
 
@@ -131,8 +129,7 @@ Packet::Packet(int socketFd, Server& server)
 
 int Packet::getVarintSize(int32_t value) {
 	if (value < 0) {
-		std::cerr << "[Packet] ERROR: getVarintSize called with negative value: " << value
-				  << std::endl;
+		std::cerr << "[Packet] ERROR: getVarintSize called with negative value: " << value << std::endl;
 		throw std::runtime_error("getVarintSize called with negative value");
 	}
 	int size		   = 0;
@@ -158,8 +155,7 @@ int Packet::readVarint(int sock, int* bytesRead) {
 	while (true) {
 		ssize_t result = ::read(sock, &byte, 1);
 		if (result <= 0) {
-			std::cerr << "readVarint: Failed to read byte " << localBytesRead << " from socket "
-					  << sock << " (errno: " << errno << ")" << std::endl;
+			std::cerr << "readVarint: Failed to read byte " << localBytesRead << " from socket " << sock << " (errno: " << errno << ")" << std::endl;
 			return -1;
 		}
 
@@ -170,15 +166,13 @@ int Packet::readVarint(int sock, int* bytesRead) {
 
 		position += 7;
 		if (position >= 32) {
-			std::cerr << "readVarint: Varint too long (> 32 bits) after " << localBytesRead
-					  << " bytes" << std::endl;
+			std::cerr << "readVarint: Varint too long (> 32 bits) after " << localBytesRead << " bytes" << std::endl;
 			return -1;
 		}
 
 		// Safety check to prevent infinite loops
 		if (localBytesRead > 5) {
-			std::cerr << "readVarint: Too many bytes read (" << localBytesRead
-					  << "), corrupted varint" << std::endl;
+			std::cerr << "readVarint: Too many bytes read (" << localBytesRead << "), corrupted varint" << std::endl;
 			return -1;
 		}
 	}
@@ -218,8 +212,7 @@ bool Packet::isSocketValid(int sock) {
 	}
 
 	if (pfd.revents & (POLLHUP | POLLERR)) {
-		std::cerr << "Socket validation: Socket " << sock << " is disconnected or has error"
-				  << std::endl;
+		std::cerr << "Socket validation: Socket " << sock << " is disconnected or has error" << std::endl;
 		return false;
 	}
 

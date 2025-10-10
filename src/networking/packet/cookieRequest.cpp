@@ -29,8 +29,8 @@ void handleCookieRequest(Packet& packet, Server& server) {
 		// Create a fresh buffer from the packet data to read from beginning
 		Buffer cookieBuffer(packet.getData().getData());
 		cookieIdentifier = cookieBuffer.readString(32767); // Max string length
-		// g_logger->logNetwork(INFO, "Cookie Request for identifier: '" + cookieIdentifier + "'",
-		// "Configuration");
+														   // g_logger->logNetwork(INFO, "Cookie Request for identifier: '" + cookieIdentifier + "'",
+														   // "Configuration");
 	} catch (const std::exception& e) {
 		// g_logger->logNetwork(ERROR, "Failed to read cookie identifier: " + std::string(e.what()),
 		// "Configuration"); Send empty response instead of disconnecting

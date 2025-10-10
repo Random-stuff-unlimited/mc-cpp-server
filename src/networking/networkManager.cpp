@@ -13,9 +13,8 @@
 #include <unistd.h>
 
 NetworkManager::NetworkManager(size_t workerCount, Server& s)
-	: _incomingPackets(), _outgoingPackets(), _workerThreads(), _shutdownFlag(false),
-	  _receiverThread(), _senderThread(), _receiverThreadInit(0), _senderThreadInit(0), _server(s),
-	  _epollFd(-1), _serverSocket(-1) {
+	: _incomingPackets(), _outgoingPackets(), _workerThreads(), _shutdownFlag(false), _receiverThread(), _senderThread(), _receiverThreadInit(0),
+	  _senderThreadInit(0), _server(s), _epollFd(-1), _serverSocket(-1) {
 	_workerThreads.reserve(workerCount);
 
 	setupEpoll();
@@ -101,8 +100,7 @@ void NetworkManager::start() {
 	if (strcmp(getServer().getConfig().getServerAddress().c_str(), "0.0.0.0") == 0) {
 		serverAddr.sin_addr.s_addr = INADDR_ANY;
 	} else {
-		if (inet_aton(getServer().getConfig().getServerAddress().c_str(), &serverAddr.sin_addr) ==
-			0) {
+		if (inet_aton(getServer().getConfig().getServerAddress().c_str(), &serverAddr.sin_addr) == 0) {
 			close(_serverSocket);
 			throw std::runtime_error("Invalid IP address");
 		}
@@ -110,8 +108,7 @@ void NetworkManager::start() {
 
 	if (bind(_serverSocket, (struct sockaddr*)&serverAddr, sizeof(serverAddr)) < 0) {
 		close(_serverSocket);
-		throw std::runtime_error("Failed to bind socket to " +
-								 std::string(getServer().getConfig().getServerAddress()) + ":" +
+		throw std::runtime_error("Failed to bind socket to " + std::string(getServer().getConfig().getServerAddress()) + ":" +
 								 std::to_string(getServer().getConfig().getServerPort()));
 	}
 

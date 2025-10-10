@@ -26,7 +26,7 @@ namespace nbt {
 		std::string				parseTagName(const std::vector<uint8_t>& data, size_t& cursor);
 		TagCompound				parseCompound(const std::vector<uint8_t>& data, size_t& cursor);
 		TagList					parseList(const std::vector<uint8_t>& data, size_t& cursor);
-		Tag parseTag(const std::vector<uint8_t>& data, size_t& cursor, uint8_t tagType);
+		Tag						parseTag(const std::vector<uint8_t>& data, size_t& cursor, uint8_t tagType);
 	};
 
 } // namespace nbt

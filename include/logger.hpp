@@ -37,10 +37,7 @@ class LogManager {
 	~LogManager();
 
 	// Core logging methods
-	void log(LogLevel			level,
-			 LogCategory		category,
-			 const std::string& message,
-			 const std::string& source = "");
+	void log(LogLevel level, LogCategory category, const std::string& message, const std::string& source = "");
 	void logNetwork(LogLevel level, const std::string& message, const std::string& source = "");
 	void logGameInfo(LogLevel level, const std::string& message, const std::string& source = "");
 

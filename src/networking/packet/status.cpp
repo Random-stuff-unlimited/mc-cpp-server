@@ -17,14 +17,10 @@ void handleStatusPacket(Packet& packet, Server& server) {
 		return;
 	}
 
-	json		jres	= {{"version",
-							{{"name", server.getConfig().getVersion()},
-							 {"protocol", server.getConfig().getProtocolVersion()}}},
-						   {"players",
-							{{"max", server.getConfig().getServerSize()},
-							 {"online", server.getAmountOnline()},
-							 {"sample", server.getPlayerSample()}}},
-						   {"description", {{"text", server.getConfig().getServerMotd()}}}};
+	json jres = {
+			{"version", {{"name", server.getConfig().getVersion()}, {"protocol", server.getConfig().getProtocolVersion()}}},
+			{"players", {{"max", server.getConfig().getServerSize()}, {"online", server.getAmountOnline()}, {"sample", server.getPlayerSample()}}},
+			{"description", {{"text", server.getConfig().getServerMotd()}}}};
 	std::string payload = jres.dump();
 
 	int jsonLen	 = payload.size();

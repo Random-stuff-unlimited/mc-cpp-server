@@ -177,8 +177,7 @@ namespace nbt {
 		case TAG_COMPOUND:
 			return Tag(std::make_shared<TagCompound>(parseCompound(data, cursor)));
 		default:
-			throw std::runtime_error("NBT parsing error: unsupported tag type: " +
-									 std::to_string(tagType));
+			throw std::runtime_error("NBT parsing error: unsupported tag type: " + std::to_string(tagType));
 		}
 	}
 

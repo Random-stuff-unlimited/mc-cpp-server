@@ -45,8 +45,7 @@ std::vector<uint8_t> MD5::hash(const std::string& input) {
 	for (size_t offset = 0; offset < data.size(); offset += 64) {
 		uint32_t M[16];
 		for (int i = 0; i < 16; ++i) {
-			M[i] = (data[offset + i * 4]) | (data[offset + i * 4 + 1] << 8) |
-				   (data[offset + i * 4 + 2] << 16) | (data[offset + i * 4 + 3] << 24);
+			M[i] = (data[offset + i * 4]) | (data[offset + i * 4 + 1] << 8) | (data[offset + i * 4 + 2] << 16) | (data[offset + i * 4 + 3] << 24);
 		}
 
 		uint32_t a = A, b = B, c = C, d = D;
