@@ -1,8 +1,7 @@
-#include "world/worldManager.hpp"
-
 #include "lib/filesystem.hpp"
 #include "lib/nbtParser.hpp"
 #include "logger.hpp"
+#include "world/world.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -19,15 +18,14 @@
 #include <zconf.h>
 #include <zlib.h>
 
-std::vector<uint8_t> WorldManager::decompressGzip(std::filesystem::path compressedFilePath) {
+std::vector<uint8_t> World::Manager::decompressGzip(std::filesystem::path compressedFilePath) {
 	// Read file into memory
 	std::ifstream file(compressedFilePath, std::ios::binary);
 	if (!file) {
 		throw std::runtime_error("Could not open file: " + compressedFilePath.string());
 	}
 
-	std::vector<uint8_t> compressed((std::istreambuf_iterator<char>(file)),
-									std::istreambuf_iterator<char>());
+	std::vector<uint8_t> compressed((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
 	file.close();
 
 	// Initialize zlib stream
@@ -61,7 +59,7 @@ std::vector<uint8_t> WorldManager::decompressGzip(std::filesystem::path compress
 	return decompressed;
 }
 
-Data WorldManager::loadLevelDat(std::filesystem::path levelDatPath) {
+World::LevelDat World::Manager::loadLevelDat(std::filesystem::path levelDatPath) {
 	std::vector<uint8_t> decompressedData = decompressGzip(levelDatPath);
 	if (decompressedData.empty()) {
 		throw std::runtime_error("Decompressed level.dat data is empty.");
@@ -71,12 +69,11 @@ Data WorldManager::loadLevelDat(std::filesystem::path levelDatPath) {
 	nbt::Parser parser;
 	nbt::NBT	n = parser.parse(decompressedData);
 
-	Data dataStruct;
+	World::LevelDat dataStruct;
 	dataStruct.nbtData = std::move(n);
 
 	// --- Populate the Data struct for easy access ---
-	const auto& dataCompound =
-			dataStruct.nbtData.getRoot().at("Data").get<std::shared_ptr<nbt::TagCompound>>();
+	const auto& dataCompound = dataStruct.nbtData.getRoot().at("Data").get<std::shared_ptr<nbt::TagCompound>>();
 
 	// Helper to safely get a value from a compound tag
 	auto getTagValue = [&](const std::string& key, auto& member) {
@@ -136,11 +133,10 @@ Data WorldManager::loadLevelDat(std::filesystem::path levelDatPath) {
 	return dataStruct;
 }
 
-std::filesystem::path WorldManager::locateRegionFileByChunkCoord(int localX, int localZ) {
-	const auto		  regionDir = getPath().parent_path() / "world" / "region";
-	const std::string filename =
-			"r." + std::to_string(localX / 32) + "." + std::to_string(localZ / 32) + ".mca";
-	const std::filesystem::path path = regionDir / filename;
+std::filesystem::path World::Manager::locateRegionFileByChunkCoord(int localX, int localZ) {
+	const auto					regionDir = getPath().parent_path() / "world" / "region";
+	const std::string			filename  = "r." + std::to_string(localX / 32) + "." + std::to_string(localZ / 32) + ".mca";
+	const std::filesystem::path path	  = regionDir / filename;
 
 	if (std::filesystem::exists(path)) {
 		return path;
@@ -148,4 +144,92 @@ std::filesystem::path WorldManager::locateRegionFileByChunkCoord(int localX, int
 		g_logger->logGameInfo(ERROR, "Cannot find the region file asked" + path.string());
 		throw std::runtime_error("Cannot find the region file asked");
 	}
+}
+
+std::vector<uint8_t> World::Manager::decompressZlib(const std::vector<uint8_t>& compressedData) {
+	if (compressedData.empty()) {
+		return {};
+	}
+
+	// Initialize zlib stream
+	z_stream stream = {};
+	stream.next_in	= const_cast<Bytef*>(compressedData.data());
+	stream.avail_in = static_cast<uInt>(compressedData.size());
+
+	// Initialize for zlib format (not gzip)
+	int ret = inflateInit(&stream);
+	if (ret != Z_OK) {
+		throw std::runtime_error("Failed to initialize zlib decompression");
+	}
+
+	// Estimate output size (start with 4x input size)
+	std::vector<uint8_t> decompressed(compressedData.size() * 4);
+
+	do {
+		stream.next_out	 = decompressed.data() + stream.total_out;
+		stream.avail_out = static_cast<uInt>(decompressed.size() - stream.total_out);
+
+		ret = inflate(&stream, Z_NO_FLUSH);
+
+		if (ret == Z_STREAM_ERROR || ret == Z_DATA_ERROR || ret == Z_MEM_ERROR) {
+			inflateEnd(&stream);
+			throw std::runtime_error("Zlib decompression error: " + std::to_string(ret));
+		}
+
+		// If we need more space, double the buffer
+		if (stream.avail_out == 0 && ret != Z_STREAM_END) {
+			decompressed.resize(decompressed.size() * 2);
+		}
+
+	} while (ret != Z_STREAM_END);
+
+	inflateEnd(&stream);
+
+	// Resize to actual decompressed size
+	decompressed.resize(stream.total_out);
+	return decompressed;
+}
+
+std::vector<uint8_t> World::Manager::decompressGzip(const std::vector<uint8_t>& compressedData) {
+	if (compressedData.empty()) {
+		return {};
+	}
+
+	// Initialize zlib stream for gzip format
+	z_stream stream = {};
+	stream.next_in	= const_cast<Bytef*>(compressedData.data());
+	stream.avail_in = static_cast<uInt>(compressedData.size());
+
+	// Use inflateInit2 with gzip flag (16 + MAX_WBITS)
+	int ret = inflateInit2(&stream, 16 + MAX_WBITS);
+	if (ret != Z_OK) {
+		throw std::runtime_error("Failed to initialize gzip decompression");
+	}
+
+	// Estimate output size (start with 4x input size)
+	std::vector<uint8_t> decompressed(compressedData.size() * 4);
+
+	do {
+		stream.next_out	 = decompressed.data() + stream.total_out;
+		stream.avail_out = static_cast<uInt>(decompressed.size() - stream.total_out);
+
+		ret = inflate(&stream, Z_NO_FLUSH);
+
+		if (ret == Z_STREAM_ERROR || ret == Z_DATA_ERROR || ret == Z_MEM_ERROR) {
+			inflateEnd(&stream);
+			throw std::runtime_error("Gzip decompression error: " + std::to_string(ret));
+		}
+
+		// If we need more space, double the buffer
+		if (stream.avail_out == 0 && ret != Z_STREAM_END) {
+			decompressed.resize(decompressed.size() * 2);
+		}
+
+	} while (ret != Z_STREAM_END);
+
+	inflateEnd(&stream);
+
+	// Resize to actual decompressed size
+	decompressed.resize(stream.total_out);
+	return decompressed;
 }

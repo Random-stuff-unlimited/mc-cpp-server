@@ -12,46 +12,140 @@ void sendChunkData(Packet& packet, Server& server, int chunkX, int chunkZ) {
 
 	Buffer buf;
 
-	// Chunk X and Z coordinates
-	buf.writeInt(chunkX);
-	buf.writeInt(chunkZ);
+	try {
+		// Use your new chunk loading system
+		World::Query	 query;
+		World::ChunkData chunkData = query.fetchChunk(chunkX, chunkZ);
 
-	// Heightmaps (NBT) - minimal implementation using empty compound tag
-	buf.writeByte(0x0A);
-	buf.writeByte(0x00);
-	buf.writeByte(0x00);
-	buf.writeByte(0x00);
+		// Write chunk coordinates
+		buf.writeInt(chunkX);
+		buf.writeInt(chunkZ);
 
-	// Chunk data array - simplified version
-	Buffer chunkData;
+		// Write heightmaps (simplified)
+		if (!chunkData.heightmaps.empty()) {
+			buf.writeBytes(chunkData.heightmaps);
+		} else {
+			// Empty heightmap
+			buf.writeByte(0x0A); // Compound tag
+			buf.writeByte(0x00); // Empty name length
+			buf.writeByte(0x00); // End tag
+		}
 
-	// Number of sections (24 sections for world height -64 to 319)
-	const int NUM_SECTIONS = 24;
+		// Write chunk data
+		if (!chunkData.blockData.empty()) {
+			buf.writeVarInt(chunkData.blockData.size());
+			buf.writeBytes(chunkData.blockData);
+		} else {
+			// Generate simple empty chunk inline
+			Buffer	  emptyData;
+			const int NUM_SECTIONS = 24;
 
-	for (int section = 0; section < NUM_SECTIONS; section++) {
-		// Block count (non-air blocks in this section) - write as 2 bytes for short
-		buf.writeByte(0x00);
-		buf.writeByte(0x00);
+			for (int section = 0; section < NUM_SECTIONS; section++) {
+				emptyData.writeByte(0x00); // Block count low
+				emptyData.writeByte(0x00); // Block count high
 
-		// Block states palette
-		chunkData.writeByte(0);
-		chunkData.writeVarInt(0);
-		chunkData.writeVarInt(0);
+				// Block states - single air block
+				emptyData.writeByte(0);	  // Bits per entry
+				emptyData.writeVarInt(0); // Air block state
+				emptyData.writeVarInt(0); // No data array
 
-		// Biomes palette
-		chunkData.writeByte(0);
-		chunkData.writeVarInt(1);
-		chunkData.writeVarInt(0);
+				// Biomes - single plains biome
+				emptyData.writeByte(0);	  // Bits per entry
+				emptyData.writeVarInt(1); // Plains biome
+				emptyData.writeVarInt(0); // No data array
+			}
+
+			buf.writeVarInt(emptyData.getData().size());
+			buf.writeBytes(emptyData.getData());
+		}
+
+		// Block entities
+		buf.writeVarInt(0);
+
+		// Light data (simplified version)
+		buf.writeVarInt(1);		  // Sky light mask length
+		buf.writeLong(0x1FFFFFF); // All sections have sky light
+		buf.writeVarInt(1);		  // Block light mask length
+		buf.writeLong(0);		  // No block light
+		buf.writeVarInt(1);		  // Empty sky light mask length
+		buf.writeLong(0);		  // No empty sky light sections
+		buf.writeVarInt(1);		  // Empty block light mask length
+		buf.writeLong(0);		  // No empty block light sections
+
+		// Sky light arrays
+		for (int i = 0; i < 25; i++) {
+			buf.writeVarInt(2048);
+			for (int j = 0; j < 2048; j++) {
+				buf.writeByte(0xFF);
+			}
+		}
+
+	} catch (const std::exception& e) {
+		std::cerr << "Error in sendChunkData: " << e.what() << std::endl;
+		// Return without setting packet data - this will cause the packet to be skipped
+		return;
 	}
 
-	// Write chunk data size and data
-	buf.writeVarInt(chunkData.getData().size());
-	buf.writeBytes(chunkData.getData());
+	// Create final packet
+	int packetId		 = 0x27;
+	int packetIdSize	 = packet.getVarintSize(packetId);
+	int totalPayloadSize = packetIdSize + buf.getData().size();
 
-	// Number of block entities
-	buf.writeVarInt(0);
+	Buffer finalBuf;
+	finalBuf.writeVarInt(totalPayloadSize);
+	finalBuf.writeVarInt(packetId);
+	finalBuf.writeBytes(buf.getData());
 
-	// Light data - simplified version
+	packet.getData() = finalBuf;
+	packet.setPacketSize(finalBuf.getData().size());
+	packet.setReturnPacket(PACKET_SEND);
+
+	(void)server;
+}
+
+// Helper function to generate empty chunk sections
+Buffer generateEmptyChunkSections() {
+	Buffer	  chunkData;
+	const int NUM_SECTIONS = 24; // Sections for world height -64 to 319
+
+	for (int section = 0; section < NUM_SECTIONS; section++) {
+		// Block count (non-air blocks) - 0 for empty sections
+		chunkData.writeByte(0x00);
+		chunkData.writeByte(0x00);
+
+		// Block states palette - single entry for air
+		chunkData.writeByte(0);	  // Bits per entry (0 = single valued)
+		chunkData.writeVarInt(0); // Air block state ID
+		chunkData.writeVarInt(0); // No data array needed for single valued
+
+		// Biomes palette - single entry for plains
+		chunkData.writeByte(0);	  // Bits per entry (0 = single valued)
+		chunkData.writeVarInt(1); // Plains biome ID
+		chunkData.writeVarInt(0); // No data array needed for single valued
+	}
+
+	return chunkData;
+}
+
+// Helper function to write light data from loaded chunk
+void writeLightData(Buffer& buf, const World::ChunkData& chunkData) {
+	if (!chunkData.skyLight.empty() || !chunkData.blockLight.empty()) {
+		// Use actual light data from chunk
+		writeActualLightData(buf, chunkData);
+	} else {
+		// Fallback to default light data
+		writeEmptyLightData(buf);
+	}
+}
+
+void writeActualLightData(Buffer& buf, const World::ChunkData& chunkData) {
+	// This is complex - you need to reconstruct the light data format
+	// For now, fallback to empty light data
+	// TODO: Implement proper light data reconstruction from chunkData.skyLight and chunkData.blockLight
+	writeEmptyLightData(buf);
+}
+
+void writeEmptyLightData(Buffer& buf) {
 	// Sky Light Mask (BitSet) - all sections have sky light
 	buf.writeVarInt(1);
 	buf.writeLong(0x1FFFFFF);
@@ -72,27 +166,10 @@ void sendChunkData(Packet& packet, Server& server, int chunkX, int chunkZ) {
 	for (int i = 0; i < 25; i++) {
 		buf.writeVarInt(2048);
 		for (int j = 0; j < 2048; j++) {
-			buf.writeByte(0xFF);
+			buf.writeByte(0xFF); // Full sky light
 		}
 	}
-
 	// No Block Light arrays since mask is 0
-
-	// Create final packet
-	int packetId		 = 0x27;
-	int packetIdSize	 = packet.getVarintSize(packetId);
-	int totalPayloadSize = packetIdSize + buf.getData().size();
-
-	Buffer finalBuf;
-	finalBuf.writeVarInt(totalPayloadSize);
-	finalBuf.writeVarInt(packetId);
-	finalBuf.writeBytes(buf.getData());
-
-	packet.getData() = finalBuf;
-	packet.setPacketSize(finalBuf.getData().size());
-	packet.setReturnPacket(PACKET_SEND);
-
-	(void)server;
 }
 
 void sendPlayerPositionAndLook(Packet& packet, Server& server) {

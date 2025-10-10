@@ -59,18 +59,11 @@ void sendChunkBatchSequence(Packet& packet, Server& server) {
 	ThreadSafeQueue<Packet*>* outgoingPackets = server.getNetworkManager().getOutgoingQueue();
 	if (!player || !outgoingPackets) return;
 
-	// Player spawn position (you should get this from player data)
-	int playerChunkX = 0; // player->getChunkX();
-	int playerChunkZ = 0; // player->getChunkZ();
+	int playerChunkX = 0;
+	int playerChunkZ = 0;
+	int viewDistance = 3; // Reasonable size
 
-	// Get view distance from player config
-	int viewDistance = 5; // Default
-	if (player->getPlayerConfig()) {
-		viewDistance = player->getPlayerConfig()->getViewDistance();
-	}
-
-	std::cout << "=== Starting chunk batch sequence for player: " << player->getPlayerName()
-			  << " (view distance: " << viewDistance << ") ===\n";
+	std::cout << "=== Starting chunk batch sequence for player: " << player->getPlayerName() << " (view distance: " << viewDistance << ") ===\n";
 
 	// 1. Send Chunk Batch Start
 	try {
@@ -82,8 +75,11 @@ void sendChunkBatchSequence(Packet& packet, Server& server) {
 		return;
 	}
 
-	// 2. Send chunks in a radius around player
-	int chunksCount = 0;
+	// 2. Send chunks in smaller batches
+	int		  chunksCount	 = 0;
+	int		  batchSize		 = 0;
+	const int MAX_BATCH_SIZE = 16; // Limit chunks per batch
+
 	for (int x = playerChunkX - viewDistance; x <= playerChunkX + viewDistance; x++) {
 		for (int z = playerChunkZ - viewDistance; z <= playerChunkZ + viewDistance; z++) {
 			try {
@@ -91,21 +87,38 @@ void sendChunkBatchSequence(Packet& packet, Server& server) {
 				sendChunkData(*chunkPacket, server, x, z);
 				outgoingPackets->push(chunkPacket);
 				chunksCount++;
+				batchSize++;
+
+				// Send batch finished and start new batch if we hit limit
+				if (batchSize >= MAX_BATCH_SIZE) {
+					// Send batch finished
+					Packet* batchFinishedPacket = new Packet(packet);
+					sendChunkBatchFinished(*batchFinishedPacket, server, batchSize);
+					outgoingPackets->push(batchFinishedPacket);
+
+					// Start new batch
+					Packet* batchStartPacket = new Packet(packet);
+					sendChunkBatchStart(*batchStartPacket, server);
+					outgoingPackets->push(batchStartPacket);
+
+					batchSize = 0;
+				}
+
 			} catch (const std::exception& e) {
-				std::cerr << "Error sending chunk (" << x << ", " << z << "): " << e.what()
-						  << std::endl;
+				std::cerr << "Error sending chunk (" << x << ", " << z << "): " << e.what() << std::endl;
 			}
 		}
 	}
 
-	// 3. Send Chunk Batch Finished
-	try {
-		Packet* batchFinishedPacket = new Packet(packet);
-		sendChunkBatchFinished(*batchFinishedPacket, server, chunksCount);
-		outgoingPackets->push(batchFinishedPacket);
-	} catch (const std::exception& e) {
-		std::cerr << "Error sending chunk batch finished: " << e.what() << std::endl;
-		return;
+	// 3. Send final batch finished
+	if (batchSize > 0) {
+		try {
+			Packet* batchFinishedPacket = new Packet(packet);
+			sendChunkBatchFinished(*batchFinishedPacket, server, batchSize);
+			outgoingPackets->push(batchFinishedPacket);
+		} catch (const std::exception& e) {
+			std::cerr << "Error sending chunk batch finished: " << e.what() << std::endl;
+		}
 	}
 
 	std::cout << "=== Chunk batch sequence completed: " << chunksCount << " chunks sent ===\n";

@@ -5,7 +5,7 @@ TabWidth: 4             # how wide a tab renders (adjust per team preference)
 UseTab: Always  # use tabs for indentation, spaces for alignment
 ContinuationIndentWidth: 8
 BreakBeforeBraces: Attach
-ColumnLimit: 100
+ColumnLimit: 150
 AllowShortIfStatementsOnASingleLine: true
 AllowShortFunctionsOnASingleLine: true
 PointerAlignment: Left

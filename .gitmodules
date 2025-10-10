@@ -1,0 +1,3 @@
+[submodule "data-generator"]
+	path = data-generator
+	url = https://github.com/Random-stuff-unlimited/data-generator.git

@@ -4,7 +4,7 @@
 class NetworkManager;
 #include "../config.hpp"
 #include "../player.hpp"
-#include "../world/worldManager.hpp"
+#include "../world/world.hpp"
 #include "id_manager.hpp"
 #include "lib/json.hpp"
 
@@ -25,8 +25,8 @@ class Server {
 	Config							 _config;
 	NetworkManager*					 _networkManager;
 	IdManager						 _idManager;
-	WorldManager					 _worldManager;
-	Data							 _worldData;
+	World::Manager					 _worldManager;
+	World::LevelDat					 _worldData;
 
   public:
 	Server();
@@ -50,9 +50,9 @@ class Server {
 	json	   getPlayerSample();
 	IdManager& getIdManager() { return (_idManager); }
 
-	NetworkManager& getNetworkManager() { return *_networkManager; }
-	WorldManager&	getWorldManager() { return _worldManager; }
-	Data&			getWorldData() { return _worldData; }
+	NetworkManager&	 getNetworkManager() { return *_networkManager; }
+	World::Manager&	 ManagManagererWorldManager() { return _worldManager; }
+	World::LevelDat& getWorldData() { return _worldData; }
 };
 
 #endif

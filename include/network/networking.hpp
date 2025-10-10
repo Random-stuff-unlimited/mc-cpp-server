@@ -145,4 +145,9 @@ void handleConfirmTeleportation(Packet& packet, Server& server);
 void completeSpawnSequence(Packet& packet, Server& server);
 void sendDisconnectPacket(Packet* packet, const std::string& reason, Server& server);
 
+Buffer generateEmptyChunkSections();
+void   writeLightData(Buffer& buf, const World::ChunkData& chunkData);
+void   writeActualLightData(Buffer& buf, const World::ChunkData& chunkData);
+void   writeEmptyLightData(Buffer& buf);
+
 #endif
