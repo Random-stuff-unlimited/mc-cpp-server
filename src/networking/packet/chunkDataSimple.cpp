@@ -8,164 +8,160 @@
 #include <iostream>
 
 void sendChunkData(Packet& packet, Server& server, int chunkX, int chunkZ) {
-    std::cout << "=== Sending Chunk Data (" << chunkX << ", " << chunkZ << ") ===\n";
+	Buffer buf;
 
-    Buffer buf;
+	// --- Coordinates ---
+	buf.writeInt(chunkX);
+	buf.writeInt(chunkZ);
 
-    // Chunk X and Z coordinates
-    buf.writeInt(chunkX);
-    buf.writeInt(chunkZ);
+	// --- Heightmaps (NBT minimal valide) ---
+	Buffer nbt;
+	nbt.writeByte(0x0A); // TAG_Compound
+	nbt.writeShort(0);   // name length = 0
+	nbt.writeByte(0x00); // TAG_End
+	buf.writeBytes(nbt.getData());
 
-    // Heightmaps (NBT) - minimal implementation using empty compound tag
-    buf.writeByte(0x0A);
-    buf.writeByte(0x00);
-    buf.writeByte(0x00);
-    buf.writeByte(0x00);
+	// --- Chunk Sections ---
+	Buffer chunkData;
+	const int SECTION_COUNT = 24;
 
-    // Chunk data array - simplified version
-    Buffer chunkData;
+	for (int sectionY = 0; sectionY < SECTION_COUNT; ++sectionY) {
+		bool hasDirt = (sectionY == 4);
 
-    // Number of sections (24 sections for world height -64 to 319)
-    const int NUM_SECTIONS = 24;
+		if (hasDirt) {
+			chunkData.writeShort(4096);                     // non-air count
+			chunkData.writeByte(8);                         // bits per block
+			chunkData.writeVarInt(2);                       // palette length
+			chunkData.writeVarInt(0);                       // air
+			chunkData.writeVarInt(3);                       // dirt
+			chunkData.writeVarInt(16 * 16 * 16 / (64 / 8)); // data array length
 
-    for (int section = 0; section < NUM_SECTIONS; section++) {
-        // Block count (non-air blocks in this section) - write as 2 bytes for short
-        buf.writeByte(0x00);
-        buf.writeByte(0x00);
+			for (int i = 0; i < 4096; i++) {
+				chunkData.writeByte(1); // palette index for dirt
+			}
+		} else {
+			chunkData.writeShort(0);
+			chunkData.writeByte(0);
+			chunkData.writeVarInt(1);
+			chunkData.writeVarInt(0);
+			chunkData.writeVarInt(0);
+		}
 
-        // Block states palette
-        chunkData.writeByte(0);
-        chunkData.writeVarInt(0);
-        chunkData.writeVarInt(0);
+		// Biomes
+		chunkData.writeByte(0);
+		chunkData.writeVarInt(1);
+		chunkData.writeVarInt(1);
+		chunkData.writeVarInt(0);
+	}
 
-        // Biomes palette
-        chunkData.writeByte(0);
-        chunkData.writeVarInt(1);
-        chunkData.writeVarInt(0);
-    }
+	buf.writeVarInt(chunkData.getData().size());
+	buf.writeBytes(chunkData.getData());
 
-    // Write chunk data size and data
-    buf.writeVarInt(chunkData.getData().size());
-    buf.writeBytes(chunkData.getData());
+	// No block entities
+	buf.writeVarInt(0);
 
-    // Number of block entities
-    buf.writeVarInt(0);
+	// Minimal light data
+	buf.writeVarInt(0); // sky mask
+	buf.writeVarInt(0); // block mask
+	buf.writeVarInt(0); // empty sky mask
+	buf.writeVarInt(0); // empty block mask
 
-    // Light data - simplified version
-    // Sky Light Mask (BitSet) - all sections have sky light
-    buf.writeVarInt(1);
-    buf.writeLong(0x1FFFFFF);
+	// --- Finalize packet ---
+	int packetId = 0x27;
 
-    // Block Light Mask (BitSet) - no block light
-    buf.writeVarInt(1);
-    buf.writeLong(0);
+	Buffer payload;
+	payload.writeVarInt(packetId);     // packet ID first
+	payload.writeBytes(buf.getData()); // then packet data
 
-    // Empty Sky Light Mask
-    buf.writeVarInt(1);
-    buf.writeLong(0);
+	Buffer finalBuf;
+	finalBuf.writeVarInt(payload.getData().size()); // total length prefix
+	finalBuf.writeBytes(payload.getData());
 
-    // Empty Block Light Mask
-    buf.writeVarInt(1);
-    buf.writeLong(0);
+	packet.getData() = finalBuf;
+	packet.setPacketId(packetId);
+	packet.setPacketSize(finalBuf.getData().size());
+	packet.setReturnPacket(PACKET_SEND);
 
-    // Sky Light arrays (2048 bytes each for sections with sky light)
-    for (int i = 0; i < 25; i++) {
-        buf.writeVarInt(2048);
-        for (int j = 0; j < 2048; j++) {
-            buf.writeByte(0xFF);
-        }
-    }
-
-    // No Block Light arrays since mask is 0
-
-    // Create final packet
-    int packetId = 0x27;
-    int packetIdSize = packet.getVarintSize(packetId);
-    int totalPayloadSize = packetIdSize + buf.getData().size();
-
-    Buffer finalBuf;
-    finalBuf.writeVarInt(totalPayloadSize);
-    finalBuf.writeVarInt(packetId);
-    finalBuf.writeBytes(buf.getData());
-
-    packet.getData() = finalBuf;
-    packet.setPacketSize(finalBuf.getData().size());
-    packet.setReturnPacket(PACKET_SEND);
-
-    (void)server;
+	std::cout << "Chunk (" << chunkX << ", " << chunkZ
+	          << ") built, size = " << finalBuf.getData().size() << " bytes\n";
 }
 
 void sendPlayerPositionAndLook(Packet& packet, Server& server) {
-    std::cout << "=== Sending Player Position and Look ===\n";
+	std::cout << "=== Sending Player Position and Look ===\n";
 
-    Buffer buf;
+	Buffer buf;
 
-    // Teleport ID
-    buf.writeVarInt(1);
+	// Teleport ID
+	buf.writeVarInt(1);
 
-    // Player position (using writeLong for double precision storage)
-    // Note: This is a simplified approach - ideally you'd add writeDouble to Buffer
-    int64_t x_bits = 0x3FE0000000000000;
-    int64_t y_bits = 0x4050000000000000;
-    int64_t z_bits = 0x3FE0000000000000;
+	// Player position (double encoded via int64_t bits)
+	int64_t x_bits = 0x3FE0000000000000; // 0.5
+	int64_t y_bits = 0x4050000000000000; // 64.0
+	int64_t z_bits = 0x3FE0000000000000; // 0.5
 
-    buf.writeLong(x_bits);
-    buf.writeLong(y_bits);
-    buf.writeLong(z_bits);
+	buf.writeLong(x_bits);
+	buf.writeLong(y_bits);
+	buf.writeLong(z_bits);
 
-    // Velocity (all zero)
-    buf.writeLong(0);
-    buf.writeLong(0);
-    buf.writeLong(0);
+	// Velocity (all zero)
+	buf.writeLong(0);
+	buf.writeLong(0);
+	buf.writeLong(0);
 
-    // Rotation (using writeInt for float storage)
-    buf.writeInt(0);
-    buf.writeInt(0);
+	// Rotation (using int for float storage)
+	buf.writeInt(0);
+	buf.writeInt(0);
 
-    // Flags (0x00 = absolute positioning)
-    buf.writeInt(0x00);
+	// Flags (0x00 = absolute positioning)
+	buf.writeInt(0x00);
 
-    int packetId = 0x41;
-    int packetIdSize = packet.getVarintSize(packetId);
-    int totalPayloadSize = packetIdSize + buf.getData().size();
+	// --- Finalize packet ---
+	int packetId = 0x41;
 
-    Buffer finalBuf;
-    finalBuf.writeVarInt(totalPayloadSize);
-    finalBuf.writeVarInt(packetId);
-    finalBuf.writeBytes(buf.getData());
+	Buffer payload;
+	payload.writeVarInt(packetId);     // write packet ID first
+	payload.writeBytes(buf.getData()); // then write packet data
 
-    packet.getData() = finalBuf;
-    packet.setPacketSize(finalBuf.getData().size());
-    packet.setReturnPacket(PACKET_SEND);
+	// The length prefix is the size of payload (packetId + data)
+	Buffer finalBuf;
+	finalBuf.writeVarInt(payload.getData().size());
+	finalBuf.writeBytes(payload.getData());
 
-    (void)server;
+	packet.getData() = finalBuf;
+	packet.setPacketId(packetId);
+	packet.setPacketSize(finalBuf.getData().size());
+	packet.setReturnPacket(PACKET_SEND);
+
+	(void)server;
 }
 
 void sendSpawnPosition(Packet& packet, Server& server) {
-    std::cout << "=== Sending Spawn Position ===\n";
+	std::cout << "=== Sending Spawn Position ===\n";
 
-    Buffer buf;
+	Buffer buf;
 
-    // Encode position as long (X=0, Y=64, Z=0 packed into 64 bits)
-    // Position format: ((x & 0x3FFFFFF) << 38) | ((z & 0x3FFFFFF) << 12) | (y & 0xFFF)
-    int64_t encodedPos = ((int64_t)0 << 38) | ((int64_t)0 << 12) | (64 & 0xFFF);
-    buf.writeLong(encodedPos);
+	// Encode position as long (X=0, Y=64, Z=0 packed into 64 bits)
+	int64_t encodedPos = ((int64_t)0 << 38) | ((int64_t)0 << 12) | (64 & 0xFFF);
+	buf.writeLong(encodedPos);
 
-    // Spawn angle (0.0f as int bits)
-    buf.writeInt(0);
+	// Spawn angle (0.0f as int bits)
+	buf.writeInt(0);
 
-    int packetId = 0x5A; // Set Default Spawn Position packet ID for protocol 770
-    int packetIdSize = packet.getVarintSize(packetId);
-    int totalPayloadSize = packetIdSize + buf.getData().size();
+	// --- Finalize packet ---
+	int packetId = 0x5A;
 
-    Buffer finalBuf;
-    finalBuf.writeVarInt(totalPayloadSize);
-    finalBuf.writeVarInt(packetId);
-    finalBuf.writeBytes(buf.getData());
+	Buffer payload;
+	payload.writeVarInt(packetId);
+	payload.writeBytes(buf.getData());
 
-    packet.getData() = finalBuf;
-    packet.setPacketSize(finalBuf.getData().size());
-    packet.setReturnPacket(PACKET_SEND);
+	Buffer finalBuf;
+	finalBuf.writeVarInt(payload.getData().size());
+	finalBuf.writeBytes(payload.getData());
 
-    (void)server;
+	packet.getData() = finalBuf;
+	packet.setPacketId(packetId);
+	packet.setPacketSize(finalBuf.getData().size());
+	packet.setReturnPacket(PACKET_SEND);
+
+	(void)server;
 }

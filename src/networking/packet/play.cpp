@@ -1,86 +1,135 @@
-#include <iostream>
-#include <sstream>
-#include <vector>
-#include <map>
-#include <string>
-
-#include "networking.hpp"
-#include "server.hpp"
-#include "packet.hpp"
 #include "buffer.hpp"
+#include "nbt.hpp"
+#include "networking.hpp"
+#include "packet.hpp"
+#include "server.hpp"
+
+#include <iostream>
+#include <memory>
+#include <sstream>
 
 void writePlayPacket(Packet& packet, Server& server) {
-    Player* player = packet.getPlayer();
-    if (!player) return;
+	Player* player = packet.getPlayer();
+	if (!player) return;
 
-    Buffer buf;
+	Buffer buf;
 
-    // 1. Entity ID
-    buf.writeInt(player->getPlayerID());
+	// --- 1. Entity ID ---
+	buf.writeInt(player->getPlayerID());
 
-    // 2. Is Hardcore (false)
-    buf.writeBool(false);
+	// --- 2. Is Hardcore ---
+	buf.writeBool(false);
 
-    // 3. Game mode (survival = 0)
-    buf.writeByte(0);
+	// --- 3. Game mode ---
+	buf.writeByte(0); // Survival
 
-    // 4. Previous game mode (-1 = not set)
-    buf.writeByte(-1);
+	// --- 4. Previous game mode ---
+	buf.writeByte(-1);
 
-    // 5. World names (just overworld for now)
-    buf.writeVarInt(1); // Number of worlds
-    buf.writeString("minecraft:overworld");
+	// --- 5. World names ---
+	buf.writeVarInt(1);
+	buf.writeString("minecraft:overworld");
 
-    // 6. Registry codec (empty/minimal for now)
-    // We'll write a minimal empty NBT structure
-    buf.writeByte(0x0A); // TAG_Compound
-    buf.writeByte(0);     // Short value (high byte)
-    buf.writeByte(0);     // Short value (low byte)
-    buf.writeByte(0x00); // TAG_End
+	// --- 6. Registry codec (NBT) ---
+	nbt::TagCompound root;
 
-    // 7. Dimension (empty/minimal for now)
-    // We'll write a minimal empty NBT structure  
-    buf.writeByte(0x0A); // TAG_Compound
-    buf.writeByte(0);     // Short value (high byte)
-    buf.writeByte(0);     // Short value (low byte)
-    buf.writeByte(0x00); // TAG_End
+	// Minimal dimension_type
+	nbt::TagCompound dimensionTypes;
+	nbt::TagCompound overworldType;
+	overworldType["piglin_safe"]          = true;
+	overworldType["natural"]              = true;
+	overworldType["ambient_light"]        = 0.0f;
+	overworldType["logical_height"]       = 256;
+	overworldType["infiniburn"]           = "minecraft:infiniburn_overworld";
+	overworldType["ultrawarm"]            = false;
+	overworldType["coordinate_scale"]     = 1.0f;
+	overworldType["has_skylight"]         = true;
+	overworldType["has_ceiling"]          = false;
+	overworldType["respawn_anchor_works"] = false;
+	overworldType["bed_works"]            = true;
+	overworldType["effects"]              = "minecraft:overworld";
+	dimensionTypes["minecraft:overworld"] = std::make_shared<nbt::TagCompound>(overworldType);
 
-    // 8. World name
-    buf.writeString("minecraft:overworld");
+	root["minecraft:dimension_type"] = std::make_shared<nbt::TagCompound>(dimensionTypes);
 
-    // 9. Hashed seed
-    buf.writeLong(12345678L);
+	// Minimal biome registry
+	nbt::TagCompound biomes;
+	nbt::TagCompound plainsBiome;
+	plainsBiome["precipitation"] = std::string("rain");
+	plainsBiome["depth"]         = 0.125f;
+	plainsBiome["temperature"]   = 0.8f;
+	plainsBiome["scale"]         = 0.05f;
+	plainsBiome["downfall"]      = 0.4f;
+	plainsBiome["category"]      = std::string("plains");
+	biomes["minecraft:plains"]   = std::make_shared<nbt::TagCompound>(plainsBiome);
 
-    // 10. Max players
-    buf.writeVarInt(20);
+	root["minecraft:worldgen/biome"] = std::make_shared<nbt::TagCompound>(biomes);
 
-    // 11. View distance
-    buf.writeVarInt(10);
+	// Minimal noise settings registry
+	nbt::TagCompound noiseSettings;
+	nbt::TagCompound overworldNoise;
+	overworldNoise["sea_level"]          = 63;
+	overworldNoise["height"]             = "minecraft:overworld";
+	noiseSettings["minecraft:overworld"] = std::make_shared<nbt::TagCompound>(overworldNoise);
 
-    // 12. Simulation distance
-    buf.writeVarInt(10);
+	root["minecraft:worldgen/noise_settings"] = std::make_shared<nbt::TagCompound>(noiseSettings);
 
-    // 13. Reduced debug info
-    buf.writeBool(false);
+	// Encode NBT into buffer
+	std::ostringstream nbtStream;
+	nbt::NBT nbtData("root", root);
+	nbtData.encode(nbtStream);
+	std::string nbtBytes = nbtStream.str();
+	buf.writeBytes(std::vector<uint8_t>(nbtBytes.begin(), nbtBytes.end()));
 
-    // 14. Enable respawn screen
-    buf.writeBool(true);
+	// --- 7. Dimension (current) ---
+	buf.writeString("minecraft:overworld");
 
-    // 15. Do limited crafting
-    buf.writeBool(false);
+	// --- 8. Hashed seed ---
+	buf.writeLong(12345678L);
 
-    // 16. Dimension type
-    buf.writeString("minecraft:overworld");
+	// --- 9. Max players ---
+	buf.writeVarInt(20);
 
-    // 17. Dimension name
-    buf.writeString("minecraft:overworld");
+	// --- 10. View distance ---
+	buf.writeVarInt(10);
 
-    // 18. Portal cooldown
-    buf.writeVarInt(0);
+	// --- 11. Simulation distance ---
+	buf.writeVarInt(10);
 
-    // 19. Enforces secure chat
-    buf.writeBool(false);
+	// --- 12. Reduced debug info ---
+	buf.writeBool(false);
 
-    packet.setPacketId(0x2B); // Login (play) packet ID
-    packet.getData() = buf;
+	// --- 13. Enable respawn screen ---
+	buf.writeBool(true);
+
+	// --- 14. Do limited crafting ---
+	buf.writeBool(false);
+
+	// --- 15. Dimension type name ---
+	buf.writeString("minecraft:overworld");
+
+	// --- 16. Dimension name ---
+	buf.writeString("minecraft:overworld");
+
+	// --- 17. Portal cooldown ---
+	buf.writeVarInt(0);
+
+	// --- 18. Enforces secure chat ---
+	buf.writeBool(false);
+
+	// --- Encapsulate packet ID + data ---
+	int packetId = 0x2B; // Login packet
+	Buffer payload;
+	payload.writeVarInt(packetId);
+	payload.writeBytes(buf.getData());
+
+	// --- Final buffer with size prefix ---
+	Buffer finalBuf;
+	finalBuf.writeVarInt(payload.getData().size());
+	finalBuf.writeBytes(payload.getData());
+
+	packet.getData() = finalBuf;
+	packet.setPacketSize(finalBuf.getData().size());
+	packet.setPacketId(packetId);
+	packet.setReturnPacket(PACKET_SEND);
 }

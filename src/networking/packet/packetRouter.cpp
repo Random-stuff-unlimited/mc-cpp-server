@@ -308,13 +308,13 @@ void initGameSequence(Packet* packet, ThreadSafeQueue<Packet*>* _outgoingPackets
 		writePlayPacket(*playPacket, server);
 		_outgoingPackets->push(playPacket);
 
+		// 3. Send complete chunk batch sequence (Start -> Chunks -> Finished)
+		sendChunkBatchSequence(*packet, server, _outgoingPackets);
+
 		// 2. Send Set Center Chunk - 0x57
 		Packet* setCenterPacket = new Packet(*packet);
 		writeSetCenterPacket(*setCenterPacket, server);
 		_outgoingPackets->push(setCenterPacket);
-
-		// 3. Send complete chunk batch sequence (Start -> Chunks -> Finished)
-		sendChunkBatchSequence(*packet, server, _outgoingPackets);
 
 		// 4. Send player position and look - 0x41
 		Packet* positionPacket = new Packet(*packet);

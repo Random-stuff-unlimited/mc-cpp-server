@@ -39,12 +39,13 @@ class Buffer {
 	void writeUUID(const UUID& uuid);
 
 	void writeBool(bool value);
-    void writeNBT(const std::string& nbtData);
-    void writePosition(int32_t x, int32_t y, int32_t z);
-    void writeFloat(float value);
-    void writeDouble(double value);
-    void writeIdentifier(const std::string& id);
-    void writeVarLong(int64_t value);
+	void writeNBT(const std::string& nbtData);
+	void writePosition(int32_t x, int32_t y, int32_t z);
+	void writeFloat(float value);
+	void writeDouble(double value);
+	void writeIdentifier(const std::string& id);
+	void writeVarLong(int64_t value);
+	void writeShort(int16_t value);
 };
 
 #endif

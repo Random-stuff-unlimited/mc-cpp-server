@@ -10,14 +10,11 @@ Buffer::Buffer() : _pos(0) {}
 Buffer::Buffer(const std::vector<uint8_t>& data) : _data(data), _pos(0) {}
 
 uint8_t Buffer::readByte() {
-	if (_pos >= _data.size())
-		throw std::runtime_error("Buffer underflow on byte");
+	if (_pos >= _data.size()) throw std::runtime_error("Buffer underflow on byte");
 	return _data[_pos++];
 }
 
-void Buffer::writeByte(uint8_t byte) {
-	_data.push_back(byte);
-}
+void Buffer::writeByte(uint8_t byte) { _data.push_back(byte); }
 
 void Buffer::writeBytes(const std::string& data) {
 	_data.insert(_data.end(), data.begin(), data.end());
@@ -25,6 +22,11 @@ void Buffer::writeBytes(const std::string& data) {
 
 void Buffer::writeBytes(const std::vector<uint8_t>& data) {
 	_data.insert(_data.end(), data.begin(), data.end());
+}
+
+void Buffer::writeShort(int16_t value) {
+	writeByte(static_cast<uint8_t>((value >> 8) & 0xFF));
+	writeByte(static_cast<uint8_t>(value & 0xFF));
 }
 
 void Buffer::writeUUID(const UUID& uuid) {
@@ -44,8 +46,7 @@ int Buffer::readVarInt() {
 		currentByte = readByte();
 		value |= (currentByte & 0x7F) << position;
 		position += 7;
-		if (position >= 32)
-			throw std::runtime_error("VarInt too big");
+		if (position >= 32) throw std::runtime_error("VarInt too big");
 	} while (currentByte & 0x80);
 
 	return value;
@@ -105,13 +106,9 @@ void Buffer::writeString(const std::string& str) {
 	_data.insert(_data.end(), str.begin(), str.end());
 }
 
-std::vector<uint8_t>& Buffer::getData() {
-	return _data;
-}
+std::vector<uint8_t>& Buffer::getData() { return _data; }
 
-size_t Buffer::remaining() const {
-	return _data.size() - _pos;
-}
+size_t Buffer::remaining() const { return _data.size() - _pos; }
 
 uint16_t Buffer::readUShort() {
 	uint16_t val = (readByte() << 8) | readByte();
@@ -140,43 +137,44 @@ void Buffer::writeLong(long value) {
 	}
 }
 
-void Buffer::writeBool(bool value) {
-    writeByte(value ? 0x01 : 0x00);
-}
+void Buffer::writeBool(bool value) { writeByte(value ? 0x01 : 0x00); }
 
-void Buffer::writeNBT(const std::string& nbtData) {
-    writeBytes(nbtData);
-}
+void Buffer::writeNBT(const std::string& nbtData) { writeBytes(nbtData); }
 
 void Buffer::writePosition(int32_t x, int32_t y, int32_t z) {
-    int64_t packed = ((int64_t)(x & 0x3FFFFFF) << 38) | ((int64_t)(y & 0xFFF) << 26) | (int64_t)(z & 0x3FFFFFF);
-    writeLong(packed);
+	int64_t packed = ((int64_t)(x & 0x3FFFFFF) << 38) | ((int64_t)(y & 0xFFF) << 26) |
+	                 (int64_t)(z & 0x3FFFFFF);
+	writeLong(packed);
 }
 
 void Buffer::writeFloat(float value) {
-    union { float f; uint32_t i; } u;
-    u.f = value;
-    writeUInt(u.i);
+	union {
+		float f;
+		uint32_t i;
+	} u;
+	u.f = value;
+	writeUInt(u.i);
 }
 
 void Buffer::writeDouble(double value) {
-    union { double d; uint64_t i; } u;
-    u.d = value;
-    writeLong(u.i);
+	union {
+		double d;
+		uint64_t i;
+	} u;
+	u.d = value;
+	writeLong(u.i);
 }
 
 void Buffer::writeVarLong(int64_t value) {
-    while (true) {
-        if ((value & ~0x7FL) == 0) {
-            writeByte((uint8_t)value);
-            return;
-        } else {
-            writeByte((uint8_t)((value & 0x7F) | 0x80));
-            value >>= 7;
-        }
-    }
+	while (true) {
+		if ((value & ~0x7FL) == 0) {
+			writeByte((uint8_t)value);
+			return;
+		} else {
+			writeByte((uint8_t)((value & 0x7F) | 0x80));
+			value >>= 7;
+		}
+	}
 }
 
-void Buffer::writeIdentifier(const std::string& id) {
-    writeString(id);
-}
+void Buffer::writeIdentifier(const std::string& id) { writeString(id); }
