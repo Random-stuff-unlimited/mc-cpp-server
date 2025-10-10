@@ -59,15 +59,6 @@ class WorldManager {
 	Data loadLevelDat(std::filesystem::path levelDatPath);
 
   private:
-	// NBT parsing helper functions
-	nbt::Tag		 parseTag(const std::vector<uint8_t>& data, size_t& cursor, uint8_t type);
-	std::string		 parseTagName(const std::vector<uint8_t>& data, size_t& cursor);
-	nbt::TagCompound parseCompound(const std::vector<uint8_t>& data, size_t& cursor);
-	nbt::TagList	 parseList(const std::vector<uint8_t>& data, size_t& cursor);
-
-	template <typename T> T read(const std::vector<uint8_t>& data, size_t& cursor);
-
-  private:
 	Data _LevelDat;
 };
 
