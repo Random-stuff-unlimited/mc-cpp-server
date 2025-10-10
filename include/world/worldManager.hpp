@@ -56,7 +56,8 @@ class WorldManager {
 	// Decompresses a Gzip file into a byte vector
 	std::vector<uint8_t> decompressGzip(std::filesystem::path compressedFilePath);
 	// Loads and parses the level.dat file
-	Data loadLevelDat(std::filesystem::path levelDatPath);
+	Data				  loadLevelDat(std::filesystem::path levelDatPath);
+	std::filesystem::path locateRegionFileByChunkCoord(int localX, int localZ);
 
   private:
 	Data _LevelDat;

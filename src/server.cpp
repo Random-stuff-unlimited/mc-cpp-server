@@ -1,10 +1,9 @@
-#include "network/server.hpp"
-
 #include "config.hpp"
 #include "lib/filesystem.hpp"
 #include "lib/json.hpp"
 #include "logger.hpp"
 #include "network/networking.hpp"
+#include "network/server.hpp"
 #include "player.hpp"
 #include "world/worldManager.hpp"
 
@@ -87,6 +86,9 @@ int Server::start_server() {
 					ERROR, "Failed to load world: " + std::string(e.what()), "SERVER");
 			return 1;
 		}
+
+		std::filesystem::path regionFile = _worldManager.locateRegionFileByChunkCoord(0, 0);
+		g_logger->logGameInfo(INFO, "Region File: " + regionFile.string(), "SERVER");
 
 		size_t workerCount = 4;
 		if (workerCount == 0) workerCount = 4; // fallback

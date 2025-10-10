@@ -1,7 +1,9 @@
+#include "lib/filesystem.hpp"
+#include "lib/nbtParser.hpp"
+#include "logger.hpp"
 #include "world/worldManager.hpp"
 
-#include "lib/nbtParser.hpp"
-
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <filesystem>
@@ -131,4 +133,18 @@ Data WorldManager::loadLevelDat(std::filesystem::path levelDatPath) {
 	getTagValue("WasModded", dataStruct.WasModded);
 
 	return dataStruct;
+}
+
+std::filesystem::path WorldManager::locateRegionFileByChunkCoord(int localX, int localZ) {
+	const auto		  regionDir = getPath().parent_path() / "world" / "region";
+	const std::string filename =
+			"r." + std::to_string(localX / 32) + "." + std::to_string(localZ / 32) + ".mca";
+	const std::filesystem::path path = regionDir / filename;
+
+	if (std::filesystem::exists(path)) {
+		return path;
+	} else {
+		g_logger->logGameInfo(ERROR, "Cannot find the region file asked" + path.string());
+		throw std::runtime_error("Cannot find the region file asked");
+	}
 }
