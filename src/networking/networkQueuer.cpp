@@ -42,8 +42,7 @@ void NetworkManager::receiverThreadLoop() {
 					event.events  = EPOLLIN;
 					event.data.fd = client_fd;
 					if (epoll_ctl(_epollFd, EPOLL_CTL_ADD, client_fd, &event) == -1) {
-						std::cerr << "[Network Manager] Failed to add new client socket to epoll"
-								  << std::endl;
+						std::cerr << "[Network Manager] Failed to add new client socket to epoll" << std::endl;
 						close(client_fd);
 					}
 				}

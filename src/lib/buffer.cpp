@@ -17,13 +17,9 @@ uint8_t Buffer::readByte() {
 
 void Buffer::writeByte(uint8_t byte) { _data.push_back(byte); }
 
-void Buffer::writeBytes(const std::string& data) {
-	_data.insert(_data.end(), data.begin(), data.end());
-}
+void Buffer::writeBytes(const std::string& data) { _data.insert(_data.end(), data.begin(), data.end()); }
 
-void Buffer::writeBytes(const std::vector<uint8_t>& data) {
-	_data.insert(_data.end(), data.begin(), data.end());
-}
+void Buffer::writeBytes(const std::vector<uint8_t>& data) { _data.insert(_data.end(), data.begin(), data.end()); }
 
 void Buffer::writeUUID(const UUID& uuid) {
 	uint64_t msb = uuid.getMostSigBits();
@@ -138,8 +134,7 @@ void Buffer::writeBool(bool value) { writeByte(value ? 0x01 : 0x00); }
 void Buffer::writeNBT(const std::string& nbtData) { writeBytes(nbtData); }
 
 void Buffer::writePosition(int32_t x, int32_t y, int32_t z) {
-	int64_t packed = ((int64_t)(x & 0x3FFFFFF) << 38) | ((int64_t)(y & 0xFFF) << 26) |
-					 (int64_t)(z & 0x3FFFFFF);
+	int64_t packed = ((int64_t)(x & 0x3FFFFFF) << 38) | ((int64_t)(y & 0xFFF) << 26) | (int64_t)(z & 0x3FFFFFF);
 	writeLong(packed);
 }
 

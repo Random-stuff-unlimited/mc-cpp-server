@@ -21,10 +21,9 @@ void	 UUID::setLeastSigBits(uint64_t val) { _leastSigBits = val; }
 
 std::string UUID::toString() const {
 	std::stringstream ss;
-	ss << std::hex << std::setfill('0') << std::setw(8) << ((_mostSigBits >> 32) & 0xFFFFFFFF)
-	   << "-" << std::setw(4) << ((_mostSigBits >> 16) & 0xFFFF) << "-" << std::setw(4)
-	   << (_mostSigBits & 0xFFFF) << "-" << std::setw(4) << ((_leastSigBits >> 48) & 0xFFFF) << "-"
-	   << std::setw(12) << (_leastSigBits & 0xFFFFFFFFFFFFULL);
+	ss << std::hex << std::setfill('0') << std::setw(8) << ((_mostSigBits >> 32) & 0xFFFFFFFF) << "-" << std::setw(4)
+	   << ((_mostSigBits >> 16) & 0xFFFF) << "-" << std::setw(4) << (_mostSigBits & 0xFFFF) << "-" << std::setw(4) << ((_leastSigBits >> 48) & 0xFFFF)
+	   << "-" << std::setw(12) << (_leastSigBits & 0xFFFFFFFFFFFFULL);
 	return ss.str();
 }
 

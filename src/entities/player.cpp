@@ -6,13 +6,12 @@
 #include <string>
 
 Player::Player(Server& server)
-	: _name("Player_entity"), _state(PlayerState::None), _socketFd(-1), x(0), y(0), z(0), health(0),
-	  _uuid(), _playerId(server.getIdManager().allocate()), _server(server),
-	  _config(new PlayerConfig()) {}
+	: _name("Player_entity"), _state(PlayerState::None), _socketFd(-1), x(0), y(0), z(0), health(0), _uuid(),
+	  _playerId(server.getIdManager().allocate()), _server(server), _config(new PlayerConfig()) {}
 
 Player::Player(const std::string& name, const PlayerState state, const int socket, Server& server)
-	: _state(state), _socketFd(socket), x(0), y(0), z(0), health(20), _uuid(),
-	  _playerId(server.getIdManager().allocate()), _server(server), _config(new PlayerConfig()) {
+	: _state(state), _socketFd(socket), x(0), y(0), z(0), health(20), _uuid(), _playerId(server.getIdManager().allocate()), _server(server),
+	  _config(new PlayerConfig()) {
 	if (name.length() > 32)
 		_name = name.substr(0, 31);
 	else
@@ -49,7 +48,7 @@ int Player::getPlayerID() const { return (_playerId); }
 
 // PlayerConfig implementation
 PlayerConfig::PlayerConfig()
-	: _chatMode(0), _mainHand(1), _locale("en_US"), _viewDistance(10), _displayedSkinParts(0),
-	  _chatColors(true), _enableTextFiltering(false), _allowServerListings(true) {}
+	: _chatMode(0), _mainHand(1), _locale("en_US"), _viewDistance(10), _displayedSkinParts(0), _chatColors(true), _enableTextFiltering(false),
+	  _allowServerListings(true) {}
 
 PlayerConfig::~PlayerConfig() {}

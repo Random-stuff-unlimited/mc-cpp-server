@@ -56,7 +56,7 @@ std::string LogManager::getCurrentTimestamp() {
 std::string LogManager::getDetailedTimestamp() {
 	auto now	= std::chrono::system_clock::now();
 	auto time_t = std::chrono::system_clock::to_time_t(now);
-	auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()) % 1000;
+	auto ms		= std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()) % 1000;
 
 	std::stringstream ss;
 	ss << std::put_time(std::localtime(&time_t), "%H:%M:%S");
@@ -111,10 +111,7 @@ bool LogManager::initializeLogDirectory() {
 	return true;
 }
 
-void LogManager::log(LogLevel			level,
-					 LogCategory		category,
-					 const std::string& message,
-					 const std::string& source) {
+void LogManager::log(LogLevel level, LogCategory category, const std::string& message, const std::string& source) {
 	LogEntry entry;
 	entry.timestamp = std::chrono::system_clock::now();
 	entry.level		= level;
@@ -128,22 +125,15 @@ void LogManager::log(LogLevel			level,
 		_logQueue.push(entry);
 	}
 
-	if (category == GAMEINFO ||
-		category == NETWORK) { // Remove category == NETWORK on release build
+	if (category == GAMEINFO || category == NETWORK) { // Remove category == NETWORK on release build
 		std::string formattedEntry = formatLogEntry(entry);
 		std::cout << formattedEntry << std::endl;
 	}
 }
 
-void LogManager::logNetwork(LogLevel level, const std::string& message, const std::string& source) {
-	log(level, NETWORK, message, source);
-}
+void LogManager::logNetwork(LogLevel level, const std::string& message, const std::string& source) { log(level, NETWORK, message, source); }
 
-void LogManager::logGameInfo(LogLevel			level,
-							 const std::string& message,
-							 const std::string& source) {
-	log(level, GAMEINFO, message, source);
-}
+void LogManager::logGameInfo(LogLevel level, const std::string& message, const std::string& source) { log(level, GAMEINFO, message, source); }
 
 void LogManager::writerThreadLoop() {
 	while (_running || !_logQueue.empty()) {
@@ -184,9 +174,7 @@ std::string LogManager::formatLogEntry(const LogEntry& entry) {
 
 	// Add timestamp
 	auto time_t = std::chrono::system_clock::to_time_t(entry.timestamp);
-	auto ms		= std::chrono::duration_cast<std::chrono::milliseconds>(
-					  entry.timestamp.time_since_epoch()) %
-			  1000;
+	auto ms		= std::chrono::duration_cast<std::chrono::milliseconds>(entry.timestamp.time_since_epoch()) % 1000;
 
 	ss << "[" << std::put_time(std::localtime(&time_t), "%H:%M:%S");
 	ss << "." << std::setfill('0') << std::setw(3) << ms.count() << "] ";
