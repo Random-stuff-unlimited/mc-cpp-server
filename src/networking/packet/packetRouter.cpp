@@ -13,6 +13,7 @@ void handleConfigurationState(Packet* packet, Server& server);
 void handlePlayState(Packet* packet, Server& server);
 void sendDisconnectPacket(Packet* packet, const std::string& reason, Server& server);
 void initGameSequence(Packet* packet, Server& server);
+void sendRegistryData(Packet& packet, Server& server);
 
 // ========================================
 // Main Packet Router
@@ -128,7 +129,10 @@ void handleConfigurationState(Packet* packet, Server& server) {
 		handleClientInformation(*packet, server);
 		packet->setReturnPacket(PACKET_OK);
 
-		// After processing client info, tell client we're done configuring
+		// Send Registry Data first (this will queue multiple packets, one per registry)
+		sendRegistryData(*packet, server);
+
+		// After processing client info and sending registry data, tell client we're done configuring
 		Packet* finishPacket = new Packet(*packet);
 		handleFinishConfiguration(*finishPacket, server);
 		server.getNetworkManager().getOutgoingQueue()->push(finishPacket);
