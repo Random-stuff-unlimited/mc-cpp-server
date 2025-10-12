@@ -17,81 +17,76 @@
  *     - Entries (Array of VarInt): Registry IDs of entries in this tag
  */
 void sendUpdateTags(Packet& packet, Server& server) {
-    g_logger->logNetwork(INFO, "=== Sending Update Tags packet (0x0D) ===", "Configuration");
+	g_logger->logNetwork(INFO, "=== Sending Update Tags packet (0x0D) ===", "Configuration");
 
-    Player* player = packet.getPlayer();
-    if (!player) {
-        g_logger->logNetwork(ERROR, "Error: No player associated with Update Tags packet", "Configuration");
-        packet.setReturnPacket(PACKET_DISCONNECT);
-        return;
-    }
+	Player* player = packet.getPlayer();
+	if (!player) {
+		g_logger->logNetwork(ERROR, "Error: No player associated with Update Tags packet", "Configuration");
+		packet.setReturnPacket(PACKET_DISCONNECT);
+		return;
+	}
 
-    ThreadSafeQueue<Packet*>* outgoingPackets = server.getNetworkManager().getOutgoingQueue();
-    if (!outgoingPackets) {
-        g_logger->logNetwork(ERROR, "Error: No outgoing packet queue available", "Configuration");
-        packet.setReturnPacket(PACKET_ERROR);
-        return;
-    }
+	ThreadSafeQueue<Packet*>* outgoingPackets = server.getNetworkManager().getOutgoingQueue();
+	if (!outgoingPackets) {
+		g_logger->logNetwork(ERROR, "Error: No outgoing packet queue available", "Configuration");
+		packet.setReturnPacket(PACKET_ERROR);
+		return;
+	}
 
-    try {
-        Buffer tagBuffer;
-        
-        // Define required registries for tags (Vanilla expects these)
-        std::vector<std::string> requiredRegistries = {
-            "minecraft:block",
-            "minecraft:item", 
-            "minecraft:fluid",
-            "minecraft:entity_type",
-            "minecraft:game_event"
-        };
+	try {
+		Buffer tagBuffer;
 
-        // Write number of registries
-        tagBuffer.writeVarInt(requiredRegistries.size());
+		// Define required registries for tags (Vanilla expects these)
+		std::vector<std::string> requiredRegistries = {
+				"minecraft:block", "minecraft:item", "minecraft:fluid", "minecraft:entity_type", "minecraft:game_event"};
 
-        for (const std::string& registryId : requiredRegistries) {
-            // Write registry identifier
-            tagBuffer.writeString(registryId);
-            
-            // For now, send empty tag arrays for each registry
-            // In a full implementation, you would load actual tag data
-            tagBuffer.writeVarInt(0); // Number of tags in this registry
-            
-            g_logger->logNetwork(DEBUG, "Added empty tag registry: " + registryId, "Configuration");
-        }
+		// Write number of registries
+		tagBuffer.writeVarInt(requiredRegistries.size());
 
-        // Create the final packet
-        Buffer finalBuf;
-        int packetId = 0x0D; // Update Tags packet ID
+		for (const std::string& registryId : requiredRegistries) {
+			// Write registry identifier
+			tagBuffer.writeString(registryId);
 
-        // Calculate total size including packet ID
-        int packetIdSize = packet.getVarintSize(packetId);
-        int totalPayloadSize = packetIdSize + tagBuffer.getData().size();
+			// For now, send empty tag arrays for each registry
+			// In a full implementation, you would load actual tag data
+			tagBuffer.writeVarInt(0); // Number of tags in this registry
 
-        // Write packet length
-        finalBuf.writeVarInt(totalPayloadSize);
-        // Write packet ID
-        finalBuf.writeVarInt(packetId);
-        // Write tag data
-        finalBuf.writeBytes(tagBuffer.getData());
+			g_logger->logNetwork(DEBUG, "Added empty tag registry: " + registryId, "Configuration");
+		}
 
-        // Create new packet for tags
-        Packet* tagsPacket = new Packet(packet);
-        tagsPacket->getData() = finalBuf;
-        tagsPacket->setPacketSize(finalBuf.getData().size());
-        tagsPacket->setReturnPacket(PACKET_SEND);
+		// Create the final packet
+		Buffer finalBuf;
+		int	   packetId = 0x0D; // Update Tags packet ID
 
-        // Queue the packet
-        outgoingPackets->push(tagsPacket);
+		// Calculate total size including packet ID
+		int packetIdSize	 = packet.getVarintSize(packetId);
+		int totalPayloadSize = packetIdSize + tagBuffer.getData().size();
 
-        g_logger->logNetwork(INFO, 
-            "Update Tags packet created with " + std::to_string(requiredRegistries.size()) + 
-            " registries, size: " + std::to_string(finalBuf.getData().size()) + " bytes", 
-            "Configuration");
+		// Write packet length
+		finalBuf.writeVarInt(totalPayloadSize);
+		// Write packet ID
+		finalBuf.writeVarInt(packetId);
+		// Write tag data
+		finalBuf.writeBytes(tagBuffer.getData());
 
-        packet.setReturnPacket(PACKET_OK);
+		// Create new packet for tags
+		Packet* tagsPacket	  = new Packet(packet);
+		tagsPacket->getData() = finalBuf;
+		tagsPacket->setPacketSize(finalBuf.getData().size());
+		tagsPacket->setReturnPacket(PACKET_SEND);
 
-    } catch (const std::exception& e) {
-        g_logger->logNetwork(ERROR, "Critical error in Update Tags processing: " + std::string(e.what()), "Configuration");
-        packet.setReturnPacket(PACKET_ERROR);
-    }
+		// Queue the packet
+		outgoingPackets->push(tagsPacket);
+
+		g_logger->logNetwork(INFO,
+							 "Update Tags packet created with " + std::to_string(requiredRegistries.size()) +
+									 " registries, size: " + std::to_string(finalBuf.getData().size()) + " bytes",
+							 "Configuration");
+
+		packet.setReturnPacket(PACKET_OK);
+
+	} catch (const std::exception& e) {
+		g_logger->logNetwork(ERROR, "Critical error in Update Tags processing: " + std::string(e.what()), "Configuration");
+		packet.setReturnPacket(PACKET_ERROR);
+	}
 }
