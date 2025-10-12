@@ -133,9 +133,9 @@ void handleConfigurationState(Packet* packet, Server& server) {
 		sendRegistryData(*packet, server);
 
 		// After processing client info and sending registry data, tell client we're done configuring
-		Packet* finishPacket = new Packet(*packet);
-		handleFinishConfiguration(*finishPacket, server);
-		server.getNetworkManager().getOutgoingQueue()->push(finishPacket);
+		// Packet* finishPacket = new Packet(*packet);
+		// handleFinishConfiguration(*finishPacket, server);
+		// server.getNetworkManager().getOutgoingQueue()->push(finishPacket);
 		// g_logger->logNetwork(INFO, "Sent Finish Configuration after Client Information",
 		// "Configuration");
 

@@ -4,10 +4,24 @@
 #include "RegistryData.hpp"
 #include "network/packet.hpp"
 #include "network/server.hpp"
+#include "minecraftRegistries.hpp"
+
+#include <vector>
+#include <string>
+#include <map>
 
 /**
  * Utility functions for handling Registry Data packets and operations
  */
+
+/**
+ * Parses the minecraft_registries.h file data into a vector of RegistryData objects.
+ * This function processes the MINECRAFT_REGISTRIES map and converts each registry
+ * into a RegistryData object suitable for network transmission.
+ *
+ * @return Vector of RegistryData objects parsed from minecraft_registries.h
+ */
+std::vector<RegistryData> parseMinecraftRegistries();
 
 /**
  * Sends Registry Data packet (0x07) to client during configuration phase.
@@ -29,7 +43,6 @@ RegistryData createCombinedRegistryData();
 /**
  * Validates a RegistryData object for correctness and consistency.
  * Checks for empty registry IDs, duplicate entry IDs, and other validation rules.
- * Note: Implementation is in registryData.cpp
  *
  * @param registry The RegistryData object to validate
  * @return true if the registry is valid, false otherwise
@@ -120,6 +133,7 @@ void sendRegistryDataBatch(Packet& packet, Server& server, const std::vector<Reg
 
 /**
  * Creates all essential registries and returns them as a vector.
+ * Uses parseMinecraftRegistries() as the primary method, with fallback to legacy method.
  *
  * @return Vector of RegistryData objects for all essential registries
  */
@@ -142,5 +156,85 @@ bool saveRegistryToFile(const RegistryData& registry, const std::string& filenam
  * @return true if successful, false otherwise
  */
 bool loadRegistryFromFile(RegistryData& registry, const std::string& filename);
+
+/**
+ * Creates a registry data object from parsed minecraft_registries.h entry.
+ *
+ * @param registryName The registry name/ID
+ * @param registryEntries Vector of registry entries
+ * @return RegistryData object populated with the entries
+ */
+RegistryData createRegistryFromEntries(const std::string& registryName, const std::vector<RegistryEntry>& registryEntries);
+
+/**
+ * Filters registries by name pattern.
+ *
+ * @param registries Vector of RegistryData objects to filter
+ * @param pattern Pattern to match against registry names
+ * @param useRegex Whether to use regex matching (default: false, uses simple contains)
+ * @return Vector of matching RegistryData objects
+ */
+std::vector<RegistryData> filterRegistriesByName(const std::vector<RegistryData>& registries, const std::string& pattern, bool useRegex = false);
+
+/**
+ * Gets statistics about a collection of registries.
+ *
+ * @param registries Vector of RegistryData objects
+ * @return Map containing statistics (total_registries, total_entries, avg_entries_per_registry, etc.)
+ */
+std::map<std::string, size_t> getRegistryStatistics(const std::vector<RegistryData>& registries);
+
+/**
+ * Converts a RegistryData object to a human-readable string representation.
+ *
+ * @param registry The RegistryData object to convert
+ * @param includeEntries Whether to include all entries in the output
+ * @param maxEntries Maximum number of entries to include (0 = all)
+ * @return String representation of the registry
+ */
+std::string registryToString(const RegistryData& registry, bool includeEntries = false, size_t maxEntries = 10);
+
+/**
+ * Creates a minimal registry with only specified entries.
+ *
+ * @param registryName Name of the registry
+ * @param entryNames Vector of entry names to include
+ * @return RegistryData object with only the specified entries
+ */
+RegistryData createMinimalRegistry(const std::string& registryName, const std::vector<std::string>& entryNames);
+
+/**
+ * Validates that all registries in a vector are consistent and valid.
+ *
+ * @param registries Vector of RegistryData objects to validate
+ * @return true if all registries are valid, false otherwise
+ */
+bool validateAllRegistries(const std::vector<RegistryData>& registries);
+
+/**
+ * Sorts registries by various criteria.
+ *
+ * @param registries Vector of RegistryData objects to sort (modified in place)
+ * @param sortBy Sorting criteria: "name", "size", "entries"
+ * @param ascending Whether to sort in ascending order
+ */
+void sortRegistries(std::vector<RegistryData>& registries, const std::string& sortBy = "name", bool ascending = true);
+
+/**
+ * Finds a specific registry by name in a vector.
+ *
+ * @param registries Vector of RegistryData objects to search
+ * @param registryName Name of the registry to find
+ * @return Pointer to the found registry, or nullptr if not found
+ */
+const RegistryData* findRegistryByName(const std::vector<RegistryData>& registries, const std::string& registryName);
+
+/**
+ * Creates a backup copy of all registries.
+ *
+ * @param registries Vector of RegistryData objects to backup
+ * @return Deep copy of all registries
+ */
+std::vector<RegistryData> backupRegistries(const std::vector<RegistryData>& registries);
 
 #endif // MC_CPP_SERVER_DATA_REGISTRY_UTILS_HPP
