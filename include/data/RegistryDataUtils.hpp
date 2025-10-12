@@ -44,9 +44,7 @@ bool validateRegistryData(const RegistryData& registry);
  * @param addNamespace Whether to add "minecraft:" namespace to the registry ID
  * @return RegistryData object populated with the provided data
  */
-RegistryData createRegistryFromMap(const std::string& registryName,
-                                  const std::map<std::string, uint32_t>& registryData,
-                                  bool addNamespace = true);
+RegistryData createRegistryFromMap(const std::string& registryName, const std::map<std::string, uint32_t>& registryData, bool addNamespace = true);
 
 /**
  * Serializes a RegistryData object into a complete packet buffer ready to send.
@@ -109,8 +107,7 @@ bool compareRegistries(const RegistryData& reg1, const RegistryData& reg2);
  * @param mergedRegistryName Name for the merged registry
  * @return RegistryData object containing all merged entries
  */
-RegistryData mergeRegistries(const std::vector<RegistryData>& registries,
-                            const std::string& mergedRegistryName);
+RegistryData mergeRegistries(const std::vector<RegistryData>& registries, const std::string& mergedRegistryName);
 
 /**
  * Sends multiple RegistryData objects as separate packets in a batch.

@@ -1,4 +1,5 @@
 #include "RegistryData.hpp"
+
 #include "RegistryIds.hpp"
 #include "logger.hpp"
 #include "network/networking.hpp"
@@ -48,21 +49,19 @@ void sendRegistryData(Packet& packet, Server& server) {
 			std::map<std::string, uint32_t> data;
 		};
 
-		std::vector<RegistryInfo> essentialRegistries = {
-			{"block", registryIds.getBlock()},
-			{"item", registryIds.getItem()},
-			{"entity_type", registryIds.getEntityType()},
-			{"sound_event", registryIds.getSoundEvent()},
-			{"particle_type", registryIds.getParticleType()},
-			{"mob_effect", registryIds.getMobEffect()},
-			{"block_entity_type", registryIds.getBlockEntityType()},
-			{"menu", registryIds.getMenu()},
-			{"recipe_type", registryIds.getRecipeType()},
-			{"recipe_serializer", registryIds.getRecipeSerializer()}
-		};
+		std::vector<RegistryInfo> essentialRegistries = {{"block", registryIds.getBlock()},
+														 {"item", registryIds.getItem()},
+														 {"entity_type", registryIds.getEntityType()},
+														 {"sound_event", registryIds.getSoundEvent()},
+														 {"particle_type", registryIds.getParticleType()},
+														 {"mob_effect", registryIds.getMobEffect()},
+														 {"block_entity_type", registryIds.getBlockEntityType()},
+														 {"menu", registryIds.getMenu()},
+														 {"recipe_type", registryIds.getRecipeType()},
+														 {"recipe_serializer", registryIds.getRecipeSerializer()}};
 
 		int successfulRegistries = 0;
-		int totalPacketsSent = 0;
+		int totalPacketsSent	 = 0;
 
 		// Process each registry
 		for (const auto& registryInfo : essentialRegistries) {
@@ -116,18 +115,16 @@ void sendRegistryData(Packet& packet, Server& server) {
 
 				g_logger->logNetwork(INFO,
 									 "Registry Data packet created for '" + registryInfo.registryName + "' with " +
-									 std::to_string(registryData.getEntryCount()) + " entries, size: " +
-									 std::to_string(finalBuf.getData().size()) + " bytes",
+											 std::to_string(registryData.getEntryCount()) +
+											 " entries, size: " + std::to_string(finalBuf.getData().size()) + " bytes",
 									 "Configuration");
 
 				// Log debug information about the registry
 				g_logger->logNetwork(DEBUG, "Registry details: " + registryData.toString(), "Configuration");
 
 			} catch (const std::exception& e) {
-				g_logger->logNetwork(ERROR,
-									 "Failed to create registry packet for '" + registryInfo.registryName +
-									 "': " + std::string(e.what()),
-									 "Configuration");
+				g_logger->logNetwork(
+						ERROR, "Failed to create registry packet for '" + registryInfo.registryName + "': " + std::string(e.what()), "Configuration");
 				// Continue with other registries instead of failing completely
 				continue;
 			}
@@ -135,9 +132,9 @@ void sendRegistryData(Packet& packet, Server& server) {
 
 		// Log summary
 		g_logger->logNetwork(INFO,
-							 "Registry Data processing complete: " + std::to_string(successfulRegistries) +
-							 "/" + std::to_string(essentialRegistries.size()) + " registries processed, " +
-							 std::to_string(totalPacketsSent) + " packets queued",
+							 "Registry Data processing complete: " + std::to_string(successfulRegistries) + "/" +
+									 std::to_string(essentialRegistries.size()) + " registries processed, " + std::to_string(totalPacketsSent) +
+									 " packets queued",
 							 "Configuration");
 
 		if (successfulRegistries == 0) {
@@ -160,22 +157,20 @@ void sendRegistryData(Packet& packet, Server& server) {
  */
 RegistryData createCombinedRegistryData() {
 	RegistryData combinedRegistry("minecraft:combined");
-	RegistryIds registryIds;
+	RegistryIds	 registryIds;
 
 	try {
 		// Add entries from all essential registries
-		std::vector<std::pair<std::string, std::map<std::string, uint32_t>>> registries = {
-			{"block", registryIds.getBlock()},
-			{"item", registryIds.getItem()},
-			{"entity_type", registryIds.getEntityType()},
-			{"sound_event", registryIds.getSoundEvent()},
-			{"particle_type", registryIds.getParticleType()},
-			{"mob_effect", registryIds.getMobEffect()},
-			{"block_entity_type", registryIds.getBlockEntityType()},
-			{"menu", registryIds.getMenu()},
-			{"recipe_type", registryIds.getRecipeType()},
-			{"recipe_serializer", registryIds.getRecipeSerializer()}
-		};
+		std::vector<std::pair<std::string, std::map<std::string, uint32_t>>> registries = {{"block", registryIds.getBlock()},
+																						   {"item", registryIds.getItem()},
+																						   {"entity_type", registryIds.getEntityType()},
+																						   {"sound_event", registryIds.getSoundEvent()},
+																						   {"particle_type", registryIds.getParticleType()},
+																						   {"mob_effect", registryIds.getMobEffect()},
+																						   {"block_entity_type", registryIds.getBlockEntityType()},
+																						   {"menu", registryIds.getMenu()},
+																						   {"recipe_type", registryIds.getRecipeType()},
+																						   {"recipe_serializer", registryIds.getRecipeSerializer()}};
 
 		size_t totalEntries = 0;
 		for (const auto& reg : registries) {
@@ -193,10 +188,8 @@ RegistryData createCombinedRegistryData() {
 		}
 
 		if (g_logger) {
-			g_logger->logNetwork(INFO,
-								 "Created combined registry with " + std::to_string(combinedRegistry.getEntryCount()) +
-								 " total entries",
-								 "Configuration");
+			g_logger->logNetwork(
+					INFO, "Created combined registry with " + std::to_string(combinedRegistry.getEntryCount()) + " total entries", "Configuration");
 		}
 
 	} catch (const std::exception& e) {
