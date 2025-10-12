@@ -11,3 +11,4 @@ logs
 
 # Test server directory
 test-server
+include/external
