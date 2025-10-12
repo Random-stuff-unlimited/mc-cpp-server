@@ -2,13 +2,13 @@
 #define MC_CPP_SERVER_DATA_REGISTRY_UTILS_HPP
 
 #include "RegistryData.hpp"
+#include "minecraftRegistries.hpp"
 #include "network/packet.hpp"
 #include "network/server.hpp"
-#include "minecraftRegistries.hpp"
 
-#include <vector>
-#include <string>
 #include <map>
+#include <string>
+#include <vector>
 
 /**
  * Utility functions for handling Registry Data packets and operations
