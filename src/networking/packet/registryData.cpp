@@ -1,4 +1,5 @@
-#include "data/RegistryIds.hpp"
+#include "RegistryData.hpp"
+#include "RegistryIds.hpp"
 #include "logger.hpp"
 #include "network/networking.hpp"
 #include "network/packet.hpp"
@@ -8,8 +9,9 @@
 /**
  * Sends Registry Data packet (0x07) to client during configuration phase.
  *
- * This implementation sends only essential registries that are commonly required
- * by Minecraft clients. Sending too many registries can cause connection issues.
+ * This implementation uses the new RegistryData class for better structure
+ * and error handling. It sends only essential registries that are commonly
+ * required by Minecraft clients.
  *
  * Packet structure (Configuration phase, ID 0x07):
  * - Registry ID (Identifier): The registry identifier (e.g., "minecraft:block")
@@ -17,10 +19,11 @@
  *   - Length (VarInt): Number of entries
  *   - For each entry:
  *     - Entry ID (Identifier): Entry name (e.g., "minecraft:stone")
- *     - Has Data (Boolean): Whether this entry has NBT data (always false)
+ *     - Has Data (Boolean): Whether this entry has NBT data (always false for basic registries)
+ *     - Data (Optional NBT): NBT data if has_data is true
  */
 void sendRegistryData(Packet& packet, Server& server) {
-	g_logger->logNetwork(INFO, "=== Sending essential Registry Data packets (0x07) ===", "Configuration");
+	g_logger->logNetwork(INFO, "=== Sending Registry Data packets (0x07) using new RegistryData class ===", "Configuration");
 
 	Player* player = packet.getPlayer();
 	if (!player) {
@@ -39,87 +42,168 @@ void sendRegistryData(Packet& packet, Server& server) {
 	try {
 		RegistryIds registryIds;
 
-		// Define essential registries only - these are the most commonly required
+		// Define essential registries with their data sources
 		struct RegistryInfo {
 			std::string						registryName;
 			std::map<std::string, uint32_t> data;
 		};
 
-		std::vector<RegistryInfo> essentialRegistries = {{"block", registryIds.getBlock()},
-														 {"item", registryIds.getItem()},
-														 {"entity_type", registryIds.getEntityType()},
-														 {"sound_event", registryIds.getSoundEvent()},
-														 {"particle_type", registryIds.getParticleType()},
-														 {"mob_effect", registryIds.getMobEffect()},
-														 {"block_entity_type", registryIds.getBlockEntityType()},
-														 {"menu", registryIds.getMenu()},
-														 {"recipe_type", registryIds.getRecipeType()},
-														 {"recipe_serializer", registryIds.getRecipeSerializer()}};
+		std::vector<RegistryInfo> essentialRegistries = {
+			{"block", registryIds.getBlock()},
+			{"item", registryIds.getItem()},
+			{"entity_type", registryIds.getEntityType()},
+			{"sound_event", registryIds.getSoundEvent()},
+			{"particle_type", registryIds.getParticleType()},
+			{"mob_effect", registryIds.getMobEffect()},
+			{"block_entity_type", registryIds.getBlockEntityType()},
+			{"menu", registryIds.getMenu()},
+			{"recipe_type", registryIds.getRecipeType()},
+			{"recipe_serializer", registryIds.getRecipeSerializer()}
+		};
 
-		// Send each registry as a separate packet
-		for (const auto& registry : essentialRegistries) {
+		int successfulRegistries = 0;
+		int totalPacketsSent = 0;
+
+		// Process each registry
+		for (const auto& registryInfo : essentialRegistries) {
 			// Skip empty registries
-			if (registry.data.empty()) {
-				g_logger->logNetwork(WARN, "Skipping empty registry: " + registry.registryName, "Configuration");
+			if (registryInfo.data.empty()) {
+				g_logger->logNetwork(WARN, "Skipping empty registry: " + registryInfo.registryName, "Configuration");
 				continue;
 			}
 
-			// Create payload buffer for this registry
-			Buffer payloadBuf;
+			try {
+				// Create RegistryData object
+				RegistryData registryData("minecraft:" + registryInfo.registryName);
 
-			// Write registry identifier (namespace:path format)
-			payloadBuf.writeIdentifier("minecraft:" + registry.registryName);
+				// Reserve space for efficiency
+				registryData.reserve(registryInfo.data.size());
 
-			// Write the number of entries in this registry
-			payloadBuf.writeVarInt(static_cast<int>(registry.data.size()));
+				// Add all entries to the registry (basic registries don't have NBT data)
+				for (const auto& entry : registryInfo.data) {
+					registryData.addEntry(entry.first, false); // has_data = false for basic registries
+				}
 
-			// Write each entry in the registry
-			for (const auto& entry : registry.data) {
-				// Write entry identifier
-				payloadBuf.writeIdentifier(entry.first);
+				// Serialize the registry data
+				std::vector<uint8_t> serializedData = registryData.serialize();
 
-				// Write whether the entry has data (always false for basic registries)
-				payloadBuf.writeBool(false);
+				// Create the final packet with proper structure
+				Buffer finalBuf;
+				int	   packetId = RegistryData::PACKET_ID; // 0x07
+
+				// Calculate total size including packet ID
+				int packetIdSize	 = packet.getVarintSize(packetId);
+				int totalPayloadSize = packetIdSize + serializedData.size();
+
+				// Write packet length
+				finalBuf.writeVarInt(totalPayloadSize);
+				// Write packet ID
+				finalBuf.writeVarInt(packetId);
+				// Write serialized registry data
+				finalBuf.writeBytes(serializedData);
+
+				// Create new packet for this registry
+				Packet* registryPacket	  = new Packet(packet);
+				registryPacket->getData() = finalBuf;
+				registryPacket->setPacketSize(finalBuf.getData().size());
+				registryPacket->setReturnPacket(PACKET_SEND);
+
+				// Queue the packet
+				outgoingPackets->push(registryPacket);
+
+				successfulRegistries++;
+				totalPacketsSent++;
+
+				g_logger->logNetwork(INFO,
+									 "Registry Data packet created for '" + registryInfo.registryName + "' with " +
+									 std::to_string(registryData.getEntryCount()) + " entries, size: " +
+									 std::to_string(finalBuf.getData().size()) + " bytes",
+									 "Configuration");
+
+				// Log debug information about the registry
+				g_logger->logNetwork(DEBUG, "Registry details: " + registryData.toString(), "Configuration");
+
+			} catch (const std::exception& e) {
+				g_logger->logNetwork(ERROR,
+									 "Failed to create registry packet for '" + registryInfo.registryName +
+									 "': " + std::string(e.what()),
+									 "Configuration");
+				// Continue with other registries instead of failing completely
+				continue;
 			}
+		}
 
-			// Create the final packet with proper structure
-			Buffer finalBuf;
-			int	   packetId = 0x07; // Registry Data packet ID for configuration mode
+		// Log summary
+		g_logger->logNetwork(INFO,
+							 "Registry Data processing complete: " + std::to_string(successfulRegistries) +
+							 "/" + std::to_string(essentialRegistries.size()) + " registries processed, " +
+							 std::to_string(totalPacketsSent) + " packets queued",
+							 "Configuration");
 
-			// Calculate total size including packet ID
-			int packetIdSize	 = packet.getVarintSize(packetId);
-			int totalPayloadSize = packetIdSize + payloadBuf.getData().size();
+		if (successfulRegistries == 0) {
+			g_logger->logNetwork(ERROR, "No registry data packets were successfully created", "Configuration");
+			packet.setReturnPacket(PACKET_ERROR);
+		} else {
+			// Set return packet to OK since we've queued at least some registry packets
+			packet.setReturnPacket(PACKET_OK);
+		}
 
-			// Write packet length
-			finalBuf.writeVarInt(totalPayloadSize);
-			// Write packet ID
-			finalBuf.writeVarInt(packetId);
-			// Write payload
-			finalBuf.writeBytes(payloadBuf.getData());
+	} catch (const std::exception& e) {
+		g_logger->logNetwork(ERROR, "Critical error in Registry Data processing: " + std::string(e.what()), "Configuration");
+		packet.setReturnPacket(PACKET_ERROR);
+	}
+}
 
-			// Create new packet for this registry
-			Packet* registryPacket	  = new Packet(packet);
-			registryPacket->getData() = finalBuf;
-			registryPacket->setPacketSize(finalBuf.getData().size());
-			registryPacket->setReturnPacket(PACKET_SEND);
+/**
+ * Alternative function to create a single RegistryData object with all registries
+ * This can be used if you prefer to send all registries in one packet instead of separate packets
+ */
+RegistryData createCombinedRegistryData() {
+	RegistryData combinedRegistry("minecraft:combined");
+	RegistryIds registryIds;
 
-			// Queue the packet
-			outgoingPackets->push(registryPacket);
+	try {
+		// Add entries from all essential registries
+		std::vector<std::pair<std::string, std::map<std::string, uint32_t>>> registries = {
+			{"block", registryIds.getBlock()},
+			{"item", registryIds.getItem()},
+			{"entity_type", registryIds.getEntityType()},
+			{"sound_event", registryIds.getSoundEvent()},
+			{"particle_type", registryIds.getParticleType()},
+			{"mob_effect", registryIds.getMobEffect()},
+			{"block_entity_type", registryIds.getBlockEntityType()},
+			{"menu", registryIds.getMenu()},
+			{"recipe_type", registryIds.getRecipeType()},
+			{"recipe_serializer", registryIds.getRecipeSerializer()}
+		};
 
+		size_t totalEntries = 0;
+		for (const auto& reg : registries) {
+			totalEntries += reg.second.size();
+		}
+
+		combinedRegistry.reserve(totalEntries);
+
+		for (const auto& reg : registries) {
+			for (const auto& entry : reg.second) {
+				// Prefix entry IDs with registry type for disambiguation
+				std::string prefixedId = reg.first + ":" + entry.first;
+				combinedRegistry.addEntry(prefixedId, false);
+			}
+		}
+
+		if (g_logger) {
 			g_logger->logNetwork(INFO,
-								 "Registry Data packet created for '" + registry.registryName + "' with " + std::to_string(registry.data.size()) +
-										 " entries, size: " + std::to_string(finalBuf.getData().size()) + " bytes",
+								 "Created combined registry with " + std::to_string(combinedRegistry.getEntryCount()) +
+								 " total entries",
 								 "Configuration");
 		}
 
-		g_logger->logNetwork(
-				INFO, "All " + std::to_string(essentialRegistries.size()) + " essential Registry Data packets queued successfully", "Configuration");
-
-		// Set return packet to OK since we've queued all the registry packets
-		packet.setReturnPacket(PACKET_OK);
-
 	} catch (const std::exception& e) {
-		g_logger->logNetwork(ERROR, "Error creating Registry Data packets: " + std::string(e.what()), "Configuration");
-		packet.setReturnPacket(PACKET_ERROR);
+		if (g_logger) {
+			g_logger->logNetwork(ERROR, "Failed to create combined registry: " + std::string(e.what()), "Configuration");
+		}
 	}
+
+	return combinedRegistry;
 }

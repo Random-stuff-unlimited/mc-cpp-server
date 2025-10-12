@@ -1,3 +1,3 @@
-[submodule "data-generator"]
-	path = data-generator
+[submodule "external/data-generator"]
+	path = external/data-generator
 	url = https://github.com/Random-stuff-unlimited/data-generator.git

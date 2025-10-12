@@ -18,7 +18,7 @@ CXX             := g++
 CXXFLAGS        := -std=c++20 -Wall -Wextra -Wpedantic -O2
 DEBUG_FLAGS     := -g -DDEBUG -O0
 RELEASE_FLAGS   := -DNDEBUG -O3
-INCLUDE_FLAGS   := -I$(INCLUDE_DIR)
+INCLUDE_FLAGS   := -I$(INCLUDE_DIR) -I$(INCLUDE_DIR)/data -I$(INCLUDE_DIR)/network -I$(INCLUDE_DIR)/world -I$(INCLUDE_DIR)/lib
 
 # Linker flags (add your libraries here)
 LDFLAGS         :=
