@@ -14,6 +14,8 @@ void handlePlayState(Packet* packet, Server& server);
 void sendDisconnectPacket(Packet* packet, const std::string& reason, Server& server);
 void initGameSequence(Packet* packet, Server& server);
 void sendRegistryData(Packet& packet, Server& server);
+void sendUpdateTags(Packet& packet, Server& server);
+void sendCompleteConfigurationSequence(Packet* packet, Server& server);
 
 // ========================================
 // Main Packet Router
@@ -124,20 +126,12 @@ void handleLoginState(Packet* packet, Server& server) {
 void handleConfigurationState(Packet* packet, Server& server) {
 	if (packet->getId() == 0x00) {
 		// Client Information (configuration)
-		// g_logger->logNetwork(INFO, "Received Client Information in Configuration state",
-		// "Configuration");
+		g_logger->logNetwork(INFO, "Received Client Information in Configuration state", "Configuration");
 		handleClientInformation(*packet, server);
 		packet->setReturnPacket(PACKET_OK);
 
-		// Send Registry Data first (this will queue multiple packets, one per registry)
-		sendRegistryData(*packet, server);
-
-		// After processing client info and sending registry data, tell client we're done configuring
-		// Packet* finishPacket = new Packet(*packet);
-		// handleFinishConfiguration(*finishPacket, server);
-		// server.getNetworkManager().getOutgoingQueue()->push(finishPacket);
-		// g_logger->logNetwork(INFO, "Sent Finish Configuration after Client Information",
-		// "Configuration");
+		// Send complete configuration sequence
+		sendCompleteConfigurationSequence(packet, server);
 
 	} else if (packet->getId() == 0x01) {
 		// Cookie Response (configuration)
@@ -299,6 +293,53 @@ void initGameSequence(Packet* packet, Server& server) {
 		packet->setReturnPacket(PACKET_OK);
 	} catch (const std::exception& e) {
 		g_logger->logNetwork(ERROR, "Error in game sequence: " + std::string(e.what()), "PacketRouter");
+		packet->setReturnPacket(PACKET_ERROR);
+	}
+}
+
+// ========================================
+// Complete Configuration Sequence
+// ========================================
+
+void sendCompleteConfigurationSequence(Packet* packet, Server& server) {
+	if (!packet || !server.getNetworkManager().getOutgoingQueue()) {
+		g_logger->logNetwork(ERROR, "Invalid packet or server in configuration sequence", "Configuration");
+		return;
+	}
+
+	Player* player = packet->getPlayer();
+	if (!player) {
+		g_logger->logNetwork(ERROR, "No player found for configuration sequence", "Configuration");
+		return;
+	}
+
+	g_logger->logNetwork(INFO, "=== Starting Complete Configuration Sequence ===", "Configuration");
+
+	try {
+		// 1. Send Registry Data (this will queue multiple packets, one per registry)
+		g_logger->logNetwork(INFO, "Step 1: Sending Registry Data", "Configuration");
+		sendRegistryData(*packet, server);
+
+		// 2. Send Update Tags after Registry Data
+		g_logger->logNetwork(INFO, "Step 2: Sending Update Tags", "Configuration");
+		sendUpdateTags(*packet, server);
+
+		// 3. TODO: Add other configuration packets here if needed
+		// - Feature Flags
+		// - Data Packs
+		// - Resource Packs
+		// - Custom Payloads
+
+		// 4. Send Finish Configuration to complete the sequence
+		g_logger->logNetwork(INFO, "Step 3: Sending Finish Configuration", "Configuration");
+		Packet* finishPacket = new Packet(*packet);
+		handleFinishConfiguration(*finishPacket, server);
+		server.getNetworkManager().getOutgoingQueue()->push(finishPacket);
+
+		g_logger->logNetwork(INFO, "=== Configuration Sequence Completed Successfully ===", "Configuration");
+
+	} catch (const std::exception& e) {
+		g_logger->logNetwork(ERROR, "Error in configuration sequence: " + std::string(e.what()), "Configuration");
 		packet->setReturnPacket(PACKET_ERROR);
 	}
 }

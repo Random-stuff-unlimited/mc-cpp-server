@@ -10,7 +10,6 @@ struct Tag {
 };
 
 const std::unordered_map<std::string, std::vector<Tag>> RegistriesTags = {
-		{"minecraft:dialog", {{"minecraft:pause_screen_additions", {}}, {"minecraft:quick_actions", {}}}},
 		{"minecraft:point_of_interest_type",
 		 {{"minecraft:bee_home", {15, 16}},
 		  {"minecraft:acquirable_job_site", {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12}},
