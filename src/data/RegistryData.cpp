@@ -1,5 +1,4 @@
 #include "data/RegistryData.hpp"
-
 #include "network/buffer.hpp"
 
 #include <stdexcept>
@@ -47,17 +46,20 @@ std::vector<uint8_t> RegistryData::serialize() const {
 	try {
 		Buffer buffer;
 
+		// Format MC 1.21.5: id + entries length + entries array
 		buffer.writeIdentifier(_registry_id);
-
 		buffer.writeVarInt(static_cast<int32_t>(_entries.size()));
 
 		for (const auto& entry : _entries) {
+			// Chaque entrée: key (string) + value optional (anonymousNbt)
 			buffer.writeIdentifier(entry.entry_id);
 
-			buffer.writeBool(entry.has_data);
-
+			// Format "value optional": boolean présent + données NBT si présent
 			if (entry.has_data && entry.data.has_value()) {
-				buffer.writeNBT("{}");
+				buffer.writeBool(true); // Données présentes
+				buffer.writeNBT("{}");	// Données NBT (vide pour l'instant)
+			} else {
+				buffer.writeBool(false); // Pas de données NBT optionnelles
 			}
 		}
 

@@ -149,7 +149,7 @@ void handleConfigurationState(Packet* packet, Server& server) {
 		// Acknowledge Finish Configuration -> enter Play
 		g_logger->logNetwork(INFO, "Received Acknowledge Finish Configuration - transitioning to Play state", "PacketRouter");
 		handleAcknowledgeFinishConfiguration(*packet, server);
-		initGameSequence(packet, server);
+		// initGameSequence(packet, server);
 
 	} else if (packet->getId() == 0x04) {
 		// Keep Alive (configuration)

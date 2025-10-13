@@ -1,6 +1,5 @@
-#include "network/buffer.hpp"
-
 #include "lib/UUID.hpp"
+#include "network/buffer.hpp"
 
 #include <cstdint>
 #include <stdexcept>
@@ -131,7 +130,23 @@ void Buffer::writeLong(long value) {
 
 void Buffer::writeBool(bool value) { writeByte(value ? 0x01 : 0x00); }
 
-void Buffer::writeNBT(const std::string& nbtData) { writeBytes(nbtData); }
+void Buffer::writeNBT(const std::string& nbtData) {
+	// Format anonymousNbt pour MC 1.21.5 - compound NBT minimal mais valide
+	if (nbtData == "{}") {
+		// Compound NBT vide mais valide:
+		// TAG_String + nom vide + valeur vide + TAG_End
+		writeByte(0x08); // TAG_String
+		writeVarInt(0);	 // Nom de longueur 0 (anonyme)
+		writeVarInt(0);	 // Valeur string vide
+		writeByte(0x00); // TAG_End pour fermer le compound
+	} else {
+		// Pour autres données NBT, utiliser la même structure minimale
+		writeByte(0x08); // TAG_String
+		writeVarInt(0);	 // Nom de longueur 0
+		writeVarInt(0);	 // Valeur string vide
+		writeByte(0x00); // TAG_End
+	}
+}
 
 void Buffer::writePosition(int32_t x, int32_t y, int32_t z) {
 	int64_t packed = ((int64_t)(x & 0x3FFFFFF) << 38) | ((int64_t)(y & 0xFFF) << 26) | (int64_t)(z & 0x3FFFFFF);

@@ -1,6 +1,5 @@
-#include "RegistryDataUtils.hpp"
-
 #include "RegistryData.hpp"
+#include "RegistryDataUtils.hpp"
 #include "RegistryIds.hpp"
 #include "logger.hpp"
 #include "minecraftRegistries.hpp"
@@ -22,10 +21,14 @@ std::vector<RegistryData> parseMinecraftRegistries() {
 			const std::string& registryName = registryPair.first;
 			const Registry&	   registry		= registryPair.second;
 
+			// Ne pas ignorer les registres vides - les créer quand même
 			if (registry.entries.empty()) {
 				if (g_logger) {
-					g_logger->logNetwork(WARN, "Skipping empty registry: " + registryName, "RegistryData");
+					g_logger->logNetwork(WARN, "Creating empty registry: " + registryName, "RegistryData");
 				}
+				// Créer un registre vide au lieu de l'ignorer
+				RegistryData emptyRegistry(registryName);
+				registries.push_back(std::move(emptyRegistry));
 				continue;
 			}
 
@@ -34,7 +37,15 @@ std::vector<RegistryData> parseMinecraftRegistries() {
 			registryData.reserve(registry.entries.size());
 
 			for (const auto& entry : registry.entries) {
-				registryData.addEntry(entry.name, false);
+				// En MC 1.21.5, certains registres nécessitent des données NBT
+				bool needsNBT =
+						(registryName == "minecraft:damage_type" || registryName == "minecraft:dimension_type" ||
+						 registryName == "minecraft:enchantment" || registryName == "minecraft:worldgen/biome" ||
+						 registryName == "minecraft:banner_pattern" || registryName == "minecraft:trim_material" ||
+						 registryName == "minecraft:trim_pattern" || registryName == "minecraft:painting_variant" ||
+						 registryName == "minecraft:jukebox_song" || registryName == "minecraft:instrument" || registryName == "minecraft:chat_type");
+
+				registryData.addEntry(entry.name, needsNBT);
 			}
 
 			if (validateRegistryData(registryData)) {
@@ -100,9 +111,10 @@ bool validateRegistryData(const RegistryData& registry) {
 
 	if (registry.isEmpty()) {
 		if (g_logger) {
-			g_logger->logNetwork(WARN, "Registry validation: registry is empty", "RegistryData");
+			g_logger->logNetwork(WARN, "Registry validation: registry is empty - " + registry.getRegistryId(), "RegistryData");
 		}
-		return false;
+		// Ne pas rejeter les registres vides - MC 1.21.5 peut en avoir
+		// return false;
 	}
 
 	std::set<std::string> entryIds;
