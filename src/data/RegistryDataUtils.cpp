@@ -1,5 +1,6 @@
-#include "RegistryData.hpp"
 #include "RegistryDataUtils.hpp"
+
+#include "RegistryData.hpp"
 #include "RegistryIds.hpp"
 #include "logger.hpp"
 #include "minecraftRegistries.hpp"
