@@ -1,4 +1,5 @@
 #include "data/TagUtils.hpp"
+
 #include "logger.hpp"
 
 #include <algorithm>
