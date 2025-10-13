@@ -1,4 +1,5 @@
 #include "data/RegistryData.hpp"
+
 #include "network/buffer.hpp"
 
 #include <stdexcept>
