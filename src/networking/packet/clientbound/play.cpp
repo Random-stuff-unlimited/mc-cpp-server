@@ -10,84 +10,80 @@ void writePlayPacket(Packet& packet, Server& server) {
 
 	Buffer buf;
 
-	buf.writeByte(0x2B);
 	// 1. Entity ID
 	buf.writeInt(player->getPlayerID());
 
-	// 2. Is Hardcore (false)
+	// 2. Is hardcore
 	buf.writeBool(false);
 
-	// 3. Dimension Names (Prefixed Array)
-	buf.writeVarInt(3);
+	// 3. Dimension Names (Prefixed Array of Identifier)
+	buf.writeVarInt(3); // Number of dimensions
 	buf.writeString("minecraft:overworld");
 	buf.writeString("minecraft:the_nether");
 	buf.writeString("minecraft:the_end");
 
-	// 4. Max PLayer
-	buf.writeVarInt(server.getConfig().getServerSize());
+	// 4. Max Players
+	buf.writeVarInt(20);
 
-	// 5. view distance
-	buf.writeVarInt(5);
+	// 5. View Distance
+	buf.writeVarInt(10);
 
-	// 6. Reduced debug info
+	// 6. Simulation Distance
+	buf.writeVarInt(10);
+
+	// 7. Reduced Debug Info
 	buf.writeBool(false);
 
-	// 7. Enable respawn screen
+	// 8. Enable respawn screen
 	buf.writeBool(true);
 
-	// 8. Do limited crafting
+	// 9. Do limited crafting
 	buf.writeBool(false);
 
-	// 9. Dimension type
-	buf.writeVarInt(1);
+	// 10. Dimension Type (VarInt - registry ID)
+	buf.writeVarInt(0); // overworld dimension type ID
 
-	// 10. Dimension name
+	// 11. Dimension Name (Identifier)
 	buf.writeString("minecraft:overworld");
 
-	// 11. Hashed seed
-	buf.writeLong(12345678L);
+	// 12. Hashed seed
+	buf.writeLong(1L);
 
-	// 12. hashed seed
-	buf.writeLong(12345678L);
+	// 13. Game mode (Unsigned Byte)
+	buf.writeByte(1); // Creative
 
-	// 12. gamemode
-	buf.writeByte(0);
+	// 14. Previous Game mode (Byte)
+	buf.writeByte(-1); // Undefined
 
-	// 13. previous gamemode
-	buf.writeByte(0);
-
-	// 14. is debug
+	// 15. Is Debug
 	buf.writeBool(false);
 
-	// 15. is flat
-	buf.writeBool(false);
+	// 16. Is Flat
+	buf.writeBool(true);
 
-	// 16. has death location
-	buf.writeBool(false);
+	// 17. Has death location
+	bool hasDeathLocation = false; // Set to true if player has died
+	buf.writeBool(hasDeathLocation);
 
-	// 17. has death location
-	buf.writeBool(false);
+	// 18. Death dimension name (Optional - only if hasDeathLocation is true)
+	// 19. Death location (Optional - only if hasDeathLocation is true)
+	if (hasDeathLocation) {
+		buf.writeString("minecraft:overworld"); // Death dimension name
+		buf.writeLong(0); // Death location as Position (packed long)
+	}
 
-	// 18. death dimension
-	buf.writeString("minecraft:overworld");
-
-	// 19. death location
-	buf.writeDouble(0.0);
-	buf.writeDouble(0.0);
-	buf.writeDouble(0.0);
-
-	// 20. portal cooldown
+	// 20. Portal cooldown
 	buf.writeVarInt(0);
 
-	// 21. sea level
-	buf.writeVarInt(64);
+	// 21. Sea level
+	buf.writeVarInt(63);
 
-	// 22. enforces secure chat
+	// 22. Enforces Secure Chat
 	buf.writeBool(false);
 
 	Buffer final;
 
-	final.writeInt(buf.getData().size());
+	final.writeVarInt(buf.getData().size());
 	final.writeBytes(buf.getData());
 
 	packet.setPacketId(0x2B);

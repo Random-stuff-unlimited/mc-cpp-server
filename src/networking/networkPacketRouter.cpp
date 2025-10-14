@@ -268,26 +268,27 @@ void initGameSequence(Packet* packet, Server& server) {
 		writePlayPacket(*playPacket, server);
 		server.getNetworkManager().getOutgoingQueue()->push(playPacket);
 
+		// 4. Send player position and look - 0x41
+		// Packet* positionPacket = new Packet(*packet);
+		// sendPlayerPositionAndLook(*positionPacket, server); // rename packet
+		// server.getNetworkManager().getOutgoingQueue()->push(positionPacket);
+
 		// 2. Send Set Center Chunk - 0x57
-		Packet* setCenterPacket = new Packet(*packet);
-		writeSetCenterPacket(*setCenterPacket, server);
-		server.getNetworkManager().getOutgoingQueue()->push(setCenterPacket);
+		// Packet* setCenterPacket = new Packet(*packet);
+		// writeSetCenterPacket(*setCenterPacket, server);
+		// server.getNetworkManager().getOutgoingQueue()->push(setCenterPacket);
 
 		// 3. Send complete chunk batch sequence (Start -> Chunks -> Finished)
-		sendChunkBatchSequence(*packet, server);
+		// sendChunkBatchSequence(*packet, server);
 
-		// 4. Send player position and look - 0x41
-		Packet* positionPacket = new Packet(*packet);
-		sendPlayerPositionAndLook(*positionPacket, server);
-		server.getNetworkManager().getOutgoingQueue()->push(positionPacket);
 
 		// 5. Send spawn position - 0x5A
-		Packet* spawnPacket = new Packet(*packet);
-		sendSpawnPosition(*spawnPacket, server);
-		server.getNetworkManager().getOutgoingQueue()->push(spawnPacket);
+		// Packet* spawnPacket = new Packet(*packet);
+		// sendSpawnPosition(*spawnPacket, server);
+		// server.getNetworkManager().getOutgoingQueue()->push(spawnPacket);
 
 		// // 6. Complete spawn sequence (abilities, health, experience, time, held item)
-		completeSpawnSequence(*packet, server);
+		// completeSpawnSequence(*packet, server);
 
 		g_logger->logNetwork(INFO, "Complete game sequence sent to player: ", "PacketRouter");
 
