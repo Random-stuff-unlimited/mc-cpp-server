@@ -1,8 +1,7 @@
-#include "network/packet.hpp"
-
 #include "lib/json.hpp"
 #include "logger.hpp"
 #include "network/buffer.hpp"
+#include "network/packet.hpp"
 #include "network/server.hpp"
 #include "player.hpp"
 
@@ -23,7 +22,6 @@ Packet::~Packet() {}
 
 Packet::Packet(const Packet& other)
 	: _size(other._size), _id(other._id), _data(other._data), _player(other._player), _socketFd(other._socketFd), _returnPacket(other._returnPacket) {
-	std::cout << "[Packet] Copy constructor called" << std::endl;
 }
 
 Packet& Packet::operator=(const Packet& other) {
@@ -34,7 +32,6 @@ Packet& Packet::operator=(const Packet& other) {
 		_player		  = other._player;
 		_socketFd	  = other._socketFd;
 		_returnPacket = other._returnPacket;
-		std::cout << "[Packet] Assignment operator called" << std::endl;
 	}
 	return *this;
 }

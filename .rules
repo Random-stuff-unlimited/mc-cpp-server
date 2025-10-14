@@ -1,0 +1,5 @@
+1. Do not create markdown documentation.
+2. When creating code from scratch you should always make sure the code does work before reitering.
+3. When working on complex feature you always should ask for direction on data type the user might need.
+4. If you think a library header is needed to go futher stop and ask user. You can recommand a library.
+5. If not asked do not modify any code in any way.
