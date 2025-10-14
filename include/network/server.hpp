@@ -27,6 +27,7 @@ class Server {
 	IdManager						 _idManager;
 	World::Manager					 _worldManager;
 	World::LevelDat					 _worldData;
+	World::Query					 _worldQuery;
 
   public:
 	Server();
@@ -51,8 +52,11 @@ class Server {
 	IdManager& getIdManager() { return (_idManager); }
 
 	NetworkManager&	 getNetworkManager() { return *_networkManager; }
-	World::Manager&	 ManagManagererWorldManager() { return _worldManager; }
+	World::Manager&	 getWorldManager() { return _worldManager; }
 	World::LevelDat& getWorldData() { return _worldData; }
+	World::Query&	 getWorldQuery() { return _worldQuery; }
+
+	void printChunkInfo(const World::ChunkData& chunk);
 };
 
 #endif

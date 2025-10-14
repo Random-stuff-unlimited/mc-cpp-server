@@ -1,14 +1,14 @@
-#include "network/server.hpp"
-
 #include "config.hpp"
 #include "lib/filesystem.hpp"
 #include "lib/json.hpp"
 #include "logger.hpp"
 #include "network/networking.hpp"
+#include "network/server.hpp"
 #include "player.hpp"
 #include "world/world.hpp"
 
 #include <cstddef>
+#include <cstdio>
 #include <exception>
 #include <filesystem>
 #include <iostream>
@@ -17,7 +17,7 @@
 
 using json = nlohmann::json;
 
-Server::Server() : _playerLst(), _config(), _networkManager(nullptr) {}
+Server::Server() : _playerLst(), _config(), _networkManager(nullptr), _worldQuery(_worldManager) {}
 
 Server::~Server() {
 	if (_networkManager) {
@@ -71,6 +71,8 @@ int Server::start_server() {
 
 		std::filesystem::path regionFile = _worldManager.locateRegionFileByChunkCoord(0, 0);
 		g_logger->logGameInfo(INFO, "Region File: " + regionFile.string(), "SERVER");
+		World::ChunkData chunk = _worldQuery.fetchChunk(0, 0);
+		printChunkInfo(chunk);
 
 		size_t workerCount = 4;
 		if (workerCount == 0) workerCount = 4; // fallback
@@ -206,3 +208,86 @@ void Server::removePlayerToSample(const std::string& name) {
 
 int	 Server::getAmountOnline() { return _playerLst.size(); }
 json Server::getPlayerSample() { return _playerSample; }
+
+void Server::printChunkInfo(const World::ChunkData& chunk) {
+	g_logger->logGameInfo(INFO, "========== CHUNK DATA INFO ==========", "SERVER");
+
+	// Basic chunk information
+	g_logger->logGameInfo(INFO, "Chunk Coordinates: (" + std::to_string(chunk.chunkX) + ", " + std::to_string(chunk.chunkZ) + ")", "SERVER");
+	g_logger->logGameInfo(INFO, "Chunk Empty: " + std::string(chunk.isEmpty() ? "true" : "false"), "SERVER");
+
+	// Data vector sizes
+	g_logger->logGameInfo(INFO, "Block Data Size: " + std::to_string(chunk.blockData.size()) + " bytes", "SERVER");
+	g_logger->logGameInfo(INFO, "Biome Data Size: " + std::to_string(chunk.biomeData.size()) + " bytes", "SERVER");
+	g_logger->logGameInfo(INFO, "Heightmaps Size: " + std::to_string(chunk.heightmaps.size()) + " bytes", "SERVER");
+	g_logger->logGameInfo(INFO, "Block Entities Size: " + std::to_string(chunk.blockEntities.size()) + " bytes", "SERVER");
+	g_logger->logGameInfo(INFO, "Sky Light Size: " + std::to_string(chunk.skyLight.size()) + " bytes", "SERVER");
+	g_logger->logGameInfo(INFO, "Block Light Size: " + std::to_string(chunk.blockLight.size()) + " bytes", "SERVER");
+
+	// Calculate total data size
+	size_t totalSize = chunk.blockData.size() + chunk.biomeData.size() + chunk.heightmaps.size() + chunk.blockEntities.size() +
+					   chunk.skyLight.size() + chunk.blockLight.size();
+	g_logger->logGameInfo(INFO, "Total Chunk Data Size: " + std::to_string(totalSize) + " bytes", "SERVER");
+
+	// Analyze data content
+	if (!chunk.blockData.empty()) {
+		g_logger->logGameInfo(INFO, "Block Data: Contains " + std::to_string(chunk.blockData.size()) + " bytes of NBT block sections", "SERVER");
+
+		// Try to parse some basic NBT info if possible
+		try {
+			if (chunk.blockData.size() > 10) {
+				// Show first few bytes as hex for debugging
+				std::string hexStr = "First 10 bytes (hex): ";
+				for (size_t i = 0; i < std::min(static_cast<size_t>(10), chunk.blockData.size()); ++i) {
+					char hexChar[4];
+					snprintf(hexChar, sizeof(hexChar), "%02X ", static_cast<unsigned char>(chunk.blockData[i]));
+					hexStr += hexChar;
+				}
+				g_logger->logGameInfo(DEBUG, hexStr, "SERVER");
+			}
+		} catch (const std::exception& e) {
+			g_logger->logGameInfo(DEBUG, "Could not analyze block data: " + std::string(e.what()), "SERVER");
+		}
+	} else {
+		g_logger->logGameInfo(INFO, "Block Data: Empty (chunk not generated or air-only)", "SERVER");
+	}
+
+	if (!chunk.biomeData.empty()) {
+		g_logger->logGameInfo(INFO, "Biome Data: Contains biome information for 4x4x4 block cells", "SERVER");
+	} else {
+		g_logger->logGameInfo(INFO, "Biome Data: Empty (default biome used)", "SERVER");
+	}
+
+	if (!chunk.heightmaps.empty()) {
+		g_logger->logGameInfo(INFO, "Heightmaps: Contains terrain height data for performance optimization", "SERVER");
+	} else {
+		g_logger->logGameInfo(INFO, "Heightmaps: Empty (not calculated)", "SERVER");
+	}
+
+	if (!chunk.blockEntities.empty()) {
+		g_logger->logGameInfo(INFO,
+							  "Block Entities: Contains " + std::to_string(chunk.blockEntities.size()) +
+									  " bytes of special blocks (chests, furnaces, etc.)",
+							  "SERVER");
+	} else {
+		g_logger->logGameInfo(INFO, "Block Entities: No special blocks found", "SERVER");
+	}
+
+	if (!chunk.skyLight.empty()) {
+		g_logger->logGameInfo(INFO, "Sky Light: Contains natural lighting data (2048 bytes expected per 16x16x16 section)", "SERVER");
+	} else {
+		g_logger->logGameInfo(INFO, "Sky Light: No sky light data (underground sections or not calculated)", "SERVER");
+	}
+
+	if (!chunk.blockLight.empty()) {
+		g_logger->logGameInfo(INFO, "Block Light: Contains artificial lighting data from torches, glowstone, etc.", "SERVER");
+	} else {
+		g_logger->logGameInfo(INFO, "Block Light: No block light sources found", "SERVER");
+	}
+
+	// Minecraft chunk format info
+	g_logger->logGameInfo(INFO, "Note: Minecraft chunks are 16x384x16 blocks (Overworld) divided into 16x16x16 sections", "SERVER");
+	g_logger->logGameInfo(INFO, "Note: Block data uses palletized format with NBT compression for efficiency", "SERVER");
+
+	g_logger->logGameInfo(INFO, "====================================", "SERVER");
+}

@@ -14,7 +14,7 @@ void sendChunkData(Packet& packet, Server& server, int chunkX, int chunkZ) {
 
 	try {
 		// Use your new chunk loading system
-		World::Query	 query;
+		World::Query	 query	   = server.getWorldQuery();
 		World::ChunkData chunkData = query.fetchChunk(chunkX, chunkZ);
 
 		// Write chunk coordinates

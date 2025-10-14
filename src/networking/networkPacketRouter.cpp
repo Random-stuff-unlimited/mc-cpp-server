@@ -134,8 +134,6 @@ void handleConfigurationState(Packet* packet, Server& server) {
 		handleClientInformation(*packet, server);
 
 		// Send complete configuration sequence
-		sendCompleteConfigurationSequence(packet, server);
-		// initGameSequence(packet, server)
 	} else if (packet->getId() == 0x01) {
 		// Cookie Response (configuration)
 		g_logger->logNetwork(INFO, "Received Cookie Response in Configuration state", "Configuration");
@@ -151,7 +149,7 @@ void handleConfigurationState(Packet* packet, Server& server) {
 		// Acknowledge Finish Configuration -> enter Play
 		g_logger->logNetwork(INFO, "Received Acknowledge Finish Configuration - transitioning to Play state", "PacketRouter");
 		handleAcknowledgeFinishConfiguration(*packet, server);
-		// initGameSequence(packet, server);
+		initGameSequence(packet, server);
 
 	} else if (packet->getId() == 0x04) {
 		// Keep Alive (configuration)
@@ -172,8 +170,7 @@ void handleConfigurationState(Packet* packet, Server& server) {
 		// Serverbound Known Packs (configuration)
 		g_logger->logNetwork(INFO, "Received Serverbound Known Packs in Configuration state", "Configuration");
 		serverboundKnownPacks(*packet);
-		packet->setReturnPacket(PACKET_OK);
-
+		sendCompleteConfigurationSequence(packet, server);
 	} else if (packet->getId() == 0x08) {
 		// Custom Click Action (configuration)
 		g_logger->logNetwork(INFO, "Serverbound known packs", "Configuration");

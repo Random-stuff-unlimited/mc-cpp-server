@@ -74,23 +74,31 @@ namespace World {
 
 	class Manager {
 	  public:
-		static std::vector<uint8_t>	 decompressGzip(std::filesystem::path compressedFilePath);
-		static std::vector<uint8_t>	 decompressGzip(const std::vector<uint8_t>& compressedData);
-		static std::vector<uint8_t>	 decompressZlib(const std::vector<uint8_t>& compressedData);
-		static std::filesystem::path locateRegionFileByChunkCoord(int ChunkX, int ChunkZ);
-		LevelDat					 loadLevelDat(std::filesystem::path levelDatPath);
+		static std::vector<uint8_t> decompressGzip(std::filesystem::path compressedFilePath);
+		static std::vector<uint8_t> decompressGzip(const std::vector<uint8_t>& compressedData);
+		static std::vector<uint8_t> decompressZlib(const std::vector<uint8_t>& compressedData);
+
+		std::filesystem::path locateRegionFileByChunkCoord(int ChunkX, int ChunkZ);
+		LevelDat			  loadLevelDat(std::filesystem::path levelDatPath);
+
+		const LevelDat& getLevelDat() const { return _LevelDat; }
+
+		void						 setWorldPath(const std::filesystem::path& worldPath) { _worldPath = worldPath; }
+		const std::filesystem::path& getWorldPath() const { return _worldPath; }
 
 	  private:
-		LevelDat _LevelDat;
+		LevelDat			  _LevelDat;
+		std::filesystem::path _worldPath;
 	};
 
 	class Query {
 	  public:
+		explicit Query(Manager& manager) : _worldManager(manager) {}
 		ChunkData fetchChunk(int chunkX, int chunkZ) {
 			ChunkData chunk(chunkX, chunkZ);
 
 			try {
-				auto regionPath = World::Manager::locateRegionFileByChunkCoord(chunkX, chunkZ);
+				auto regionPath = _worldManager.locateRegionFileByChunkCoord(chunkX, chunkZ);
 				chunk			= loadChunkFromRegion(regionPath, chunkX, chunkZ);
 			} catch (const std::exception& e) {
 				g_logger->logGameInfo(DEBUG,
@@ -102,8 +110,11 @@ namespace World {
 
 			return chunk;
 		}
+		const LevelDat& getWorldData() const { return _worldManager.getLevelDat(); }
 
 	  private:
+		Manager& _worldManager;
+
 	  private:
 		void	  extractChunkDataFromNBT(const nbt::NBT& chunkNBT, ChunkData& chunk);
 		void	  extractSectionsData(const nbt::TagList& sections, ChunkData& chunk);
