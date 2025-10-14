@@ -185,3 +185,110 @@ void Buffer::writeVarLong(int64_t value) {
 }
 
 void Buffer::writeIdentifier(const std::string& id) { writeString(id); }
+
+void Buffer::writeUShort(uint16_t value) {
+	writeByte(static_cast<uint8_t>((value >> 8) & 0xFF));
+	writeByte(static_cast<uint8_t>(value & 0xFF));
+}
+
+// NEW: String reading methods
+std::string Buffer::readString() {
+	int len = readVarInt();
+
+	if (_pos + len > _data.size()) {
+		throw std::runtime_error("Buffer underflow on string");
+	}
+
+	std::string result(reinterpret_cast<char*>(&_data[_pos]), len);
+	_pos += len;
+	return result;
+}
+
+std::vector<std::string> Buffer::readStringArray() {
+	int count = readVarInt();
+	if (count < 0) {
+		throw std::runtime_error("Negative array length");
+	}
+	std::vector<std::string> result;
+	result.reserve(count);
+	
+	for (int i = 0; i < count; ++i) {
+		result.push_back(readString());
+	}
+	
+	return result;
+}
+
+std::vector<int> Buffer::readVarIntArray() {
+	int count = readVarInt();
+	if (count < 0) {
+		throw std::runtime_error("Negative array length");
+	}
+	std::vector<int> result;
+	result.reserve(count);
+	
+	for (int i = 0; i < count; ++i) {
+		result.push_back(readVarInt());
+	}
+	
+	return result;
+}
+
+// NEW: Boolean reading
+bool Buffer::readBool() {
+	uint8_t value = readByte();
+	return value != 0;
+}
+
+int32_t Buffer::readInt() {
+	int32_t value = 0;
+	for (int i = 0; i < 4; ++i) {
+		value = (value << 8) | readByte();
+	}
+	return value;
+}
+
+int64_t Buffer::readVarLong() {
+	int64_t value = 0;
+	int position = 0;
+	uint8_t currentByte;
+
+	do {
+		currentByte = readByte();
+		value |= ((int64_t)(currentByte & 0x7F)) << position;
+		position += 7;
+		if (position >= 64) throw std::runtime_error("VarLong too big");
+	} while (currentByte & 0x80);
+
+	return value;
+}
+
+// NEW: Known Packs support
+std::vector<Buffer::KnownPack> Buffer::readKnownPacks() {
+	int count = readVarInt();
+	if (count < 0) {
+		throw std::runtime_error("Negative array length");
+	}
+	std::vector<KnownPack> result;
+	result.reserve(count);
+	
+	for (int i = 0; i < count; ++i) {
+		KnownPack pack;
+		pack.nameSpace = readString();
+		pack.id = readString();
+		pack.version = readString();
+		result.push_back(pack);
+	}
+	
+	return result;
+}
+
+void Buffer::writeKnownPacks(const std::vector<KnownPack>& packs) {
+	writeVarInt(static_cast<int>(packs.size()));
+	
+	for (const auto& pack : packs) {
+		writeString(pack.nameSpace);
+		writeString(pack.id);
+		writeString(pack.version);
+	}
+}

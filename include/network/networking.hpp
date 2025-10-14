@@ -154,5 +154,6 @@ void clientboundKnownPacks(Packet& packet);
 void serverboundKnownPacks(Packet& packet);
 
 void gameEventPacket(Packet& packet, Server& server);
+void levelChunkWithLight(Packet& packet, Server& server);
 
 #endif

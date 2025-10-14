@@ -86,7 +86,7 @@ void sendSetExperience(Packet& packet, Server& server) {
 	buf.writeInt(0x00000000);
 
 	// Level (VarInt) - current experience level
-	buf.writeVarInt(0);
+	buf.writeVarInt(5);
 
 	// Total Experience (VarInt) - total experience points
 	buf.writeVarInt(0);
@@ -161,19 +161,6 @@ void sendSetHeldItem(Packet& packet, Server& server) {
 	(void)server;
 }
 
-void handleConfirmTeleportation(Packet& packet, Server& server) {
-	std::cout << "=== Received Confirm Teleportation ===\n";
-
-	// Read teleport ID from packet data
-	int teleportId = packet.getData().readVarInt();
-
-	std::cout << "Player confirmed teleportation with ID: " << teleportId << std::endl;
-
-	// Mark packet as processed
-	packet.setReturnPacket(PACKET_OK);
-
-	(void)server;
-}
 
 void completeSpawnSequence(Packet& packet, Server& server) {
 	Player*					  player		  = packet.getPlayer();

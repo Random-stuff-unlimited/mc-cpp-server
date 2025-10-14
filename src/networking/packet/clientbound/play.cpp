@@ -52,7 +52,7 @@ void writePlayPacket(Packet& packet, Server& server) {
 	buf.writeLong(1L);
 
 	// 13. Game mode (Unsigned Byte)
-	buf.writeByte(1); // Creative
+	buf.writeByte(0); // Creative
 
 	// 14. Previous Game mode (Byte)
 	buf.writeByte(-1); // Undefined

@@ -132,8 +132,6 @@ void handleConfigurationState(Packet* packet, Server& server) {
 		// Client Information (configuration)
 		g_logger->logNetwork(INFO, "Received Client Information in Configuration state", "Configuration");
 		handleClientInformation(*packet, server);
-
-		// initGameSequence(packet, server)
 	} else if (packet->getId() == 0x01) {
 		// Cookie Response (configuration)
 		g_logger->logNetwork(INFO, "Received Cookie Response in Configuration state", "Configuration");
@@ -149,7 +147,17 @@ void handleConfigurationState(Packet* packet, Server& server) {
 		// Acknowledge Finish Configuration -> enter Play
 		g_logger->logNetwork(INFO, "Received Acknowledge Finish Configuration - transitioning to Play state", "PacketRouter");
 		handleAcknowledgeFinishConfiguration(*packet, server);
-		initGameSequence(packet, server);
+
+		// 1. Send Login (play) packet - 0x2B
+		g_logger->logNetwork(INFO, "Sending Login (play) packet", "PacketRouter");
+		Packet* playPacket = new Packet(*packet);
+		writePlayPacket(*playPacket, server);
+		server.getNetworkManager().getOutgoingQueue()->push(playPacket);
+
+		// 2. Send player position and look - 0x41
+		Packet* positionPacket = new Packet(*packet);
+		sendPlayerPositionAndLook(*positionPacket, server); // rename packet
+		server.getNetworkManager().getOutgoingQueue()->push(positionPacket);
 
 	} else if (packet->getId() == 0x04) {
 		// Keep Alive (configuration)
@@ -197,8 +205,27 @@ void handlePlayState(Packet* packet, Server& server) {
 	if (packet->getId() == 0x00) {
 		// Confirm Teleportation
 		handleConfirmTeleportation(*packet, server);
-	} else if (packet->getId() == 0x1B) {
-		// Keep Alive
+
+		// Send Game Event packet - 0x42
+		g_logger->logNetwork(INFO, "Sending Game Event packet", "PacketRouter");
+		Packet* gameEvent = new Packet(*packet);
+		gameEventPacket(*gameEvent, server);
+		server.getNetworkManager().getOutgoingQueue()->push(gameEvent);
+
+		// 2. Send Set Center Chunk - 0x57
+		Packet* setCenterPacket = new Packet(*packet);
+		writeSetCenterPacket(*setCenterPacket, server);
+		server.getNetworkManager().getOutgoingQueue()->push(setCenterPacket);
+
+		// 3. Send Level Chunk With Light - 0x22
+		Packet* levelChunkPacket = new Packet(*packet);
+		levelChunkWithLight(*levelChunkPacket, server);
+		server.getNetworkManager().getOutgoingQueue()->push(levelChunkPacket);
+
+
+	} else if (packet->getId() == 0x2B) {
+		// Playere loaded
+		g_logger->logNetwork(DEBUG, "Player Load========================", "PacketRouter");
 		packet->setReturnPacket(PACKET_OK);
 	} else {
 		// Other play packets
@@ -262,31 +289,6 @@ void initGameSequence(Packet* packet, Server& server) {
 	g_logger->logNetwork(INFO, "Starting game sequence for player: " + player->getPlayerName(), "PacketRouter");
 
 	try {
-		// 1. Send Login (play) packet - 0x2B
-		g_logger->logNetwork(INFO, "Sending Login (play) packet", "PacketRouter");
-		Packet* playPacket = new Packet(*packet);
-		writePlayPacket(*playPacket, server);
-		server.getNetworkManager().getOutgoingQueue()->push(playPacket);
-
-		// 2. Send Game Event packet - 0x42
-		g_logger->logNetwork(INFO, "Sending Game Event packet", "PacketRouter");
-		Packet* gameEvent = new Packet(*packet);
-		gameEventPacket(*gameEvent, server);
-		server.getNetworkManager().getOutgoingQueue()->push(gameEvent);
-
-		// 4. Send player position and look - 0x41
-		// Packet* positionPacket = new Packet(*packet);
-		// sendPlayerPositionAndLook(*positionPacket, server); // rename packet
-		// server.getNetworkManager().getOutgoingQueue()->push(positionPacket);
-
-		// 2. Send Set Center Chunk - 0x57
-		// Packet* setCenterPacket = new Packet(*packet);
-		// writeSetCenterPacket(*setCenterPacket, server);
-		// server.getNetworkManager().getOutgoingQueue()->push(setCenterPacket);
-
-		// 3. Send complete chunk batch sequence (Start -> Chunks -> Finished)
-		// sendChunkBatchSequence(*packet, server);
-
 
 		// 5. Send spawn position - 0x5A
 		// Packet* spawnPacket = new Packet(*packet);
@@ -294,7 +296,7 @@ void initGameSequence(Packet* packet, Server& server) {
 		// server.getNetworkManager().getOutgoingQueue()->push(spawnPacket);
 
 		// // 6. Complete spawn sequence (abilities, health, experience, time, held item)
-		// completeSpawnSequence(*packet, server);
+		completeSpawnSequence(*packet, server);
 
 		g_logger->logNetwork(INFO, "Complete game sequence sent to player: ", "PacketRouter");
 
