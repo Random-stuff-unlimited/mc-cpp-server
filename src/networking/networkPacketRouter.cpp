@@ -171,6 +171,7 @@ void handleConfigurationState(Packet* packet, Server& server) {
 	} else if (packet->getId() == 0x07) {
 		// Serverbound Known Packs (configuration)
 		g_logger->logNetwork(INFO, "Received Serverbound Known Packs in Configuration state", "Configuration");
+		serverboundKnownPacks(*packet);
 		packet->setReturnPacket(PACKET_OK);
 
 	} else if (packet->getId() == 0x08) {
