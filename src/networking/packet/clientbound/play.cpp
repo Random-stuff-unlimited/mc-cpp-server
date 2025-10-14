@@ -10,6 +10,8 @@ void writePlayPacket(Packet& packet, Server& server) {
 
 	Buffer buf;
 
+	buf.writeByte(0x2B);
+
 	// 1. Entity ID
 	buf.writeInt(player->getPlayerID());
 
@@ -90,4 +92,5 @@ void writePlayPacket(Packet& packet, Server& server) {
 	packet.getData() = final;
 	packet.setPacketSize(final.getData().size());
 	packet.setReturnPacket(PACKET_SEND);
+	(void)server;
 }

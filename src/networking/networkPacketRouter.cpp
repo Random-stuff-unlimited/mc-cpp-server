@@ -268,6 +268,12 @@ void initGameSequence(Packet* packet, Server& server) {
 		writePlayPacket(*playPacket, server);
 		server.getNetworkManager().getOutgoingQueue()->push(playPacket);
 
+		// 2. Send Game Event packet - 0x42
+		g_logger->logNetwork(INFO, "Sending Game Event packet", "PacketRouter");
+		Packet* gameEvent = new Packet(*packet);
+		gameEventPacket(*gameEvent, server);
+		server.getNetworkManager().getOutgoingQueue()->push(gameEvent);
+
 		// 4. Send player position and look - 0x41
 		// Packet* positionPacket = new Packet(*packet);
 		// sendPlayerPositionAndLook(*positionPacket, server); // rename packet

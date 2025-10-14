@@ -153,4 +153,6 @@ void   writeEmptyLightData(Buffer& buf);
 void clientboundKnownPacks(Packet& packet);
 void serverboundKnownPacks(Packet& packet);
 
+void gameEventPacket(Packet& packet, Server& server);
+
 #endif
