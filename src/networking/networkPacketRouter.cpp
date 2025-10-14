@@ -133,7 +133,11 @@ void handleConfigurationState(Packet* packet, Server& server) {
 		g_logger->logNetwork(INFO, "Received Client Information in Configuration state", "Configuration");
 		handleClientInformation(*packet, server);
 
+<<<<<<< HEAD
 		// Send complete configuration sequence
+=======
+		// initGameSequence(packet, server)
+>>>>>>> refs/remotes/origin/skyvence/chunks
 	} else if (packet->getId() == 0x01) {
 		// Cookie Response (configuration)
 		g_logger->logNetwork(INFO, "Received Cookie Response in Configuration state", "Configuration");
@@ -170,7 +174,15 @@ void handleConfigurationState(Packet* packet, Server& server) {
 		// Serverbound Known Packs (configuration)
 		g_logger->logNetwork(INFO, "Received Serverbound Known Packs in Configuration state", "Configuration");
 		serverboundKnownPacks(*packet);
+<<<<<<< HEAD
 		sendCompleteConfigurationSequence(packet, server);
+=======
+		packet->setReturnPacket(PACKET_OK);
+
+		// Send complete configuration sequence
+		sendCompleteConfigurationSequence(packet, server);
+
+>>>>>>> refs/remotes/origin/skyvence/chunks
 	} else if (packet->getId() == 0x08) {
 		// Custom Click Action (configuration)
 		g_logger->logNetwork(INFO, "Serverbound known packs", "Configuration");
@@ -260,7 +272,7 @@ void initGameSequence(Packet* packet, Server& server) {
 		// 1. Send Login (play) packet - 0x2B
 		g_logger->logNetwork(INFO, "Sending Login (play) packet", "PacketRouter");
 		Packet* playPacket = new Packet(*packet);
-		writePlayPacket(*playPacket);
+		writePlayPacket(*playPacket, server);
 		server.getNetworkManager().getOutgoingQueue()->push(playPacket);
 
 		// 2. Send Set Center Chunk - 0x57

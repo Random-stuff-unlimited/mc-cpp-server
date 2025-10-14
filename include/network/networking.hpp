@@ -122,7 +122,7 @@ void handleLoginAcknowledged(Packet& packet, Server& server);
 void handleCookieRequest(Packet& packet, Server& server);
 void handleFinishConfiguration(Packet& packet, Server& server);
 void handleAcknowledgeFinishConfiguration(Packet& packet, Server& server);
-void writePlayPacket(Packet& packet);
+void writePlayPacket(Packet& packet, Server& server);
 void writeSetCenterPacket(Packet& packet, Server& server);
 
 // Chunk batch functions
