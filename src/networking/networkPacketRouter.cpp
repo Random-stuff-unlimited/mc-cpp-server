@@ -89,6 +89,7 @@ void handleStatusState(Packet* packet, Server& server) {
 // ========================================
 
 void handleLoginState(Packet* packet, Server& server) {
+	ThreadSafeQueue<Packet*>* outgoingPackets = server.getNetworkManager().getOutgoingQueue();
 	// Add safety check for packet data integrity
 	if (packet->getSize() > 32767) { // Max packet size
 		g_logger->logNetwork(ERROR, "Packet size too large: " + std::to_string(packet->getSize()), "PacketRouter");
@@ -108,6 +109,9 @@ void handleLoginState(Packet* packet, Server& server) {
 		// Login Acknowledged
 		g_logger->logNetwork(INFO, "Processing Login Acknowledged (0x03)", "PacketRouter");
 		handleLoginAcknowledged(*packet, server);
+		Packet* p = new Packet(*packet);
+		clientboundKnownPacks(*p);
+		outgoingPackets->push(p);
 	} else if (packet->getId() == 0x04) {
 		// Cookie Response (login)
 		g_logger->logNetwork(INFO, "Received Login Cookie Response (0x04) - acknowledging", "PacketRouter");
@@ -128,10 +132,10 @@ void handleConfigurationState(Packet* packet, Server& server) {
 		// Client Information (configuration)
 		g_logger->logNetwork(INFO, "Received Client Information in Configuration state", "Configuration");
 		handleClientInformation(*packet, server);
-		packet->setReturnPacket(PACKET_OK);
 
 		// Send complete configuration sequence
-		sendCompleteConfigurationSequence(packet, server);
+		// sendCompleteConfigurationSequence(packet, server);
+		// initGameSequence(packet, server);
 
 	} else if (packet->getId() == 0x01) {
 		// Cookie Response (configuration)
@@ -170,15 +174,13 @@ void handleConfigurationState(Packet* packet, Server& server) {
 
 	} else if (packet->getId() == 0x07) {
 		// Serverbound Known Packs (configuration)
-		// g_logger->logNetwork(INFO, "Received Serverbound Known Packs in Configuration state",
-		// "Configuration");
+		g_logger->logNetwork(INFO, "Received Serverbound Known Packs in Configuration state", "Configuration");
 		packet->setReturnPacket(PACKET_OK);
 
 	} else if (packet->getId() == 0x08) {
 		// Custom Click Action (configuration)
-		// g_logger->logNetwork(INFO, "Received Custom Click Action in Configuration state",
-		// "Configuration");
-		packet->setReturnPacket(PACKET_OK);
+		// g_logger->logNetwork(INFO, "Serverbound known packs", "Configuration");
+		// packet->setReturnPacket(PACKET_OK);
 
 	} else {
 		g_logger->logNetwork(WARN, "Unknown packet ID in Configuration state: 0x" + std::to_string(packet->getId()), "PacketRouter");

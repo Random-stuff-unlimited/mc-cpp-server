@@ -14,6 +14,5 @@ void handleClientInformation(Packet& packet, Server& server) {
 	config->setTextFiltering(packet.getData().readByte() != 0);
 	config->setServerListings(packet.getData().readByte() != 0);
 
-	packet.setReturnPacket(PACKET_OK);
 	(void)server;
 }

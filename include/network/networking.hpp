@@ -150,4 +150,6 @@ void   writeLightData(Buffer& buf, const World::ChunkData& chunkData);
 void   writeActualLightData(Buffer& buf, const World::ChunkData& chunkData);
 void   writeEmptyLightData(Buffer& buf);
 
+void clientboundKnownPacks(Packet& packet);
+
 #endif
