@@ -5,10 +5,12 @@
 void clientboundKnownPacks(Packet& packet) {
 	Buffer buffer;
 
-	buffer.writeVarInt(0x0E);
+	buffer.writeByte(0x0E);
+	buffer.writeVarInt(1);
 	buffer.writeString("minecraft");
 	buffer.writeString("core");
 	buffer.writeString("1.21.5");
+	std::cout << buffer.getData().size() << std::endl;
 
 	Buffer final;
 	final.writeVarInt(buffer.getData().size());

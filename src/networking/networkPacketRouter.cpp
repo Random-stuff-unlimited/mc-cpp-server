@@ -134,19 +134,17 @@ void handleConfigurationState(Packet* packet, Server& server) {
 		handleClientInformation(*packet, server);
 
 		// Send complete configuration sequence
-		// sendCompleteConfigurationSequence(packet, server);
-		// initGameSequence(packet, server);
-
+		sendCompleteConfigurationSequence(packet, server);
+		// initGameSequence(packet, server)
 	} else if (packet->getId() == 0x01) {
 		// Cookie Response (configuration)
-		// g_logger->logNetwork(INFO, "Received Cookie Response in Configuration state",
-		// "Configuration");
+		g_logger->logNetwork(INFO, "Received Cookie Response in Configuration state", "Configuration");
 		packet->setReturnPacket(PACKET_OK);
 
 	} else if (packet->getId() == 0x02) {
 		// Serverbound Plugin Message (configuration)
-		g_logger->logNetwork(
-				INFO, "Received Serverbound Plugin Message (0x02), size: " + std::to_string(packet->getSize()) + " bytes", "PacketRouter");
+		// g_logger->logNetwork(
+		// 		INFO, "Received Serverbound Plugin Message (0x02), size: " + std::to_string(packet->getSize()) + " bytes", "PacketRouter");
 		packet->setReturnPacket(PACKET_OK);
 
 	} else if (packet->getId() == 0x03) {
@@ -157,19 +155,17 @@ void handleConfigurationState(Packet* packet, Server& server) {
 
 	} else if (packet->getId() == 0x04) {
 		// Keep Alive (configuration)
-		// g_logger->logNetwork(INFO, "Received Keep Alive in Configuration state",
-		// "Configuration");
+		g_logger->logNetwork(INFO, "Received Keep Alive in Configuration state", "Configuration");
 		packet->setReturnPacket(PACKET_OK);
 
 	} else if (packet->getId() == 0x05) {
 		// Pong (configuration)
-		// g_logger->logNetwork(INFO, "Received Pong in Configuration state", "Configuration");
+		g_logger->logNetwork(INFO, "Received Pong in Configuration state", "Configuration");
 		packet->setReturnPacket(PACKET_OK);
 
 	} else if (packet->getId() == 0x06) {
 		// Resource Pack Response (configuration)
-		// g_logger->logNetwork(INFO, "Received Resource Pack Response in Configuration state",
-		// "Configuration");
+		g_logger->logNetwork(INFO, "Received Resource Pack Response in Configuration state", "Configuration");
 		packet->setReturnPacket(PACKET_OK);
 
 	} else if (packet->getId() == 0x07) {
@@ -179,8 +175,8 @@ void handleConfigurationState(Packet* packet, Server& server) {
 
 	} else if (packet->getId() == 0x08) {
 		// Custom Click Action (configuration)
-		// g_logger->logNetwork(INFO, "Serverbound known packs", "Configuration");
-		// packet->setReturnPacket(PACKET_OK);
+		g_logger->logNetwork(INFO, "Serverbound known packs", "Configuration");
+		packet->setReturnPacket(PACKET_OK);
 
 	} else {
 		g_logger->logNetwork(WARN, "Unknown packet ID in Configuration state: 0x" + std::to_string(packet->getId()), "PacketRouter");
