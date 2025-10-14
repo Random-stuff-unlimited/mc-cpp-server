@@ -1,7 +1,8 @@
+#include "network/packet.hpp"
+
 #include "lib/json.hpp"
 #include "logger.hpp"
 #include "network/buffer.hpp"
-#include "network/packet.hpp"
 #include "network/server.hpp"
 #include "player.hpp"
 
