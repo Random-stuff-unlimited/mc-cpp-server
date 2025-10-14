@@ -1,7 +1,7 @@
 #include "buffer.hpp"
-#include "logger.hpp"
 #include "network/packet.hpp"
 
+// If implementing data packs we should actually send datapack info with the loaded datapacks
 void clientboundKnownPacks(Packet& packet) {
 	Buffer buffer;
 
@@ -10,7 +10,6 @@ void clientboundKnownPacks(Packet& packet) {
 	buffer.writeString("minecraft");
 	buffer.writeString("core");
 	buffer.writeString("1.21.5");
-	std::cout << buffer.getData().size() << std::endl;
 
 	Buffer final;
 	final.writeVarInt(buffer.getData().size());
