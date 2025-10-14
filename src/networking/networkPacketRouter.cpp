@@ -133,8 +133,6 @@ void handleConfigurationState(Packet* packet, Server& server) {
 		g_logger->logNetwork(INFO, "Received Client Information in Configuration state", "Configuration");
 		handleClientInformation(*packet, server);
 
-		// Send complete configuration sequence
-		sendCompleteConfigurationSequence(packet, server);
 		// initGameSequence(packet, server)
 	} else if (packet->getId() == 0x01) {
 		// Cookie Response (configuration)
@@ -151,7 +149,7 @@ void handleConfigurationState(Packet* packet, Server& server) {
 		// Acknowledge Finish Configuration -> enter Play
 		g_logger->logNetwork(INFO, "Received Acknowledge Finish Configuration - transitioning to Play state", "PacketRouter");
 		handleAcknowledgeFinishConfiguration(*packet, server);
-		// initGameSequence(packet, server);
+		initGameSequence(packet, server);
 
 	} else if (packet->getId() == 0x04) {
 		// Keep Alive (configuration)
@@ -173,6 +171,9 @@ void handleConfigurationState(Packet* packet, Server& server) {
 		g_logger->logNetwork(INFO, "Received Serverbound Known Packs in Configuration state", "Configuration");
 		serverboundKnownPacks(*packet);
 		packet->setReturnPacket(PACKET_OK);
+
+		// Send complete configuration sequence
+		sendCompleteConfigurationSequence(packet, server);
 
 	} else if (packet->getId() == 0x08) {
 		// Custom Click Action (configuration)
@@ -263,7 +264,7 @@ void initGameSequence(Packet* packet, Server& server) {
 		// 1. Send Login (play) packet - 0x2B
 		g_logger->logNetwork(INFO, "Sending Login (play) packet", "PacketRouter");
 		Packet* playPacket = new Packet(*packet);
-		writePlayPacket(*playPacket);
+		writePlayPacket(*playPacket, server);
 		server.getNetworkManager().getOutgoingQueue()->push(playPacket);
 
 		// 2. Send Set Center Chunk - 0x57
