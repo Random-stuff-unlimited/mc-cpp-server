@@ -45,6 +45,15 @@ class PlayerConfig {
 	void setServerListings(bool serverListings) { _allowServerListings = serverListings; }
 };
 
+struct vec3 {
+	double x, y, z;
+};
+
+class PlayerEntity {
+  private:
+	vec3 _position;
+};
+
 class Player {
   private:
 	std::string	  _name;
