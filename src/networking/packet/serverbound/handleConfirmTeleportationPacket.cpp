@@ -2,7 +2,7 @@
 #include "server.hpp"
 #include <iostream>
 
-void handleConfirmTeleportation(Packet& packet, Server& server) {
+void handleConfirmTeleportationPacket(Packet& packet, Server& server) {
 	std::cout << "=== Received Confirm Teleportation ===\n";
 
 	// Read teleport ID from packet data

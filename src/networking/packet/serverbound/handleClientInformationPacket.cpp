@@ -2,7 +2,7 @@
 #include "network/server.hpp"
 #include "player.hpp"
 
-void handleClientInformation(Packet& packet, Server& server) {
+void handleClientInformationPacket(Packet& packet, Server& server) {
 	PlayerConfig* config = packet.getPlayer()->getPlayerConfig();
 
 	config->setLocale(packet.getData().readString(16));

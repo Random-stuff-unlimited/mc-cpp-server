@@ -29,10 +29,6 @@ void NetworkManager::workerThreadLoop() {
 						getServer().removePlayerFromAnyList(player);
 						epoll_ctl(_epollFd, EPOLL_CTL_DEL, packet->getSocket(), nullptr);
 						close(packet->getSocket());
-						// g_logger->logNetwork(INFO,
-						//                      "Disconnected player socket " +
-						//                              std::to_string(packet->getSocket()),
-						//                      "Worker");
 					}
 				}
 			} catch (const std::exception& e) {

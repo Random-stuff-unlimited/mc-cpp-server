@@ -12,7 +12,7 @@ void handleLoginState(Packet* packet, Server& server);
 void handleConfigurationState(Packet* packet, Server& server);
 void handlePlayState(Packet* packet, Server& server);
 void sendDisconnectPacket(Packet* packet, const std::string& reason, Server& server);
-void initGameSequence(Packet* packet, Server& server);
+// void initGameSequence(Packet* packet, Server& server);
 void sendRegistryData(Packet& packet, Server& server);
 void sendUpdateTags(Packet& packet, Server& server);
 void sendCompleteConfigurationSequence(Packet* packet, Server& server);
@@ -23,21 +23,15 @@ void sendCompleteConfigurationSequence(Packet* packet, Server& server);
 
 void packetRouter(Packet* packet, Server& server) {
 
-	if (packet == nullptr) return;
-	if (server.getNetworkManager().getOutgoingQueue() == nullptr) return;
-
+	if (packet == nullptr)
+		return;
+	if (server.getNetworkManager().getOutgoingQueue() == nullptr)
+		return;
 	Player* player = packet->getPlayer();
-
 	if (player == nullptr) {
 		packet->setReturnPacket(PACKET_DISCONNECT);
 		return;
 	}
-
-	g_logger->logNetwork(INFO,
-						 "Routing packet ID: 0x" + std::to_string(packet->getId()) + " (size: " + std::to_string(packet->getSize()) +
-								 ") for state: " + std::to_string(static_cast<int>(player->getPlayerState())),
-						 "PacketRouter");
-
 	switch (player->getPlayerState()) {
 	case PlayerState::Handshake:
 		handleHandshakeState(packet, server);
@@ -108,9 +102,9 @@ void handleLoginState(Packet* packet, Server& server) {
 	} else if (packet->getId() == 0x03) {
 		// Login Acknowledged
 		g_logger->logNetwork(INFO, "Processing Login Acknowledged (0x03)", "PacketRouter");
-		handleLoginAcknowledged(*packet, server);
+		handleLoginAcknowledgedPacket(*packet, server);
 		Packet* p = new Packet(*packet);
-		clientboundKnownPacks(*p);
+		clientboundKnownPacksPacket(*p);
 		outgoingPackets->push(p);
 	} else if (packet->getId() == 0x04) {
 		// Cookie Response (login)
@@ -131,7 +125,7 @@ void handleConfigurationState(Packet* packet, Server& server) {
 	if (packet->getId() == 0x00) {
 		// Client Information (configuration)
 		g_logger->logNetwork(INFO, "Received Client Information in Configuration state", "Configuration");
-		handleClientInformation(*packet, server);
+		handleClientInformationPacket(*packet, server);
 	} else if (packet->getId() == 0x01) {
 		// Cookie Response (configuration)
 		g_logger->logNetwork(INFO, "Received Cookie Response in Configuration state", "Configuration");
@@ -144,35 +138,30 @@ void handleConfigurationState(Packet* packet, Server& server) {
 		packet->setReturnPacket(PACKET_OK);
 
 	} else if (packet->getId() == 0x03) {
-		// Acknowledge Finish Configuration -> enter Play
-		g_logger->logNetwork(INFO, "Received Acknowledge Finish Configuration - transitioning to Play state", "PacketRouter");
-		handleAcknowledgeFinishConfiguration(*packet, server);
+		g_logger->logNetwork(INFO, "Received Acknowledge Finish Configuration - transitioning to Play state", "PacketRouter"); // Acknowledge Finish Configuration -> enter Play
+		handleAcknowledgeFinishConfigurationPacket(*packet, server);
 
-		// 1. Send Login (play) packet - 0x2B
-		g_logger->logNetwork(INFO, "Sending Login (play) packet", "PacketRouter");
-		Packet* playPacket = new Packet(*packet);
-		writePlayPacket(*playPacket, server);
-		server.getNetworkManager().getOutgoingQueue()->push(playPacket);
+		sendPlayPacket(*packet, server); // 1. Send Login (play) packet - 0x2B
 
 		// 3. Send Change Difficulty - 0x42
 		g_logger->logNetwork(INFO, "Sending Change Difficulty packet", "PacketRouter");
 		Packet* difficultyPacket = new Packet(*packet);
-		changeDifficulty(*difficultyPacket);
+		changeDifficultyPacket(*difficultyPacket);
 		server.getNetworkManager().getOutgoingQueue()->push(difficultyPacket);
 
 		// 4. Send Player Abilities - 0x39
 		g_logger->logNetwork(INFO, "Sending Player Abilities packet", "PacketRouter");
 		Packet* abilitiesPacket = new Packet(*packet);
-		playerAbilities(*abilitiesPacket);
+		playerAbilitiesPacket(*abilitiesPacket);
 		server.getNetworkManager().getOutgoingQueue()->push(abilitiesPacket);
 
 		Packet* heldItemPacket = new Packet(*packet);
-		setHeldItem(*heldItemPacket);
+		setHeldItemPacket(*heldItemPacket);
 		server.getNetworkManager().getOutgoingQueue()->push(heldItemPacket);
 
 		// 2. Send player position and look - 0x41
 		Packet* positionPacket = new Packet(*packet);
-		sendPlayerPositionAndLook(*positionPacket, server); // rename packet
+		synchronizePlayerPositionPacket(*positionPacket, server); // rename packet
 		server.getNetworkManager().getOutgoingQueue()->push(positionPacket);
 
 	} else if (packet->getId() == 0x04) {
@@ -193,7 +182,7 @@ void handleConfigurationState(Packet* packet, Server& server) {
 	} else if (packet->getId() == 0x07) {
 		// Serverbound Known Packs (configuration)
 		g_logger->logNetwork(INFO, "Received Serverbound Known Packs in Configuration state", "Configuration");
-		serverboundKnownPacks(*packet);
+		serverboundKnownPacksPacket(*packet);
 
 		packet->setReturnPacket(PACKET_OK);
 
@@ -220,7 +209,7 @@ void handleConfigurationState(Packet* packet, Server& server) {
 void handlePlayState(Packet* packet, Server& server) {
 	if (packet->getId() == 0x00) {
 		// Confirm Teleportation
-		handleConfirmTeleportation(*packet, server);
+		handleConfirmTeleportationPacket(*packet, server);
 
 		// Send Game Event packet - 0x42
 		g_logger->logNetwork(INFO, "Sending Game Event packet", "PacketRouter");
@@ -294,33 +283,33 @@ void sendDisconnectPacket(Packet* packet, const std::string& reason, Server& ser
 // Game Initialization Sequence
 // ========================================
 
-void initGameSequence(Packet* packet, Server& server) {
-	if (packet == nullptr || server.getNetworkManager().getOutgoingQueue() == nullptr) return;
+// void initGameSequence(Packet* packet, Server& server) {
+// 	if (packet == nullptr || server.getNetworkManager().getOutgoingQueue() == nullptr) return;
 
-	Player* player = packet->getPlayer();
-	if (player == nullptr) return;
+// 	Player* player = packet->getPlayer();
+// 	if (player == nullptr) return;
 
-	// Player should already be in Play state at this point
-	g_logger->logNetwork(INFO, "Starting game sequence for player: " + player->getPlayerName(), "PacketRouter");
+// 	// Player should already be in Play state at this point
+// 	g_logger->logNetwork(INFO, "Starting game sequence for player: " + player->getPlayerName(), "PacketRouter");
 
-	try {
+// 	try {
 
-		// 5. Send spawn position - 0x5A
-		// Packet* spawnPacket = new Packet(*packet);
-		// sendSpawnPosition(*spawnPacket, server);
-		// server.getNetworkManager().getOutgoingQueue()->push(spawnPacket);
+// 		// 5. Send spawn position - 0x5A
+// 		// Packet* spawnPacket = new Packet(*packet);
+// 		// sendSpawnPosition(*spawnPacket, server);
+// 		// server.getNetworkManager().getOutgoingQueue()->push(spawnPacket);
 
-		// // 6. Complete spawn sequence (abilities, health, experience, time, held item)
-		completeSpawnSequence(*packet, server);
+// 		// // 6. Complete spawn sequence (abilities, health, experience, time, held item)
+// 		completeSpawnSequence(*packet, server);
 
-		g_logger->logNetwork(INFO, "Complete game sequence sent to player: ", "PacketRouter");
+// 		g_logger->logNetwork(INFO, "Complete game sequence sent to player: ", "PacketRouter");
 
-		packet->setReturnPacket(PACKET_OK);
-	} catch (const std::exception& e) {
-		g_logger->logNetwork(ERROR, "Error in game sequence: " + std::string(e.what()), "PacketRouter");
-		packet->setReturnPacket(PACKET_ERROR);
-	}
-}
+// 		packet->setReturnPacket(PACKET_OK);
+// 	} catch (const std::exception& e) {
+// 		g_logger->logNetwork(ERROR, "Error in game sequence: " + std::string(e.what()), "PacketRouter");
+// 		packet->setReturnPacket(PACKET_ERROR);
+// 	}
+// }
 
 // ========================================
 // Complete Configuration Sequence
@@ -358,7 +347,7 @@ void sendCompleteConfigurationSequence(Packet* packet, Server& server) {
 		// 4. Send Finish Configuration to complete the sequence
 		g_logger->logNetwork(INFO, "Step 3: Sending Finish Configuration", "Configuration");
 		Packet* finishPacket = new Packet(*packet);
-		handleFinishConfiguration(*finishPacket, server);
+		handleFinishConfigurationPacket(*finishPacket, server);
 		server.getNetworkManager().getOutgoingQueue()->push(finishPacket);
 
 		g_logger->logNetwork(INFO, "=== Configuration Sequence Completed Successfully ===", "Configuration");

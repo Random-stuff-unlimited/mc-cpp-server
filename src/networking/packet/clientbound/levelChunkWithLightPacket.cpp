@@ -2,7 +2,7 @@
 #include "network/packet.hpp"
 #include "player.hpp"
 
-void levelChunkWithLight(Packet& packet, Server& server) {
+void levelChunkWithLightPacket(Packet& packet, Server& server) {
     int chunkX = 0;
     int chunkZ = 0;
 
@@ -47,7 +47,7 @@ void levelChunkWithLight(Packet& packet, Server& server) {
 				emptyData.writeVarInt(0); // Air block state ID (should be 0)
 				emptyData.writeVarInt(0); // Data array length (no data needed for single value)
 
-				// Biomes palette  
+				// Biomes palette
 				emptyData.writeByte(0);	  // Bits per entry (single value)
 				emptyData.writeVarInt(0); // Safest biome ID (should always exist)
 				emptyData.writeVarInt(0); // Data array length (no data needed for single value)
@@ -63,19 +63,19 @@ void levelChunkWithLight(Packet& packet, Server& server) {
 		// Light data (proper format)
 		// Sky Light Mask
 		buf.writeVarInt(1);		  // Sky light mask array length
-		buf.writeLong(0x1FFFFFF); // Mask for sections 0-24 (all have sky light)
-		
-		// Block Light Mask  
+		buf.writeInt64(0x1FFFFFF); // Mask for sections 0-24 (all have sky light)
+
+		// Block Light Mask
 		buf.writeVarInt(1);	// Block light mask array length
-		buf.writeLong(0);	// No block light sections
-		
+		buf.writeInt64(0);	// No block light sections
+
 		// Empty Sky Light Mask
 		buf.writeVarInt(1);	// Empty sky light mask array length
-		buf.writeLong(0);	// No empty sky light sections
-		
+		buf.writeInt64(0);	// No empty sky light sections
+
 		// Empty Block Light Mask
-		buf.writeVarInt(1);	// Empty block light mask array length  
-		buf.writeLong(0);	// No empty block light sections
+		buf.writeVarInt(1);	// Empty block light mask array length
+		buf.writeInt64(0);	// No empty block light sections
 
 		// Sky light data arrays (25 sections: -4 to 20)
 		for (int i = 0; i < 25; i++) {
@@ -84,7 +84,7 @@ void levelChunkWithLight(Packet& packet, Server& server) {
 				buf.writeByte(0xFF); // Full sky light (15 << 4 | 15)
 			}
 		}
-		
+
 		// No block light arrays since mask is 0
 
 	} catch (const std::exception& e) {

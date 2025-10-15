@@ -1,12 +1,9 @@
 #include "network/packet.hpp"
 #include "player.hpp"
 
-void handleAcknowledgeFinishConfiguration(Packet& packet, Server& server) {
-	// g_logger->logNetwork(INFO, "Received Acknowledge Finish Configuration", "Configuration");
-
+void handleAcknowledgeFinishConfigurationPacket(Packet& packet, Server& server) {
 	Player* player = packet.getPlayer();
 	if (!player) {
-		// g_logger->logNetwork(ERROR, "Error: No player associated with packet", "Configuration");
 		packet.setReturnPacket(PACKET_DISCONNECT);
 		return;
 	}

@@ -3,7 +3,7 @@
 #include "network/server.hpp"
 #include "player.hpp"
 
-void handleFinishConfiguration(Packet& packet, Server& server) {
+void handleFinishConfigurationPacket(Packet& packet, Server& server) {
 	// g_logger->logNetwork(INFO, "Starting configuration finish sequence", "Configuration");
 
 	Player* player = packet.getPlayer();

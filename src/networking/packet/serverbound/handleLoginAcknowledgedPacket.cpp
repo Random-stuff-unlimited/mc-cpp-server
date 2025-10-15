@@ -1,12 +1,9 @@
-#include "logger.hpp"
 #include "network/networking.hpp"
 #include "network/packet.hpp"
 #include "network/server.hpp"
 #include "player.hpp"
 
-#include <iostream>
-
-void handleLoginAcknowledged(Packet& packet, Server& server) {
+void handleLoginAcknowledgedPacket(Packet& packet, Server& server) {
 	// g_logger->logNetwork(INFO, "Login Acknowledged received - transitioning to Configuration
 	// state", "Login");
 

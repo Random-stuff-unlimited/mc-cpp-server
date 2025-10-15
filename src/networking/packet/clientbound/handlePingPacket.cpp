@@ -13,7 +13,7 @@ void handlePingPacket(Packet& packet, Server& server) {
 		return;
 	}
 
-	long timestamp = packet.getData().readLong();
+	long timestamp = packet.getData().readInt64();
 
 	// g_logger->logNetwork(INFO, "Received ping request with timestamp: " +
 	// std::to_string(timestamp), "Ping");
@@ -25,7 +25,7 @@ void handlePingPacket(Packet& packet, Server& server) {
 	Buffer buf;
 	buf.writeVarInt(totalPayloadSize);
 	buf.writeVarInt(packetId);
-	buf.writeLong(timestamp);
+	buf.writeInt64(timestamp);
 
 	packet.getData() = buf;
 	packet.setReturnPacket(PACKET_SEND);

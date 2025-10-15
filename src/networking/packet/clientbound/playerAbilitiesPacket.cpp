@@ -1,7 +1,7 @@
 #include "buffer.hpp"
 #include "packet.hpp"
 
-void playerAbilities(Packet& packet) {
+void playerAbilitiesPacket(Packet& packet) {
 	Buffer buff;
 
 	buff.writeByte(0x39);

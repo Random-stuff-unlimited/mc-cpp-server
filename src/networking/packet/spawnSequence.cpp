@@ -113,10 +113,10 @@ void sendUpdateTime(Packet& packet, Server& server) {
 	Buffer buf;
 
 	// World Age (Long) - total ticks since world creation
-	buf.writeLong(0);
+	buf.writeInt64(0);
 
 	// Time of day (Long) - 0 = sunrise, 6000 = noon, 12000 = sunset, 18000 = midnight
-	buf.writeLong(1000); // Morning time
+	buf.writeInt64(1000); // Morning time
 
 	// Time of day increasing (Boolean) - should client auto-advance time
 	buf.writeByte(0x01); // true

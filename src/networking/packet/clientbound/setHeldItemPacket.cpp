@@ -1,12 +1,11 @@
 #include "buffer.hpp"
 #include "packet.hpp"
 
-void changeDifficulty(Packet& packet) {
+void setHeldItemPacket(Packet& packet) {
 	Buffer buff;
 
-	buff.writeByte(0x0A);
-	buff.writeByte(2);	  // 0 Peaceful; 1 Easy; 2 Normal; 3 Hard
-	buff.writeBool(true); // Is Difficulty locked ?
+	buff.writeByte(0x62);
+	buff.writeVarInt(3); // 0-8 hand slots --> Should get it from player data when implemented
 
 	Buffer final;
 	final.writeVarInt(buff.getData().size());

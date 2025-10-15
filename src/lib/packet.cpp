@@ -1,9 +1,9 @@
 #include "lib/json.hpp"
-#include "logger.hpp"
 #include "network/buffer.hpp"
 #include "network/packet.hpp"
 #include "network/server.hpp"
 #include "player.hpp"
+#include "networking.hpp"
 
 #include <cstdint>
 #include <errno.h>
@@ -226,6 +226,25 @@ int Packet::varintLen(int value) {
 		value >>= 7;
 	} while (value != 0);
 	return (len);
+}
+
+void Packet::sendPacket(int id, Buffer& data, Server& server, bool last) {
+    if (!last) {
+        Packet* newPacket = new Packet(*this);
+        newPacket->sendPacket(id, data, server, true);
+        return;
+    }
+    Buffer buf;
+
+    buf.writeVarInt(id);
+    buf.writeBytes(data.getData());
+    buf.prependVarInt(buf.getData().size());
+
+    _data = buf;
+    _id = id;
+    _size = buf.getData().size();
+    _returnPacket = PACKET_SEND;
+    server.getNetworkManager().getOutgoingQueue()->push(this);
 }
 
 Player*	 Packet::getPlayer() const { return (_player); }

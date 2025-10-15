@@ -23,6 +23,8 @@ void handleStatusPacket(Packet& packet, Server& server) {
 			{"description", {{"text", server.getConfig().getServerMotd()}}}};
 	std::string payload = jres.dump();
 
+	Buffer buf;
+
 	int jsonLen	 = payload.size();
 	int packetId = 0x00;
 
@@ -30,7 +32,7 @@ void handleStatusPacket(Packet& packet, Server& server) {
 	int jsonLenVarintSize  = packet.getVarintSize(jsonLen);
 	int totalPayloadSize   = packetIdVarintSize + jsonLenVarintSize + jsonLen;
 
-	Buffer buf;
+
 	buf.writeVarInt(totalPayloadSize);
 	buf.writeVarInt(packetId);
 	buf.writeVarInt(jsonLen);
@@ -39,6 +41,4 @@ void handleStatusPacket(Packet& packet, Server& server) {
 	packet.setReturnPacket(PACKET_SEND);
 	packet.setPacketSize(buf.getData().size());
 	packet.getPlayer()->setPlayerState(PlayerState::Status);
-
-	// g_logger->logNetwork(INFO, "JSON response ready - connection will be closed", "Status");
 }

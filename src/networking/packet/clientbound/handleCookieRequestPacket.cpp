@@ -7,7 +7,7 @@
 
 #include <iostream>
 
-void handleCookieRequest(Packet& packet, Server& server) {
+void handleCookieRequestPacket(Packet& packet, Server& server) {
 	// g_logger->logNetwork(INFO, "Received Cookie Request in Configuration state",
 	// "Configuration");
 

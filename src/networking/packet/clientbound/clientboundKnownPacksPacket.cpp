@@ -2,7 +2,7 @@
 #include "network/packet.hpp"
 
 // If implementing data packs we should actually send datapack info with the loaded datapacks
-void clientboundKnownPacks(Packet& packet) {
+void clientboundKnownPacksPacket(Packet& packet) {
 	Buffer buffer;
 
 	buffer.writeByte(0x0E);

@@ -112,53 +112,29 @@ class NetworkManager {
 	void handleIncomingData(int socket);
 };
 
-void packetRouter(Packet* packet, Server& server);
-void handleHandshakePacket(Packet& packet, Server& server);
-void handleStatusPacket(Packet& packet, Server& server);
-void handlePingPacket(Packet& packet, Server& server);
-void handleClientInformation(Packet& packet, Server& server);
-void handleLoginStartPacket(Packet& packet, Server& server);
-void handleLoginAcknowledged(Packet& packet, Server& server);
-void handleCookieRequest(Packet& packet, Server& server);
-void handleFinishConfiguration(Packet& packet, Server& server);
-void handleAcknowledgeFinishConfiguration(Packet& packet, Server& server);
-void writePlayPacket(Packet& packet, Server& server);
-void writeSetCenterPacket(Packet& packet, Server& server);
-
-// Chunk batch functions
-void sendChunkBatchStart(Packet& packet, Server& server);
-void sendChunkBatchFinished(Packet& packet, Server& server, int batchSize);
-void sendChunkBatchSequence(Packet& packet, Server& server);
-
-// Chunk data functions
-void sendChunkData(Packet& packet, Server& server, int chunkX, int chunkZ);
-void sendPlayerPositionAndLook(Packet& packet, Server& server);
-void sendSpawnPosition(Packet& packet, Server& server);
-
-// Spawn sequence functions
-void sendPlayerAbilities(Packet& packet, Server& server);
-void sendSetHealth(Packet& packet, Server& server);
-void sendSetExperience(Packet& packet, Server& server);
-void sendUpdateTime(Packet& packet, Server& server);
-void sendSetHeldItem(Packet& packet, Server& server);
-void handleConfirmTeleportation(Packet& packet, Server& server);
-void completeSpawnSequence(Packet& packet, Server& server);
-void sendDisconnectPacket(Packet* packet, const std::string& reason, Server& server);
-
-Buffer generateEmptyChunkSections();
-void   writeLightData(Buffer& buf, const World::ChunkData& chunkData);
-void   writeActualLightData(Buffer& buf, const World::ChunkData& chunkData);
-void   writeEmptyLightData(Buffer& buf);
-
-void clientboundKnownPacks(Packet& packet);
-void serverboundKnownPacks(Packet& packet);
-
+// clientbound
+void changeDifficultyPacket(Packet& packet);
+void clientboundKnownPacksPacket(Packet& packet);
 void gameEventPacket(Packet& packet, Server& server);
-void levelChunkWithLight(Packet& packet, Server& server);
+void handleCookieRequestPacket(Packet& packet, Server& server);
+void handleFinishConfigurationPacket(Packet& packet, Server& server);
+void handleLoginStartPacket(Packet& packet, Server& server);
+void handlePingPacket(Packet& packet, Server& server);
+void handleStatusPacket(Packet& packet, Server& server);
+void levelChunkWithLightPacket(Packet& packet, Server& server);
+void playerAbilitiesPacket(Packet& packet);
+void sendPlayPacket(Packet& packet, Server& server);
+void setHeldItemPacket(Packet& packet);
+void synchronizePlayerPositionPacket(Packet& packet, Server& server);
 
-// Optional Packets
-void changeDifficulty(Packet& packet);
-void playerAbilities(Packet& packet);
-void setHeldItem(Packet& packet);
+// serverbound
+void handleAcknowledgeFinishConfigurationPacket(Packet& packet, Server& server);
+void handleClientInformationPacket(Packet& packet, Server& server);
+void handleConfirmTeleportationPacket(Packet& packet, Server& server);
+void handleHandshakePacket(Packet& packet, Server& server);
+void handleLoginAcknowledgedPacket(Packet& packet, Server& server);
+void serverboundKnownPacksPacket(Packet& packet);
+
+void packetRouter(Packet* packet, Server& server);
 
 #endif
