@@ -156,4 +156,7 @@ void serverboundKnownPacks(Packet& packet);
 void gameEventPacket(Packet& packet, Server& server);
 void levelChunkWithLight(Packet& packet, Server& server);
 
+// Optional Packets
+void changeDifficulty(Packet& packet);
+
 #endif

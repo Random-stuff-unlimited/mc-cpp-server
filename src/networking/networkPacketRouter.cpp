@@ -78,7 +78,7 @@ void handleStatusState(Packet* packet, Server& server) {
 	} else if (packet->getId() == 0x01) {
 		handlePingPacket(*packet, server);
 	} else {
-		g_logger->logNetwork(WARN, "Unknown packet ID in Status state: 0x" + std::to_string(packet->getId()), "PacketRouter");
+		// g_logger->logNetwork(WARN, "Unknown packet ID in Status state: 0x" + std::to_string(packet->getId()), "PacketRouter");
 		packet->getPlayer()->setPlayerState(PlayerState::None);
 		packet->setReturnPacket(PACKET_DISCONNECT);
 	}
@@ -117,7 +117,7 @@ void handleLoginState(Packet* packet, Server& server) {
 		g_logger->logNetwork(INFO, "Received Login Cookie Response (0x04) - acknowledging", "PacketRouter");
 		packet->setReturnPacket(PACKET_OK);
 	} else {
-		g_logger->logNetwork(WARN, "Unknown packet ID in Login state: 0x" + std::to_string(packet->getId()), "PacketRouter");
+		// g_logger->logNetwork(WARN, "Unknown packet ID in Login state: 0x" + std::to_string(packet->getId()), "PacketRouter");
 		packet->getPlayer()->setPlayerState(PlayerState::None);
 		packet->setReturnPacket(PACKET_DISCONNECT);
 	}
@@ -153,6 +153,12 @@ void handleConfigurationState(Packet* packet, Server& server) {
 		Packet* playPacket = new Packet(*packet);
 		writePlayPacket(*playPacket, server);
 		server.getNetworkManager().getOutgoingQueue()->push(playPacket);
+
+		// 3. Send Change Difficulty - 0x42
+		g_logger->logNetwork(INFO, "Sending Change Difficulty packet", "PacketRouter");
+		Packet* difficultyPacket = new Packet(*packet);
+		changeDifficulty(*difficultyPacket);
+		server.getNetworkManager().getOutgoingQueue()->push(difficultyPacket);
 
 		// 2. Send player position and look - 0x41
 		Packet* positionPacket = new Packet(*packet);
@@ -190,7 +196,7 @@ void handleConfigurationState(Packet* packet, Server& server) {
 		packet->setReturnPacket(PACKET_OK);
 
 	} else {
-		g_logger->logNetwork(WARN, "Unknown packet ID in Configuration state: 0x" + std::to_string(packet->getId()), "PacketRouter");
+		// g_logger->logNetwork(WARN, "Unknown packet ID in Configuration state: 0x" + std::to_string(packet->getId()), "PacketRouter");
 		sendDisconnectPacket(packet, "Unknown packet in Configuration state", server);
 		packet->getPlayer()->setPlayerState(PlayerState::None);
 		packet->setReturnPacket(PACKET_DISCONNECT);
@@ -213,15 +219,14 @@ void handlePlayState(Packet* packet, Server& server) {
 		server.getNetworkManager().getOutgoingQueue()->push(gameEvent);
 
 		// 2. Send Set Center Chunk - 0x57
-		Packet* setCenterPacket = new Packet(*packet);
-		writeSetCenterPacket(*setCenterPacket, server);
-		server.getNetworkManager().getOutgoingQueue()->push(setCenterPacket);
+		// Packet* setCenterPacket = new Packet(*packet);
+		// writeSetCenterPacket(*setCenterPacket, server);
+		// server.getNetworkManager().getOutgoingQueue()->push(setCenterPacket);
 
 		// 3. Send Level Chunk With Light - 0x22
-		Packet* levelChunkPacket = new Packet(*packet);
-		levelChunkWithLight(*levelChunkPacket, server);
-		server.getNetworkManager().getOutgoingQueue()->push(levelChunkPacket);
-
+		// Packet* levelChunkPacket = new Packet(*packet);
+		// levelChunkWithLight(*levelChunkPacket, server);
+		// server.getNetworkManager().getOutgoingQueue()->push(levelChunkPacket);
 
 	} else if (packet->getId() == 0x2B) {
 		// Playere loaded
