@@ -1,0 +1,35 @@
+#include "network/networking.hpp"
+#include "network/packet.hpp"
+#include "network/server.hpp"
+#include "player.hpp"
+
+void handleFinishConfiguration(Packet& packet, Server& server) {
+	// g_logger->logNetwork(INFO, "Starting configuration finish sequence", "Configuration");
+
+	Player* player = packet.getPlayer();
+	if (!player) {
+		// g_logger->logNetwork(ERROR, "Error: No player associated with packet", "Configuration");
+		packet.setReturnPacket(PACKET_DISCONNECT);
+		return;
+	}
+
+	// g_logger->logNetwork(INFO, "Sending Finish Configuration packet to " +
+	// player->getPlayerName(), "Configuration");
+
+	// Send Finish Configuration packet (0x03)
+	Buffer payload;
+	payload.writeVarInt(0x03); // Finish Configuration packet ID
+
+	Buffer final;
+	final.writeVarInt(payload.getData().size());
+	final.writeBytes(payload.getData());
+
+	packet.getData() = final;
+	packet.setReturnPacket(PACKET_SEND);
+	packet.setPacketSize(final.getData().size());
+
+	// g_logger->logNetwork(INFO, "Finish Configuration packet sent, waiting for client
+	// acknowledgment", "Configuration");
+
+	(void)server; // Suppress unused parameter warning
+}

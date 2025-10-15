@@ -18,11 +18,11 @@ CXX             := g++
 CXXFLAGS        := -std=c++20 -Wall -Wextra -Wpedantic -O2
 DEBUG_FLAGS     := -g -DDEBUG -O0
 RELEASE_FLAGS   := -DNDEBUG -O3
-INCLUDE_FLAGS   := -I$(INCLUDE_DIR)
+INCLUDE_FLAGS   := -I$(INCLUDE_DIR) -I$(INCLUDE_DIR)/data -I$(INCLUDE_DIR)/network -I$(INCLUDE_DIR)/world -I$(INCLUDE_DIR)/lib
 
 # Linker flags (add your libraries here)
 LDFLAGS         :=
-LIBS            :=
+LIBS            := -lz
 
 # ================================ COLOR SETUP ===============================
 # ANSI color codes for beautiful output
@@ -82,7 +82,7 @@ else
 endif
 
 # ================================= TARGETS ==================================
-.PHONY: all clean debug release info help run install uninstall compile_commands
+.PHONY: all clean distclean clean-test debug release info help run install uninstall compile_commands
 
 # Default target
 all: info $(TARGET)
@@ -129,14 +129,44 @@ $(DEPS_DIR):
 # Clean build artifacts
 clean:
 	@printf "$(BOLD)$(BRIGHT_RED)🧹 Cleaning build artifacts...$(RESET)\n"
+	@find $(BUILD_DIR) -type f -name "*.o" -delete 2>/dev/null || true
+	@find $(BUILD_DIR) -name "$(TARGET_NAME)" -delete 2>/dev/null || true
+	@find $(BUILD_DIR) -type d -empty -delete 2>/dev/null || true
+	@find $(DEPS_DIR) -type f -name "*.d" -delete 2>/dev/null || true
+	@find $(DEPS_DIR) -type d -empty -delete 2>/dev/null || true
+	@printf "$(BOLD)$(BRIGHT_GREEN)✨ Clean completed! (Preserved directories and config.json)$(RESET)\n"
+
+# Complete clean - removes everything including directories
+distclean:
+	@printf "$(BOLD)$(BRIGHT_RED)🧹 Complete cleanup (removing all build artifacts and directories)...$(RESET)\n"
 	@rm -rf $(BUILD_DIR) $(DEPS_DIR)
-	@printf "$(BOLD)$(BRIGHT_GREEN)✨ Clean completed!$(RESET)\n"
+	@printf "$(BOLD)$(BRIGHT_GREEN)✨ Complete cleanup finished!$(RESET)\n"
+
+# Clean test-server directory
+clean-test:
+	@printf "$(BOLD)$(BRIGHT_RED)🧹 Cleaning test-server directory...$(RESET)\n"
+	@rm -rf test-server
+	@printf "$(BOLD)$(BRIGHT_GREEN)✨ Test-server cleanup finished!$(RESET)\n"
 
 # Run the executable
 run: $(TARGET)
+	@printf "$(BOLD)$(BRIGHT_MAGENTA)🚀 Setting up test-server environment...$(RESET)\n"
+	@mkdir -p test-server
+	@printf "$(BOLD)$(BRIGHT_BLUE)📦 Copying executable to test-server...$(RESET)\n"
+	@cp $(TARGET) test-server/$(TARGET_NAME)
+	@printf "$(BOLD)$(BRIGHT_BLUE)📦 Copying config.json to test-server...$(RESET)\n"
+	@cp -f config.json test-server/ 2>/dev/null || printf "$(YELLOW)⚠️  config.json not found, skipping...$(RESET)\n"
+	@printf "$(BOLD)$(BRIGHT_BLUE)📦 Copying world folder to test-server...$(RESET)\n"
+	@if [ -d "world" ]; then \
+		cp -r world test-server/; \
+		printf "$(BOLD)$(BRIGHT_GREEN)✅ World folder copied successfully!$(RESET)\n"; \
+	else \
+		printf "$(YELLOW)⚠️  World folder not found, skipping...$(RESET)\n"; \
+	fi
+	@printf "$(BOLD)$(BRIGHT_GREEN)✅ Test environment ready!$(RESET)\n"
 	@printf "$(BOLD)$(BRIGHT_MAGENTA)🚀 Running $(TARGET_NAME)...$(RESET)\n"
 	@printf "$(DIM)$(WHITE)" && echo "================================================" && printf "$(RESET)"
-	@./$(TARGET)
+	@cd test-server && ./$(TARGET_NAME)
 	@printf "$(DIM)$(WHITE)" && echo "================================================" && printf "$(RESET)"
 
 # Display project information
@@ -190,8 +220,10 @@ help:
 	@printf "$(BOLD)$(BRIGHT_CYAN)║$(RESET) $(BRIGHT_GREEN)%-10s$(RESET) %-39s $(BOLD)$(BRIGHT_CYAN)    ║$(RESET)\n" "all" "Build the project (default: release mode)"
 	@printf "$(BOLD)$(BRIGHT_CYAN)║$(RESET) $(BRIGHT_GREEN)%-10s$(RESET) %-39s $(BOLD)$(BRIGHT_CYAN)      ║$(RESET)\n" "debug" "Build in debug mode"
 	@printf "$(BOLD)$(BRIGHT_CYAN)║$(RESET) $(BRIGHT_GREEN)%-10s$(RESET) %-39s $(BOLD)$(BRIGHT_CYAN)      ║$(RESET)\n" "release" "Build in release mode"
-	@printf "$(BOLD)$(BRIGHT_CYAN)║$(RESET) $(BRIGHT_GREEN)%-10s$(RESET) %-39s $(BOLD)$(BRIGHT_CYAN)      ║$(RESET)\n" "clean" "Remove all build artifacts"
-	@printf "$(BOLD)$(BRIGHT_CYAN)║$(RESET) $(BRIGHT_GREEN)%-10s$(RESET) %-39s $(BOLD)$(BRIGHT_CYAN)      ║$(RESET)\n" "run" "Build and run the executable"
+	@printf "$(BOLD)$(BRIGHT_CYAN)║$(RESET) $(BRIGHT_GREEN)%-10s$(RESET) %-39s $(BOLD)$(BRIGHT_CYAN)      ║$(RESET)\n" "clean" "Remove build artifacts (preserve dirs)"
+	@printf "$(BOLD)$(BRIGHT_CYAN)║$(RESET) $(BRIGHT_GREEN)%-10s$(RESET) %-39s $(BOLD)$(BRIGHT_CYAN)      ║$(RESET)\n" "distclean" "Remove all build artifacts and dirs"
+	@printf "$(BOLD)$(BRIGHT_CYAN)║$(RESET) $(BRIGHT_GREEN)%-10s$(RESET) %-39s $(BOLD)$(BRIGHT_CYAN)      ║$(RESET)\n" "clean-test" "Remove test-server directory"
+	@printf "$(BOLD)$(BRIGHT_CYAN)║$(RESET) $(BRIGHT_GREEN)%-10s$(RESET) %-39s $(BOLD)$(BRIGHT_CYAN)      ║$(RESET)\n" "run" "Setup test-server and run executable"
 	@printf "$(BOLD)$(BRIGHT_CYAN)║$(RESET) $(BRIGHT_GREEN)%-10s$(RESET) %-39s $(BOLD)$(BRIGHT_CYAN)      ║$(RESET)\n" "compile_commands" "Generate compile_commands.json for LSP"
 	@printf "$(BOLD)$(BRIGHT_CYAN)║$(RESET) $(BRIGHT_GREEN)%-10s$(RESET) %-39s $(BOLD)$(BRIGHT_CYAN)      ║$(RESET)\n" "install" "Install the executable to system"
 	@printf "$(BOLD)$(BRIGHT_CYAN)║$(RESET) $(BRIGHT_GREEN)%-10s$(RESET) %-39s $(BOLD)$(BRIGHT_CYAN)      ║$(RESET)\n" "uninstall" "Remove the executable from system"

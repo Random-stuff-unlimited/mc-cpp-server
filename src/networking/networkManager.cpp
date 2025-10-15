@@ -1,5 +1,5 @@
-#include "networking.hpp"
-#include "server.hpp"
+#include "network/networking.hpp"
+#include "network/server.hpp"
 
 #include <arpa/inet.h>
 #include <cstring>
@@ -13,9 +13,8 @@
 #include <unistd.h>
 
 NetworkManager::NetworkManager(size_t workerCount, Server& s)
-    : _incomingPackets(), _outgoingPackets(), _workerThreads(), _shutdownFlag(false),
-      _receiverThread(), _senderThread(), _receiverThreadInit(0), _senderThreadInit(0), _server(s),
-      _epollFd(-1), _serverSocket(-1) {
+	: _incomingPackets(), _outgoingPackets(), _workerThreads(), _shutdownFlag(false), _receiverThread(), _senderThread(), _receiverThreadInit(0),
+	  _senderThreadInit(0), _server(s), _epollFd(-1), _serverSocket(-1) {
 	_workerThreads.reserve(workerCount);
 
 	setupEpoll();
@@ -34,12 +33,12 @@ void NetworkManager::startThreads() {
 		_shutdownFlag = false;
 
 		if (!_receiverThreadInit) {
-			_receiverThread     = std::thread(&NetworkManager::receiverThreadLoop, this);
+			_receiverThread		= std::thread(&NetworkManager::receiverThreadLoop, this);
 			_receiverThreadInit = 1;
 		}
 
 		if (!_senderThreadInit) {
-			_senderThread     = std::thread(&NetworkManager::senderThreadLoop, this);
+			_senderThread	  = std::thread(&NetworkManager::senderThreadLoop, this);
 			_senderThreadInit = 1;
 		}
 		size_t workerCount = _workerThreads.capacity();
@@ -96,12 +95,12 @@ void NetworkManager::start() {
 
 	struct sockaddr_in serverAddr;
 	serverAddr.sin_family = AF_INET;
-	serverAddr.sin_port   = htons(getServer().getServerPort());
+	serverAddr.sin_port	  = htons(getServer().getConfig().getServerPort());
 
-	if (strcmp(getServer().getServerAddr().c_str(), "0.0.0.0") == 0) {
+	if (strcmp(getServer().getConfig().getServerAddress().c_str(), "0.0.0.0") == 0) {
 		serverAddr.sin_addr.s_addr = INADDR_ANY;
 	} else {
-		if (inet_aton(getServer().getServerAddr().c_str(), &serverAddr.sin_addr) == 0) {
+		if (inet_aton(getServer().getConfig().getServerAddress().c_str(), &serverAddr.sin_addr) == 0) {
 			close(_serverSocket);
 			throw std::runtime_error("Invalid IP address");
 		}
@@ -109,9 +108,8 @@ void NetworkManager::start() {
 
 	if (bind(_serverSocket, (struct sockaddr*)&serverAddr, sizeof(serverAddr)) < 0) {
 		close(_serverSocket);
-		throw std::runtime_error("Failed to bind socket to " +
-		                         std::string(getServer().getServerAddr()) + ":" +
-		                         std::to_string(getServer().getServerPort()));
+		throw std::runtime_error("Failed to bind socket to " + std::string(getServer().getConfig().getServerAddress()) + ":" +
+								 std::to_string(getServer().getConfig().getServerPort()));
 	}
 
 	if (listen(_serverSocket, SOMAXCONN) < 0) {

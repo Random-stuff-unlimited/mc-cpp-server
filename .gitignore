@@ -8,3 +8,7 @@ compile_commands.json
 .cache
 .vscode
 logs
+
+# Test server directory
+test-server
+include/external
