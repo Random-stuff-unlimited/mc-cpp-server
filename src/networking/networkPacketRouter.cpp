@@ -229,14 +229,14 @@ void handlePlayState(Packet* packet, Server& server) {
 		server.getNetworkManager().getOutgoingQueue()->push(gameEvent);
 
 		// 2. Send Set Center Chunk - 0x57
-		// Packet* setCenterPacket = new Packet(*packet);
-		// writeSetCenterPacket(*setCenterPacket, server);
-		// server.getNetworkManager().getOutgoingQueue()->push(setCenterPacket);
+		Packet* setCenterPacket = new Packet(*packet);
+		writeSetCenterPacket(*setCenterPacket, server);
+		server.getNetworkManager().getOutgoingQueue()->push(setCenterPacket);
 
 		// 3. Send Level Chunk With Light - 0x22
-		// Packet* levelChunkPacket = new Packet(*packet);
-		// levelChunkWithLight(*levelChunkPacket, server);
-		// server.getNetworkManager().getOutgoingQueue()->push(levelChunkPacket);
+		Packet* levelChunkPacket = new Packet(*packet);
+		levelChunkWithLight(*levelChunkPacket, server);
+		server.getNetworkManager().getOutgoingQueue()->push(levelChunkPacket);
 
 	} else if (packet->getId() == 0x2B) {
 		// Playere loaded

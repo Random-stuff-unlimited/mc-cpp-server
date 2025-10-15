@@ -1,12 +1,11 @@
 #include "network/buffer.hpp"
 #include "network/packet.hpp"
 #include "player.hpp"
+#include "world/world.hpp"
 
 void levelChunkWithLight(Packet& packet, Server& server) {
-    int chunkX = 0;
-    int chunkZ = 0;
-
-    std::cout << "=== Sending Chunk Data (" << chunkX << ", " << chunkZ << ") ===\n";
+	int chunkX = 0;
+	int chunkZ = 0;
 
 	Buffer buf;
 
@@ -15,6 +14,7 @@ void levelChunkWithLight(Packet& packet, Server& server) {
 		World::Query	 query	   = server.getWorldQuery();
 		World::ChunkData chunkData = query.fetchChunk(chunkX, chunkZ);
 
+		buf.writeByte(0x27);
 		// Write chunk coordinates
 		buf.writeInt(chunkX);
 		buf.writeInt(chunkZ);
@@ -25,7 +25,7 @@ void levelChunkWithLight(Packet& packet, Server& server) {
 		} else {
 			// Empty heightmap NBT compound
 			buf.writeByte(0x0A); // TAG_Compound
-			buf.writeVarInt(0);  // Empty name length
+			buf.writeUShort(0);	 // Empty name length (must be short, not VarInt)
 			buf.writeByte(0x00); // TAG_End
 		}
 
@@ -44,11 +44,13 @@ void levelChunkWithLight(Packet& packet, Server& server) {
 
 				// Block states palette
 				emptyData.writeByte(0);	  // Bits per entry (single value)
+				emptyData.writeVarInt(1); // Palette length (must be 1 when bpe=0)
 				emptyData.writeVarInt(0); // Air block state ID (should be 0)
 				emptyData.writeVarInt(0); // Data array length (no data needed for single value)
 
-				// Biomes palette  
+				// Biomes palette
 				emptyData.writeByte(0);	  // Bits per entry (single value)
+				emptyData.writeVarInt(1); // Palette length (must be 1 when bpe=0)
 				emptyData.writeVarInt(0); // Safest biome ID (should always exist)
 				emptyData.writeVarInt(0); // Data array length (no data needed for single value)
 			}
@@ -63,28 +65,28 @@ void levelChunkWithLight(Packet& packet, Server& server) {
 		// Light data (proper format)
 		// Sky Light Mask
 		buf.writeVarInt(1);		  // Sky light mask array length
-		buf.writeLong(0x1FFFFFF); // Mask for sections 0-24 (all have sky light)
-		
-		// Block Light Mask  
-		buf.writeVarInt(1);	// Block light mask array length
-		buf.writeLong(0);	// No block light sections
-		
-		// Empty Sky Light Mask
-		buf.writeVarInt(1);	// Empty sky light mask array length
-		buf.writeLong(0);	// No empty sky light sections
-		
-		// Empty Block Light Mask
-		buf.writeVarInt(1);	// Empty block light mask array length  
-		buf.writeLong(0);	// No empty block light sections
+		buf.writeLong(0x3FFFFFF); // Mask for 26 sections (all have sky light)
 
-		// Sky light data arrays (25 sections: -4 to 20)
-		for (int i = 0; i < 25; i++) {
+		// Block Light Mask
+		buf.writeVarInt(1); // Block light mask array length
+		buf.writeLong(0);	// No block light sections
+
+		// Empty Sky Light Mask
+		buf.writeVarInt(1); // Empty sky light mask array length
+		buf.writeLong(0);	// No empty sky light sections
+
+		// Empty Block Light Mask
+		buf.writeVarInt(1);		  // Empty block light mask array length
+		buf.writeLong(0x3FFFFFF); // All block light sections are empty
+
+		// Sky light data arrays (26 sections)
+		for (int i = 0; i < 26; i++) {
 			buf.writeVarInt(2048); // Light array size (16x16x16 / 2)
 			for (int j = 0; j < 2048; j++) {
 				buf.writeByte(0xFF); // Full sky light (15 << 4 | 15)
 			}
 		}
-		
+
 		// No block light arrays since mask is 0
 
 	} catch (const std::exception& e) {
