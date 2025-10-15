@@ -1,8 +1,8 @@
 #ifndef NETWORKING_HPP
 #define NETWORKING_HPP
 
+#include "../lib/UUID.hpp"
 #include "../player.hpp"
-#include "lib/UUID.hpp"
 #include "packet.hpp"
 
 // Forward declaration to avoid circular dependency

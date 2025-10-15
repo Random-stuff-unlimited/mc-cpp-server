@@ -1,6 +1,7 @@
 #ifndef PACKET_HPP
 #define PACKET_HPP
 
+#include "../lib/UUID.hpp"
 #include "../player.hpp"
 #include "buffer.hpp"
 #include "server.hpp"

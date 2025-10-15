@@ -1,7 +1,7 @@
 #ifndef BUFFER_HPP
 #define BUFFER_HPP
 
-#include "lib/UUID.hpp"
+#include "../lib/UUID.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -30,21 +30,20 @@ class Buffer {
 	void		writeString(const std::string& str);
 
 	// Array reading methods
-	std::vector<std::string> readStringArray();
-	std::vector<int> readVarIntArray();
-	template<typename T>
-	std::vector<T> readArray(std::function<T()> reader) {
+	std::vector<std::string>			 readStringArray();
+	std::vector<int>					 readVarIntArray();
+	template <typename T> std::vector<T> readArray(std::function<T()> reader) {
 		int count = readVarInt();
 		if (count < 0) {
 			throw std::runtime_error("Negative array length");
 		}
 		std::vector<T> result;
 		result.reserve(count);
-		
+
 		for (int i = 0; i < count; ++i) {
 			result.push_back(reader());
 		}
-		
+
 		return result;
 	}
 
@@ -65,13 +64,13 @@ class Buffer {
 	void				  writeBytes(const std::vector<uint8_t>& data);
 	void				  writeUUID(const UUID& uuid);
 
-	void writeBool(bool value);
-	void writeNBT(const std::string& nbtData);
-	void writePosition(int32_t x, int32_t y, int32_t z);
-	void writeFloat(float value);
-	void writeDouble(double value);
-	void writeIdentifier(const std::string& id);
-	void writeVarLong(int64_t value);
+	void	writeBool(bool value);
+	void	writeNBT(const std::string& nbtData);
+	void	writePosition(int32_t x, int32_t y, int32_t z);
+	void	writeFloat(float value);
+	void	writeDouble(double value);
+	void	writeIdentifier(const std::string& id);
+	void	writeVarLong(int64_t value);
 	int64_t readVarLong();
 
 	// Known Packs packet specific methods
@@ -81,7 +80,7 @@ class Buffer {
 		std::string version;
 	};
 	std::vector<KnownPack> readKnownPacks();
-	void writeKnownPacks(const std::vector<KnownPack>& packs);
+	void				   writeKnownPacks(const std::vector<KnownPack>& packs);
 };
 
 #endif

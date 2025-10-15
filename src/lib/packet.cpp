@@ -1,8 +1,7 @@
-#include "network/packet.hpp"
-
 #include "lib/json.hpp"
 #include "logger.hpp"
 #include "network/buffer.hpp"
+#include "network/packet.hpp"
 #include "network/server.hpp"
 #include "player.hpp"
 
@@ -34,7 +33,7 @@ Packet& Packet::operator=(const Packet& other) {
 		_socketFd	  = other._socketFd;
 		_returnPacket = other._returnPacket;
 	}
-	return *this;
+	return (*this);
 }
 
 Packet::Packet(Player* player) : _player(player), _socketFd(-1), _returnPacket(0) {
