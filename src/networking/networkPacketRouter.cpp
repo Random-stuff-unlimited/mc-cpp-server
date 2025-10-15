@@ -166,6 +166,10 @@ void handleConfigurationState(Packet* packet, Server& server) {
 		playerAbilities(*abilitiesPacket);
 		server.getNetworkManager().getOutgoingQueue()->push(abilitiesPacket);
 
+		Packet* heldItemPacket = new Packet(*packet);
+		setHeldItem(*heldItemPacket);
+		server.getNetworkManager().getOutgoingQueue()->push(heldItemPacket);
+
 		// 2. Send player position and look - 0x41
 		Packet* positionPacket = new Packet(*packet);
 		sendPlayerPositionAndLook(*positionPacket, server); // rename packet
