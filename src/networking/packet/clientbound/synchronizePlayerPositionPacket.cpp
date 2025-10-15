@@ -37,18 +37,5 @@ void synchronizePlayerPositionPacket(Packet& packet, Server& server) {
 	// Flags (0x00 = absolute positioning)
 	buf.writeInt(0x00);
 
-	int packetId		 = 0x41;
-	int packetIdSize	 = packet.getVarintSize(packetId);
-	int totalPayloadSize = packetIdSize + buf.getData().size();
-
-	Buffer finalBuf;
-	finalBuf.writeVarInt(totalPayloadSize);
-	finalBuf.writeVarInt(packetId);
-	finalBuf.writeBytes(buf.getData());
-
-	packet.getData() = finalBuf;
-	packet.setPacketSize(finalBuf.getData().size());
-	packet.setReturnPacket(PACKET_SEND);
-
-	(void)server;
+	packet.sendPacket(0x41, buf, server, true);
 }

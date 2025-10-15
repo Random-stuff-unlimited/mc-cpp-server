@@ -15,25 +15,9 @@ void handlePingPacket(Packet& packet, Server& server) {
 
 	long timestamp = packet.getData().readInt64();
 
-	// g_logger->logNetwork(INFO, "Received ping request with timestamp: " +
-	// std::to_string(timestamp), "Ping");
-
-	int packetId		   = 0x01;
-	int packetIdVarintSize = packet.getVarintSize(packetId);
-	int totalPayloadSize   = packetIdVarintSize + 8;
-
 	Buffer buf;
-	buf.writeVarInt(totalPayloadSize);
-	buf.writeVarInt(packetId);
+
 	buf.writeInt64(timestamp);
 
-	packet.getData() = buf;
-	packet.setReturnPacket(PACKET_SEND);
-	packet.setPacketSize(buf.getData().size());
-	packet.getPlayer()->setPlayerState(PlayerState::None);
-
-	// g_logger->logNetwork(INFO, "Pong response ready - echoing timestamp " +
-	// std::to_string(timestamp), "Ping");
-
-	(void)server;
+	packet.sendPacket(0x01, buf, server, true);
 }

@@ -1,3 +1,4 @@
+#include "buffer.hpp"
 #include "network/networking.hpp"
 #include "network/packet.hpp"
 #include "network/server.hpp"
@@ -13,23 +14,7 @@ void handleFinishConfigurationPacket(Packet& packet, Server& server) {
 		return;
 	}
 
-	// g_logger->logNetwork(INFO, "Sending Finish Configuration packet to " +
-	// player->getPlayerName(), "Configuration");
+	Buffer buf;
 
-	// Send Finish Configuration packet (0x03)
-	Buffer payload;
-	payload.writeVarInt(0x03); // Finish Configuration packet ID
-
-	Buffer final;
-	final.writeVarInt(payload.getData().size());
-	final.writeBytes(payload.getData());
-
-	packet.getData() = final;
-	packet.setReturnPacket(PACKET_SEND);
-	packet.setPacketSize(final.getData().size());
-
-	// g_logger->logNetwork(INFO, "Finish Configuration packet sent, waiting for client
-	// acknowledgment", "Configuration");
-
-	(void)server; // Suppress unused parameter warning
+	packet.sendPacket(0x03, buf, server, true);
 }

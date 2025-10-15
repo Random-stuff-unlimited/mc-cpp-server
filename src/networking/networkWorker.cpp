@@ -2,6 +2,7 @@
 #include "network/networking.hpp"
 #include "network/packet.hpp"
 #include "network/server.hpp"
+#include "packetRouter.hpp"
 #include "player.hpp"
 
 #include <chrono>
@@ -17,11 +18,8 @@ void NetworkManager::workerThreadLoop() {
 		if (_incomingPackets.waitAndPopTimeout(packet, std::chrono::milliseconds(100))) {
 			if (packet == nullptr) break;
 			try {
-
-				// g_logger->logNetwork(INFO, "Handling incoming data for player", "Worker");
 				packetRouter(packet, getServer());
 				if (packet->getReturnPacket() == PACKET_SEND) {
-					_outgoingPackets.push(packet);
 					packet = nullptr;
 				} else if (packet->getReturnPacket() == PACKET_DISCONNECT) {
 					Player* player = packet->getPlayer();

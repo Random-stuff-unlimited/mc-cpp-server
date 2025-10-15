@@ -112,29 +112,4 @@ class NetworkManager {
 	void handleIncomingData(int socket);
 };
 
-// clientbound
-void changeDifficultyPacket(Packet& packet);
-void clientboundKnownPacksPacket(Packet& packet);
-void gameEventPacket(Packet& packet, Server& server);
-void handleCookieRequestPacket(Packet& packet, Server& server);
-void handleFinishConfigurationPacket(Packet& packet, Server& server);
-void handleLoginStartPacket(Packet& packet, Server& server);
-void handlePingPacket(Packet& packet, Server& server);
-void handleStatusPacket(Packet& packet, Server& server);
-void levelChunkWithLightPacket(Packet& packet, Server& server);
-void playerAbilitiesPacket(Packet& packet);
-void sendPlayPacket(Packet& packet, Server& server);
-void setHeldItemPacket(Packet& packet);
-void synchronizePlayerPositionPacket(Packet& packet, Server& server);
-
-// serverbound
-void handleAcknowledgeFinishConfigurationPacket(Packet& packet, Server& server);
-void handleClientInformationPacket(Packet& packet, Server& server);
-void handleConfirmTeleportationPacket(Packet& packet, Server& server);
-void handleHandshakePacket(Packet& packet, Server& server);
-void handleLoginAcknowledgedPacket(Packet& packet, Server& server);
-void serverboundKnownPacksPacket(Packet& packet);
-
-void packetRouter(Packet* packet, Server& server);
-
 #endif
