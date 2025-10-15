@@ -158,5 +158,6 @@ void levelChunkWithLight(Packet& packet, Server& server);
 
 // Optional Packets
 void changeDifficulty(Packet& packet);
+void playerAbilities(Packet& packet);
 
 #endif

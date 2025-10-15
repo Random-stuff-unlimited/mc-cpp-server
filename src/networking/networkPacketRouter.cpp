@@ -160,6 +160,12 @@ void handleConfigurationState(Packet* packet, Server& server) {
 		changeDifficulty(*difficultyPacket);
 		server.getNetworkManager().getOutgoingQueue()->push(difficultyPacket);
 
+		// 4. Send Player Abilities - 0x39
+		g_logger->logNetwork(INFO, "Sending Player Abilities packet", "PacketRouter");
+		Packet* abilitiesPacket = new Packet(*packet);
+		playerAbilities(*abilitiesPacket);
+		server.getNetworkManager().getOutgoingQueue()->push(abilitiesPacket);
+
 		// 2. Send player position and look - 0x41
 		Packet* positionPacket = new Packet(*packet);
 		sendPlayerPositionAndLook(*positionPacket, server); // rename packet
