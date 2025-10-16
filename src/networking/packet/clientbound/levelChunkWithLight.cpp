@@ -1,105 +1,196 @@
+#include "logger.hpp"
 #include "network/buffer.hpp"
 #include "network/packet.hpp"
+#include "network/server.hpp"
 #include "player.hpp"
-#include "world/world.hpp"
 
-void levelChunkWithLight(Packet& packet, Server& server) {
-	int chunkX = 0;
-	int chunkZ = 0;
+std::vector<uint8_t> encodeVarInt(int32_t value) {
+	std::vector<uint8_t> output;
+	uint32_t			 uvalue = static_cast<uint32_t>(value);
 
-	Buffer buf;
+	while (uvalue >= 0x80) {
+		output.push_back(static_cast<uint8_t>((uvalue & 0x7F) | 0x80));
+		uvalue >>= 7;
+	}
+	output.push_back(static_cast<uint8_t>(uvalue & 0x7F));
 
+	return output;
+}
+
+void levelChunkWithLight(Packet& packet, Server& server, int32_t chunkX, int32_t chunkZ) {
 	try {
-		// Use your new chunk loading system
-		World::Query	 query	   = server.getWorldQuery();
-		World::ChunkData chunkData = query.fetchChunk(chunkX, chunkZ);
+		// Load the specific chunk from world
+		auto chunkData = server.getWorldQuery().fetchChunkDirect(chunkX, chunkZ);
 
-		buf.writeByte(0x27);
+		Buffer buf;
+		buf.writeByte(0x27); // Packet ID
+
 		// Write chunk coordinates
-		buf.writeInt(chunkX);
-		buf.writeInt(chunkZ);
+		buf.writeInt(chunkData.chunkX);
+		buf.writeInt(chunkData.chunkZ);
 
-		// Write heightmaps (proper NBT format)
-		if (!chunkData.heightmaps.empty()) {
-			buf.writeBytes(chunkData.heightmaps);
-		} else {
-			// Empty heightmap NBT compound
-			buf.writeByte(0x0A); // TAG_Compound
-			buf.writeUShort(0);	 // Empty name length (must be short, not VarInt)
-			buf.writeByte(0x00); // TAG_End
-		}
-
-		// Write chunk data
-		if (!chunkData.blockData.empty()) {
-			buf.writeVarInt(chunkData.blockData.size());
-			buf.writeBytes(chunkData.blockData);
-		} else {
-			// Generate simple empty chunk inline
-			Buffer	  emptyData;
-			const int NUM_SECTIONS = 24;
-
-			for (int section = 0; section < NUM_SECTIONS; section++) {
-				// Block count (Short - number of non-air blocks)
-				emptyData.writeUShort(0); // All air blocks
-
-				// Block states palette
-				emptyData.writeByte(0);	  // Bits per entry (single value)
-				emptyData.writeVarInt(1); // Palette length (must be 1 when bpe=0)
-				emptyData.writeVarInt(0); // Air block state ID (should be 0)
-				emptyData.writeVarInt(0); // Data array length (no data needed for single value)
-
-				// Biomes palette
-				emptyData.writeByte(0);	  // Bits per entry (single value)
-				emptyData.writeVarInt(1); // Palette length (must be 1 when bpe=0)
-				emptyData.writeVarInt(0); // Safest biome ID (should always exist)
-				emptyData.writeVarInt(0); // Data array length (no data needed for single value)
-			}
-
-			buf.writeVarInt(emptyData.getData().size());
-			buf.writeBytes(emptyData.getData());
-		}
-
-		// Block entities
-		buf.writeVarInt(0);
-
-		// Light data (proper format)
-		// Sky Light Mask
-		buf.writeVarInt(1);		  // Sky light mask array length
-		buf.writeLong(0x3FFFFFF); // Mask for 26 sections (all have sky light)
-
-		// Block Light Mask
-		buf.writeVarInt(1); // Block light mask array length
-		buf.writeLong(0);	// No block light sections
-
-		// Empty Sky Light Mask
-		buf.writeVarInt(1); // Empty sky light mask array length
-		buf.writeLong(0);	// No empty sky light sections
-
-		// Empty Block Light Mask
-		buf.writeVarInt(1);		  // Empty block light mask array length
-		buf.writeLong(0x3FFFFFF); // All block light sections are empty
-
-		// Sky light data arrays (26 sections)
-		for (int i = 0; i < 26; i++) {
-			buf.writeVarInt(2048); // Light array size (16x16x16 / 2)
-			for (int j = 0; j < 2048; j++) {
-				buf.writeByte(0xFF); // Full sky light (15 << 4 | 15)
+		// Write heightmaps
+		auto heightmapData	= chunkData.heightmaps.serializeToNBT();
+		auto availableTypes = chunkData.heightmaps.getAvailableTypes();
+		buf.writeVarInt(static_cast<int>(availableTypes.size())); // Count of heightmaps
+		for (const auto& heightmapType : availableTypes) {
+			buf.writeVarInt(static_cast<int>(heightmapType)); // Use the enum value as dataType
+			auto packedData = chunkData.heightmaps.packHeightMap(heightmapType);
+			buf.writeVarInt(static_cast<int>(packedData.size()));
+			for (uint64_t value : packedData) {
+				buf.writeUnsignedLong(value);
 			}
 		}
 
-		// No block light arrays since mask is 0
+		// Calculate chunk section data
+		std::vector<uint8_t> chunkSectionData;
+
+		for (int sectionIndex = 0; sectionIndex < 24; sectionIndex++) {
+			const auto& section = chunkData.sections[sectionIndex];
+
+			// Write block count (2 bytes, big-endian)
+			chunkSectionData.push_back((section.blockCount >> 8) & 0xFF);
+			chunkSectionData.push_back(section.blockCount & 0xFF);
+
+			// Write block states for ALL sections (including empty ones)
+			if (section.blockStates && !section.isEmpty) {
+				auto blockStateData = section.blockStates->serialize();
+				chunkSectionData.insert(chunkSectionData.end(), blockStateData.begin(), blockStateData.end());
+			} else {
+				// Empty section - single-valued palette with air
+				chunkSectionData.push_back(0); // bits per entry = 0 (single valued)
+				// For single-valued, write the value directly as VarInt (no palette array)
+				auto airIdBytes = encodeVarInt(0); // Air block ID = 0
+				chunkSectionData.insert(chunkSectionData.end(), airIdBytes.begin(), airIdBytes.end());
+				// No data array for single-valued (0 bits per entry means no data needed)
+			}
+
+			// Write biomes for ALL sections
+			if (section.biomes && !section.isEmpty) {
+				auto biomeData = section.biomes->serialize();
+				chunkSectionData.insert(chunkSectionData.end(), biomeData.begin(), biomeData.end());
+			} else {
+				// Default single-valued biome palette
+				chunkSectionData.push_back(0);		  // bits per entry = 0
+				auto plainsIdBytes = encodeVarInt(1); // Plains biome ID = 1
+				chunkSectionData.insert(chunkSectionData.end(), plainsIdBytes.begin(), plainsIdBytes.end());
+			}
+		}
+
+		// Write chunk data size and data
+		buf.writeVarInt(static_cast<int>(chunkSectionData.size()));
+		buf.writeBytes(chunkSectionData);
+
+		// Write block entities
+		buf.writeVarInt(static_cast<int>(chunkData.blockEntities.size()));
+		for (const auto& blockEntity : chunkData.blockEntities) {
+			buf.writeByte(blockEntity.packedXZ);
+			buf.writeUShort(static_cast<uint16_t>(blockEntity.y));
+			buf.writeVarInt(blockEntity.type);
+			buf.writeBytes(blockEntity.nbtData);
+		}
+
+		// Write light data
+		// Sky light update mask (bitmask for sections with sky light)
+		uint64_t skyLightMask	= 0;
+		uint64_t blockLightMask = 0;
+
+		for (size_t i = 0; i < chunkData.sections.size(); i++) {
+			if (chunkData.sections[i].hasSkyLight) {
+				skyLightMask |= (1ULL << i);
+			}
+			if (chunkData.sections[i].hasBlockLight) {
+				blockLightMask |= (1ULL << i);
+			}
+		}
+
+		// Bitsets are: VarInt(array_length) + array_of_ulongs
+		// Sky light mask
+		buf.writeVarInt(1);					 // Bitset length = 1
+		buf.writeUnsignedLong(skyLightMask); // 64-bit mask as ULong
+
+		// Block light mask
+		buf.writeVarInt(1);					   // Bitset length = 1
+		buf.writeUnsignedLong(blockLightMask); // 64-bit mask as ULong
+
+		// Empty sky light mask
+		buf.writeVarInt(1);		  // Bitset length = 1
+		buf.writeUnsignedLong(0); // No empty sections
+
+		// Empty block light mask
+		buf.writeVarInt(1);		  // Bitset length = 1
+		buf.writeUnsignedLong(0); // No empty sections
+
+		std::vector<std::vector<uint8_t>> skyLightArraysToWrite;
+		for (size_t i = 0; i < chunkData.sections.size(); i++) {
+			if (chunkData.sections[i].hasSkyLight && !chunkData.sections[i].skyLight.empty()) {
+				skyLightArraysToWrite.push_back(chunkData.sections[i].skyLight);
+			}
+		}
+
+		// Write sky light array count
+		buf.writeVarInt(static_cast<int>(skyLightArraysToWrite.size()));
+
+		// Write each sky light array
+		for (const auto& lightArray : skyLightArraysToWrite) {
+			buf.writeVarInt(static_cast<int>(lightArray.size()));
+			buf.writeBytes(lightArray);
+		}
+
+		// Same for block light arrays
+		std::vector<std::vector<uint8_t>> blockLightArraysToWrite;
+		for (size_t i = 0; i < chunkData.sections.size(); i++) {
+			if (chunkData.sections[i].hasBlockLight && !chunkData.sections[i].blockLight.empty()) {
+				blockLightArraysToWrite.push_back(chunkData.sections[i].blockLight);
+			}
+		}
+
+		buf.writeVarInt(static_cast<int>(blockLightArraysToWrite.size()));
+		for (const auto& lightArray : blockLightArraysToWrite) {
+			buf.writeVarInt(static_cast<int>(lightArray.size()));
+			buf.writeBytes(lightArray);
+		}
+
+		// Create final buffer with length prefix
+		Buffer final;
+		final.writeVarInt(buf.getData().size());
+		final.writeBytes(buf.getData());
+
+		// Set packet data
+		packet.setPacketId(0x27);
+		packet.getData() = final;
+		packet.setPacketSize(final.getData().size());
+		packet.setReturnPacket(PACKET_SEND);
+
+		g_logger->logGameInfo(INFO,
+							  "Sent levelChunkWithLight packet for chunk (" + std::to_string(chunkData.chunkX) + ", " +
+									  std::to_string(chunkData.chunkZ) + ")",
+							  "PACKET");
 
 	} catch (const std::exception& e) {
-		std::cerr << "Error in sendChunkData: " << e.what() << std::endl;
-		// Return without setting packet data - this will cause the packet to be skipped
-		return;
+		g_logger->logGameInfo(ERROR, "Error in levelChunkWithLight: " + std::string(e.what()), "PACKET");
+
+		// Send empty chunk as fallback
+		Buffer buf;
+		buf.writeByte(0x27);	 // Packet ID
+		buf.writeVarInt(chunkX); // chunkX parameter
+		buf.writeVarInt(chunkZ); // chunkZ parameter
+		buf.writeVarInt(0);		 // empty heightmaps
+		buf.writeVarInt(0);		 // empty chunk data
+		buf.writeVarInt(0);		 // no block entities
+		buf.writeVarLong(0);	 // no sky light
+		buf.writeVarLong(0);	 // no block light
+		buf.writeVarLong(0);	 // empty sky light mask
+		buf.writeVarLong(0);	 // empty block light mask
+
+		// Create final buffer with length prefix
+		Buffer final;
+		final.writeVarInt(buf.getData().size());
+		final.writeBytes(buf.getData());
+
+		packet.setPacketId(0x27);
+		packet.getData() = final;
+		packet.setPacketSize(final.getData().size());
+		packet.setReturnPacket(PACKET_SEND);
 	}
-
-	// Set packet data (no manual length encoding)
-	packet.setPacketId(0x27); // Level Chunk with Light packet ID
-	packet.getData() = buf;
-	packet.setPacketSize(buf.getData().size());
-	packet.setReturnPacket(PACKET_SEND);
-
-	(void)server;
 }

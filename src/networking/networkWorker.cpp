@@ -1,4 +1,3 @@
-#include "logger.hpp"
 #include "network/networking.hpp"
 #include "network/packet.hpp"
 #include "network/server.hpp"

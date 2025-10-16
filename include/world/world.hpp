@@ -1,8 +1,10 @@
 #ifndef WORLD_MANAGER_HPP
 #define WORLD_MANAGER_HPP
 
+#include "heightMap.hpp"
 #include "lib/nbt.hpp"
 #include "logger.hpp"
+#include "palettedContainer.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -11,7 +13,12 @@
 #include <string>
 #include <vector>
 
+// Forward declarations moved to namespace
+
 namespace World {
+	// Forward declarations
+	class HeightMap;
+	class PalettedContainer;
 
 	struct LevelDat { // see https://minecraft.wiki/w/Java_Edition_level_format#level.dat_format
 		// Existing fields
@@ -55,21 +62,53 @@ namespace World {
 		nbt::NBT nbtData;
 	};
 
+	struct ChunkSection {
+		uint16_t						   blockCount = 0;
+		std::unique_ptr<PalettedContainer> blockStates; // 4096 entries
+		std::unique_ptr<PalettedContainer> biomes;		// 64 entries
+
+		std::vector<uint8_t> skyLight;	 // 2048 bytes
+		std::vector<uint8_t> blockLight; // 2048 bytes
+
+		bool hasSkyLight   = false;
+		bool hasBlockLight = false;
+		bool isEmpty	   = true;
+
+		ChunkSection();
+
+		void				 calculateBlockCount(const std::vector<uint32_t>& blockStateIds);
+		void				 setBlocks(const std::vector<uint32_t>& blockStateIds);
+		void				 setBiomes(const std::vector<uint32_t>& biomeIds);
+		void				 initializeLighting(bool withSkyLight = true, bool withBlockLight = false);
+		std::vector<uint8_t> serialize() const;
+	};
+
 	struct ChunkData {
-		int chunkX;
-		int chunkZ;
+		int32_t chunkX, chunkZ;
 
-		std::vector<uint8_t> blockData;
-		std::vector<uint8_t> biomeData;
-		std::vector<uint8_t> heightmaps;
-		std::vector<uint8_t> blockEntities;
+		HeightMap				  heightmaps;
+		std::vector<ChunkSection> sections;
 
-		std::vector<uint8_t> skyLight;
-		std::vector<uint8_t> blockLight;
+		struct BlockEntity {
+			uint8_t				 packedXZ; // (x & 15) << 4 | (z & 15)
+			int16_t				 y;
+			uint32_t			 type;
+			std::vector<uint8_t> nbtData;
 
-		ChunkData(int x, int z) : chunkX(x), chunkZ(z) {}
+			BlockEntity(uint8_t x, uint8_t z, int16_t yPos, uint32_t typeId);
+		};
+		std::vector<BlockEntity> blockEntities;
 
-		bool isEmpty() const { return blockData.empty(); }
+		bool	isFullyGenerated = false;
+		int64_t inhabitedTime	 = 0;
+		int64_t lastUpdate		 = 0;
+
+		ChunkData(int32_t x, int32_t z, int worldHeight = 384, int minY = -64);
+
+		ChunkSection* getSectionByY(int worldY, int minY = -64);
+		bool		  isEmpty() const;
+
+		static ChunkData generateEmpty(int32_t x, int32_t z, int worldHeight = 384);
 	};
 
 	class Manager {
@@ -89,41 +128,6 @@ namespace World {
 	  private:
 		LevelDat			  _LevelDat;
 		std::filesystem::path _worldPath;
-	};
-
-	class Query {
-	  public:
-		explicit Query(Manager& manager) : _worldManager(manager) {}
-		ChunkData fetchChunk(int chunkX, int chunkZ) {
-			ChunkData chunk(chunkX, chunkZ);
-
-			try {
-				auto regionPath = _worldManager.locateRegionFileByChunkCoord(chunkX, chunkZ);
-				chunk			= loadChunkFromRegion(regionPath, chunkX, chunkZ);
-			} catch (const std::exception& e) {
-				g_logger->logGameInfo(DEBUG,
-									  "Chunk (" + std::to_string(chunkX) + ", " + std::to_string(chunkZ) +
-											  ") not found, sending empty chunk: " + e.what(),
-									  "World::Query::fetchChunk");
-				chunk = generateEmptyChunk(chunkX, chunkZ);
-			}
-
-			return chunk;
-		}
-		const LevelDat& getWorldData() const { return _worldManager.getLevelDat(); }
-
-	  private:
-		Manager& _worldManager;
-
-	  private:
-		void	  extractChunkDataFromNBT(const nbt::NBT& chunkNBT, ChunkData& chunk);
-		void	  extractSectionsData(const nbt::TagList& sections, ChunkData& chunk);
-		void	  extractBlockStatesFromSection(const nbt::TagCompound& blockStates, ChunkData& chunk, int8_t sectionY);
-		void	  extractHeightmaps(const nbt::TagCompound& heightmaps, ChunkData& chunk);
-		void	  extractBlockEntities(const nbt::TagList& blockEntities, ChunkData& chunk);
-		void	  extractBiomesFromSections(const nbt::TagCompound& root, ChunkData& chunk);
-		ChunkData generateEmptyChunk(int chunkX, int chunkZ);
-		ChunkData loadChunkFromRegion(const std::filesystem::path& regionPath, int chunkX, int chunkZ);
 	};
 
 } // namespace World

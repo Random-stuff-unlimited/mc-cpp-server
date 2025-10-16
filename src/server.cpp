@@ -17,7 +17,7 @@
 
 using json = nlohmann::json;
 
-Server::Server() : _playerLst(), _config(), _networkManager(nullptr), _worldQuery(_worldManager) {}
+Server::Server() : _playerLst(), _config(), _networkManager(nullptr), _worldQuery(nullptr) {}
 
 Server::~Server() {
 	if (_networkManager) {
@@ -34,6 +34,10 @@ int Server::start_server() {
 			return 1;
 		}
 
+		// Initialize world manager first
+		g_logger->logGameInfo(INFO, "Initializing world manager...", "SERVER");
+		// Add any world manager initialization here if needed
+
 		// Load world data
 		g_logger->logGameInfo(INFO, "Loading world...", "SERVER");
 		try {
@@ -44,35 +48,68 @@ int Server::start_server() {
 				g_logger->logGameInfo(ERROR, "level.dat not found at: " + levelDatPath.string(), "SERVER");
 				return 1;
 			}
-
 			_worldData = _worldManager.loadLevelDat(levelDatPath);
 
 			// Log world information
-			g_logger->logGameInfo(INFO, "World loaded successfully: " + _worldData.LevelName, "SERVER");
-			g_logger->logGameInfo(INFO,
-								  "Spawn Point: X=" + std::to_string(_worldData.SpawnX) + " Y=" + std::to_string(_worldData.SpawnY) +
-										  " Z=" + std::to_string(_worldData.SpawnZ),
-								  "SERVER");
-			g_logger->logGameInfo(INFO, "Random Seed: " + std::to_string(_worldData.RandomSeed), "SERVER");
-			g_logger->logGameInfo(INFO, "Game Type: " + std::to_string(_worldData.GameType), "SERVER");
-			g_logger->logGameInfo(INFO, "Data Version: " + std::to_string(_worldData.DataVersion), "SERVER");
-			g_logger->logGameInfo(INFO, "Difficulty: " + std::to_string(static_cast<int>(_worldData.Difficulty)), "SERVER");
-			g_logger->logGameInfo(INFO, "Hardcore: " + std::string(_worldData.hardcore ? "true" : "false"), "SERVER");
-			g_logger->logGameInfo(INFO, "Time: " + std::to_string(_worldData.Time), "SERVER");
-			g_logger->logGameInfo(INFO, "Day Time: " + std::to_string(_worldData.DayTime), "SERVER");
-			g_logger->logGameInfo(INFO, "Generator: " + _worldData.generatorName, "SERVER");
-			g_logger->logGameInfo(INFO, "Raining: " + std::string(_worldData.raining ? "true" : "false"), "SERVER");
-			g_logger->logGameInfo(INFO, "Thundering: " + std::string(_worldData.thundering ? "true" : "false"), "SERVER");
+			// g_logger->logGameInfo(INFO, "World loaded successfully: " + _worldData.LevelName, "SERVER");
+			// g_logger->logGameInfo(INFO,
+			// 					  "Spawn Point: X=" + std::to_string(_worldData.SpawnX) + " Y=" + std::to_string(_worldData.SpawnY) +
+			// 							  " Z=" + std::to_string(_worldData.SpawnZ),
+			// 					  "SERVER");
+			// g_logger->logGameInfo(INFO, "Random Seed: " + std::to_string(_worldData.RandomSeed), "SERVER");
+			// g_logger->logGameInfo(INFO, "Game Type: " + std::to_string(_worldData.GameType), "SERVER");
+			// g_logger->logGameInfo(INFO, "Data Version: " + std::to_string(_worldData.DataVersion), "SERVER");
+			// g_logger->logGameInfo(INFO, "Difficulty: " + std::to_string(static_cast<int>(_worldData.Difficulty)), "SERVER");
+			// g_logger->logGameInfo(INFO, "Hardcore: " + std::string(_worldData.hardcore ? "true" : "false"), "SERVER");
+			// g_logger->logGameInfo(INFO, "Time: " + std::to_string(_worldData.Time), "SERVER");
+			// g_logger->logGameInfo(INFO, "Day Time: " + std::to_string(_worldData.DayTime), "SERVER");
+			// g_logger->logGameInfo(INFO, "Generator: " + _worldData.generatorName, "SERVER");
+			// g_logger->logGameInfo(INFO, "Raining: " + std::string(_worldData.raining ? "true" : "false"), "SERVER");
+			// g_logger->logGameInfo(INFO, "Thundering: " + std::string(_worldData.thundering ? "true" : "false"), "SERVER");
 
 		} catch (const std::exception& e) {
 			g_logger->logGameInfo(ERROR, "Failed to load world: " + std::string(e.what()), "SERVER");
 			return 1;
 		}
 
+		// Initialize world query after world data is loaded
+		g_logger->logGameInfo(INFO, "Initializing world query system...", "SERVER");
+		_worldQuery = std::make_unique<World::OptimizedQuery>(_worldManager);
+
+		// Configure the query based on world data
+		World::OptimizedQuery::ParseConfig queryConfig;
+		queryConfig.worldHeight		  = 384; // Could be derived from world data if needed
+		queryConfig.minY			  = -64;
+		queryConfig.cacheSize		  = 128; // Increase cache for server usage
+		queryConfig.loadLighting	  = true;
+		queryConfig.validateData	  = true;
+		queryConfig.loadBlockEntities = true;
+		_worldQuery->setParserConfig(queryConfig);
+
+		g_logger->logGameInfo(INFO, "World query system initialized successfully", "SERVER");
+
+		// Test the query system with spawn chunk
+		try {
+			int32_t spawnChunkX = _worldData.SpawnX >> 4;
+			int32_t spawnChunkZ = _worldData.SpawnZ >> 4;
+			g_logger->logGameInfo(
+					INFO, "Loading spawn chunk (" + std::to_string(spawnChunkX) + ", " + std::to_string(spawnChunkZ) + ")...", "SERVER");
+
+			auto spawnChunk = _worldQuery->fetchChunkCached(spawnChunkX, spawnChunkZ);
+			g_logger->logGameInfo(INFO, "Spawn chunk loaded successfully", "SERVER");
+		} catch (const std::exception& e) {
+			g_logger->logGameInfo(WARN, "Failed to load spawn chunk: " + std::string(e.what()), "SERVER");
+		}
+
+		// Preload spawn area for better performance
+		g_logger->logGameInfo(INFO, "Preloading spawn area...", "SERVER");
+		preloadSpawnArea(3); // Load 7x7 chunks around spawn
+
 		std::filesystem::path regionFile = _worldManager.locateRegionFileByChunkCoord(0, 0);
 		g_logger->logGameInfo(INFO, "Region File: " + regionFile.string(), "SERVER");
-		World::ChunkData chunk = _worldQuery.fetchChunk(0, 0);
-		printChunkInfo(chunk);
+
+		// Log initial world query stats
+		logWorldQueryStats();
 
 		size_t workerCount = 4;
 		if (workerCount == 0) workerCount = 4; // fallback
@@ -83,6 +120,13 @@ int Server::start_server() {
 
 		while (true) {
 			// g_logger->logGameInfo(INFO, "Server is running...", "Server");
+
+			// Log stats every few iterations (in a real server, you'd do this with a timer)
+			static int statCounter = 0;
+			if (++statCounter % 1000 == 0) {
+				logWorldQueryStats();
+			}
+
 			sleep(100);
 			break;
 		}
@@ -209,85 +253,117 @@ void Server::removePlayerToSample(const std::string& name) {
 int	 Server::getAmountOnline() { return _playerLst.size(); }
 json Server::getPlayerSample() { return _playerSample; }
 
-void Server::printChunkInfo(const World::ChunkData& chunk) {
-	g_logger->logGameInfo(INFO, "========== CHUNK DATA INFO ==========", "SERVER");
+// // World query utility methods implementation
+// std::shared_ptr<World::ChunkData> Server::loadChunkForPlayer(int32_t chunkX, int32_t chunkZ) {
+// 	if (!_worldQuery) {
+// 		g_logger->logGameInfo(ERROR, "World query not initialized", "SERVER");
+// 		return std::make_shared<World::ChunkData>(World::ChunkData::generateEmpty(chunkX, chunkZ, 384));
+// 	}
 
-	// Basic chunk information
-	g_logger->logGameInfo(INFO, "Chunk Coordinates: (" + std::to_string(chunk.chunkX) + ", " + std::to_string(chunk.chunkZ) + ")", "SERVER");
-	g_logger->logGameInfo(INFO, "Chunk Empty: " + std::string(chunk.isEmpty() ? "true" : "false"), "SERVER");
+// 	try {
+// 		return _worldQuery->fetchChunkCached(chunkX, chunkZ);
+// 	} catch (const std::exception& e) {
+// 		g_logger->logGameInfo(ERROR, "Failed to load chunk (" + std::to_string(chunkX) + ", " + std::to_string(chunkZ) + "): " + e.what(), "SERVER");
+// 		return std::make_shared<World::ChunkData>(World::ChunkData::generateEmpty(chunkX, chunkZ, 384));
+// 	}
+// }
 
-	// Data vector sizes
-	g_logger->logGameInfo(INFO, "Block Data Size: " + std::to_string(chunk.blockData.size()) + " bytes", "SERVER");
-	g_logger->logGameInfo(INFO, "Biome Data Size: " + std::to_string(chunk.biomeData.size()) + " bytes", "SERVER");
-	g_logger->logGameInfo(INFO, "Heightmaps Size: " + std::to_string(chunk.heightmaps.size()) + " bytes", "SERVER");
-	g_logger->logGameInfo(INFO, "Block Entities Size: " + std::to_string(chunk.blockEntities.size()) + " bytes", "SERVER");
-	g_logger->logGameInfo(INFO, "Sky Light Size: " + std::to_string(chunk.skyLight.size()) + " bytes", "SERVER");
-	g_logger->logGameInfo(INFO, "Block Light Size: " + std::to_string(chunk.blockLight.size()) + " bytes", "SERVER");
+// std::vector<std::shared_ptr<World::ChunkData>> Server::loadPlayerViewArea(int32_t centerChunkX, int32_t centerChunkZ, int radius) {
+// 	std::vector<std::pair<int32_t, int32_t>> chunkCoords;
 
-	// Calculate total data size
-	size_t totalSize = chunk.blockData.size() + chunk.biomeData.size() + chunk.heightmaps.size() + chunk.blockEntities.size() +
-					   chunk.skyLight.size() + chunk.blockLight.size();
-	g_logger->logGameInfo(INFO, "Total Chunk Data Size: " + std::to_string(totalSize) + " bytes", "SERVER");
+// 	// Generate chunk coordinates in a square around the center
+// 	for (int x = -radius; x <= radius; ++x) {
+// 		for (int z = -radius; z <= radius; ++z) {
+// 			chunkCoords.emplace_back(centerChunkX + x, centerChunkZ + z);
+// 		}
+// 	}
 
-	// Analyze data content
-	if (!chunk.blockData.empty()) {
-		g_logger->logGameInfo(INFO, "Block Data: Contains " + std::to_string(chunk.blockData.size()) + " bytes of NBT block sections", "SERVER");
+// 	if (!_worldQuery) {
+// 		g_logger->logGameInfo(ERROR, "World query not initialized", "SERVER");
+// 		std::vector<std::shared_ptr<World::ChunkData>> emptyChunks;
+// 		for (const auto& [chunkX, chunkZ] : chunkCoords) {
+// 			emptyChunks.push_back(std::make_shared<World::ChunkData>(World::ChunkData::generateEmpty(chunkX, chunkZ, 384)));
+// 		}
+// 		return emptyChunks;
+// 	}
 
-		// Try to parse some basic NBT info if possible
-		try {
-			if (chunk.blockData.size() > 10) {
-				// Show first few bytes as hex for debugging
-				std::string hexStr = "First 10 bytes (hex): ";
-				for (size_t i = 0; i < std::min(static_cast<size_t>(10), chunk.blockData.size()); ++i) {
-					char hexChar[4];
-					snprintf(hexChar, sizeof(hexChar), "%02X ", static_cast<unsigned char>(chunk.blockData[i]));
-					hexStr += hexChar;
-				}
-				g_logger->logGameInfo(DEBUG, hexStr, "SERVER");
-			}
-		} catch (const std::exception& e) {
-			g_logger->logGameInfo(DEBUG, "Could not analyze block data: " + std::string(e.what()), "SERVER");
+// 	try {
+// 		g_logger->logGameInfo(INFO, "Loading " + std::to_string(chunkCoords.size()) + " chunks for player view area", "SERVER");
+
+// 		// Convert batch result to shared_ptr vector
+// 		auto										   batchResult = _worldQuery->fetchChunkBatch(chunkCoords);
+// 		std::vector<std::shared_ptr<World::ChunkData>> chunks;
+// 		for (auto& chunk : batchResult) {
+// 			chunks.push_back(std::make_shared<World::ChunkData>(std::move(chunk)));
+// 		}
+// 		return chunks;
+// 	} catch (const std::exception& e) {
+// 		g_logger->logGameInfo(ERROR, "Failed to load player view area: " + std::string(e.what()), "SERVER");
+
+// 		// Fallback to individual loading
+// 		std::vector<std::shared_ptr<World::ChunkData>> chunks;
+// 		for (const auto& [chunkX, chunkZ] : chunkCoords) {
+// 			chunks.push_back(loadChunkForPlayer(chunkX, chunkZ));
+// 		}
+// 		return chunks;
+// 	}
+// }
+
+void Server::preloadSpawnArea(int radius) {
+	if (!_worldQuery) {
+		g_logger->logGameInfo(ERROR, "World query not initialized", "SERVER");
+		return;
+	}
+
+	int32_t spawnChunkX = _worldData.SpawnX >> 4;
+	int32_t spawnChunkZ = _worldData.SpawnZ >> 4;
+
+	std::vector<std::pair<int32_t, int32_t>> spawnChunks;
+	for (int x = -radius; x <= radius; ++x) {
+		for (int z = -radius; z <= radius; ++z) {
+			spawnChunks.emplace_back(spawnChunkX + x, spawnChunkZ + z);
 		}
-	} else {
-		g_logger->logGameInfo(INFO, "Block Data: Empty (chunk not generated or air-only)", "SERVER");
 	}
 
-	if (!chunk.biomeData.empty()) {
-		g_logger->logGameInfo(INFO, "Biome Data: Contains biome information for 4x4x4 block cells", "SERVER");
-	} else {
-		g_logger->logGameInfo(INFO, "Biome Data: Empty (default biome used)", "SERVER");
+	g_logger->logGameInfo(INFO, "Preloading spawn area with " + std::to_string(spawnChunks.size()) + " chunks", "SERVER");
+
+	try {
+		_worldQuery->preloadChunks(spawnChunks);
+		g_logger->logGameInfo(INFO, "Spawn area preloaded successfully", "SERVER");
+	} catch (const std::exception& e) {
+		g_logger->logGameInfo(ERROR, "Failed to preload spawn area: " + std::string(e.what()), "SERVER");
+	}
+}
+
+void Server::logWorldQueryStats() {
+	if (!_worldQuery) {
+		g_logger->logGameInfo(WARN, "World query not initialized", "SERVER");
+		return;
 	}
 
-	if (!chunk.heightmaps.empty()) {
-		g_logger->logGameInfo(INFO, "Heightmaps: Contains terrain height data for performance optimization", "SERVER");
-	} else {
-		g_logger->logGameInfo(INFO, "Heightmaps: Empty (not calculated)", "SERVER");
+	auto metrics = _worldQuery->getMetrics();
+	g_logger->logGameInfo(INFO,
+						  "World Query Stats - Queries: " + std::to_string(metrics.totalQueries) + ", Cache Hits: " +
+								  std::to_string(metrics.cacheHits) + ", Cache Size: " + std::to_string(_worldQuery->getCacheSize()) +
+								  ", Avg Load Time: " + std::to_string(metrics.averageLoadTime * 1000.0) + "ms",
+						  "SERVER");
+}
+
+bool Server::isChunkAvailable(int32_t chunkX, int32_t chunkZ) {
+	if (!_worldQuery) {
+		return false;
 	}
 
-	if (!chunk.blockEntities.empty()) {
-		g_logger->logGameInfo(INFO,
-							  "Block Entities: Contains " + std::to_string(chunk.blockEntities.size()) +
-									  " bytes of special blocks (chests, furnaces, etc.)",
-							  "SERVER");
-	} else {
-		g_logger->logGameInfo(INFO, "Block Entities: No special blocks found", "SERVER");
+	// Check if chunk is cached first
+	if (_worldQuery->isChunkCached(chunkX, chunkZ)) {
+		return true;
 	}
 
-	if (!chunk.skyLight.empty()) {
-		g_logger->logGameInfo(INFO, "Sky Light: Contains natural lighting data (2048 bytes expected per 16x16x16 section)", "SERVER");
-	} else {
-		g_logger->logGameInfo(INFO, "Sky Light: No sky light data (underground sections or not calculated)", "SERVER");
+	// Check if region file exists
+	try {
+		std::filesystem::path regionPath = _worldManager.locateRegionFileByChunkCoord(chunkX, chunkZ);
+		return std::filesystem::exists(regionPath);
+	} catch (const std::exception&) {
+		return false;
 	}
-
-	if (!chunk.blockLight.empty()) {
-		g_logger->logGameInfo(INFO, "Block Light: Contains artificial lighting data from torches, glowstone, etc.", "SERVER");
-	} else {
-		g_logger->logGameInfo(INFO, "Block Light: No block light sources found", "SERVER");
-	}
-
-	// Minecraft chunk format info
-	g_logger->logGameInfo(INFO, "Note: Minecraft chunks are 16x384x16 blocks (Overworld) divided into 16x16x16 sections", "SERVER");
-	g_logger->logGameInfo(INFO, "Note: Block data uses palletized format with NBT compression for efficiency", "SERVER");
-
-	g_logger->logGameInfo(INFO, "====================================", "SERVER");
 }

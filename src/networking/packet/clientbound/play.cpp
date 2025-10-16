@@ -52,7 +52,7 @@ void writePlayPacket(Packet& packet, Server& server) {
 	buf.writeLong(1L);
 
 	// 13. Game mode (Unsigned Byte)
-	buf.writeByte(0); // Creative
+	buf.writeByte(1); // Creative
 
 	// 14. Previous Game mode (Byte)
 	buf.writeByte(-1); // Undefined
@@ -71,7 +71,7 @@ void writePlayPacket(Packet& packet, Server& server) {
 	// 19. Death location (Optional - only if hasDeathLocation is true)
 	if (hasDeathLocation) {
 		buf.writeString("minecraft:overworld"); // Death dimension name
-		buf.writeLong(0); // Death location as Position (packed long)
+		buf.writeLong(0);						// Death location as Position (packed long)
 	}
 
 	// 20. Portal cooldown

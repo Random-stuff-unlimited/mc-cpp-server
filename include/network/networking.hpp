@@ -123,7 +123,7 @@ void handleCookieRequest(Packet& packet, Server& server);
 void handleFinishConfiguration(Packet& packet, Server& server);
 void handleAcknowledgeFinishConfiguration(Packet& packet, Server& server);
 void writePlayPacket(Packet& packet, Server& server);
-void writeSetCenterPacket(Packet& packet, Server& server);
+void writeSetCenterPacket(Packet& packet);
 
 // Chunk batch functions
 void sendChunkBatchStart(Packet& packet, Server& server);
@@ -134,6 +134,7 @@ void sendChunkBatchSequence(Packet& packet, Server& server);
 void sendChunkData(Packet& packet, Server& server, int chunkX, int chunkZ);
 void sendPlayerPositionAndLook(Packet& packet, Server& server);
 void sendSpawnPosition(Packet& packet, Server& server);
+void synchronizePlayerPosition(Packet& packet, Server& server);
 
 // Spawn sequence functions
 void sendPlayerAbilities(Packet& packet, Server& server);
@@ -154,7 +155,7 @@ void clientboundKnownPacks(Packet& packet);
 void serverboundKnownPacks(Packet& packet);
 
 void gameEventPacket(Packet& packet, Server& server);
-void levelChunkWithLight(Packet& packet, Server& server);
+void levelChunkWithLight(Packet& packet, Server& server, int32_t chunkX, int32_t chunkZ);
 
 // Optional Packets
 void changeDifficulty(Packet& packet);

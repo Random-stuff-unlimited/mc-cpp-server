@@ -170,10 +170,39 @@ void handleConfigurationState(Packet* packet, Server& server) {
 		setHeldItem(*heldItemPacket);
 		server.getNetworkManager().getOutgoingQueue()->push(heldItemPacket);
 
-		// 2. Send player position and look - 0x41
-		Packet* positionPacket = new Packet(*packet);
-		sendPlayerPositionAndLook(*positionPacket, server); // rename packet
-		server.getNetworkManager().getOutgoingQueue()->push(positionPacket);
+		// 2. Send Set Center Chunk - 0x57
+		Packet* setCenterPacket = new Packet(*packet);
+		writeSetCenterPacket(*setCenterPacket);
+		server.getNetworkManager().getOutgoingQueue()->push(setCenterPacket);
+
+		// Send Game Event packet - 0x42
+		g_logger->logNetwork(INFO, "Sending Game Event packet", "PacketRouter");
+		Packet* gameEvent = new Packet(*packet);
+		gameEventPacket(*gameEvent, server);
+		server.getNetworkManager().getOutgoingQueue()->push(gameEvent);
+
+		g_logger->logNetwork(INFO, "Sending chunks in render distance area", "PacketRouter");
+
+		const int renderDistance = 3; // This will create a 7x7 grid (-3 to +3)
+		int		  chunkCount	 = 0;
+
+		for (int chunkX = -renderDistance; chunkX <= renderDistance; chunkX++) {
+			for (int chunkZ = -renderDistance; chunkZ <= renderDistance; chunkZ++) {
+				Packet* levelChunkPacket = new Packet(*packet);
+				levelChunkWithLight(*levelChunkPacket, server, chunkX, chunkZ);
+				server.getNetworkManager().getOutgoingQueue()->push(levelChunkPacket);
+				chunkCount++;
+
+				g_logger->logNetwork(DEBUG, "Queued chunk (" + std::to_string(chunkX) + ", " + std::to_string(chunkZ) + ")", "PacketRouter");
+			}
+		}
+
+		g_logger->logNetwork(INFO, "Queued " + std::to_string(chunkCount) + " chunk packets for transmission", "PacketRouter");
+
+		// 4. Send Synchronize Player Position (0x41) - after all chunks are sent
+		Packet* syncPositionPacket = new Packet(*packet);
+		synchronizePlayerPosition(*syncPositionPacket, server);
+		server.getNetworkManager().getOutgoingQueue()->push(syncPositionPacket);
 
 	} else if (packet->getId() == 0x04) {
 		// Keep Alive (configuration)
@@ -221,22 +250,6 @@ void handlePlayState(Packet* packet, Server& server) {
 	if (packet->getId() == 0x00) {
 		// Confirm Teleportation
 		handleConfirmTeleportation(*packet, server);
-
-		// Send Game Event packet - 0x42
-		g_logger->logNetwork(INFO, "Sending Game Event packet", "PacketRouter");
-		Packet* gameEvent = new Packet(*packet);
-		gameEventPacket(*gameEvent, server);
-		server.getNetworkManager().getOutgoingQueue()->push(gameEvent);
-
-		// 2. Send Set Center Chunk - 0x57
-		Packet* setCenterPacket = new Packet(*packet);
-		writeSetCenterPacket(*setCenterPacket, server);
-		server.getNetworkManager().getOutgoingQueue()->push(setCenterPacket);
-
-		// 3. Send Level Chunk With Light - 0x22
-		Packet* levelChunkPacket = new Packet(*packet);
-		levelChunkWithLight(*levelChunkPacket, server);
-		server.getNetworkManager().getOutgoingQueue()->push(levelChunkPacket);
 
 	} else if (packet->getId() == 0x2B) {
 		// Playere loaded

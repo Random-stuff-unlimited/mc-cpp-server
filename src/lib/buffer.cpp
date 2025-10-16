@@ -1,6 +1,5 @@
-#include "network/buffer.hpp"
-
 #include "lib/UUID.hpp"
+#include "network/buffer.hpp"
 
 #include <cstdint>
 #include <stdexcept>
@@ -115,6 +114,20 @@ uint64_t Buffer::readUInt64() {
 	return value;
 }
 
+uint64_t Buffer::readUnsignedLong() {
+	uint64_t value = 0;
+	for (int i = 0; i < 8; ++i) {
+		value = (value << 8) | readByte();
+	}
+	return value;
+}
+
+void Buffer::writeUnsignedLong(uint64_t value) {
+	for (int i = 7; i >= 0; --i) {
+		writeByte(static_cast<uint8_t>((value >> (i * 8)) & 0xFF));
+	}
+}
+
 long Buffer::readLong() {
 	long value = 0;
 	for (int i = 0; i < 8; ++i) {
@@ -211,11 +224,11 @@ std::vector<std::string> Buffer::readStringArray() {
 	}
 	std::vector<std::string> result;
 	result.reserve(count);
-	
+
 	for (int i = 0; i < count; ++i) {
 		result.push_back(readString());
 	}
-	
+
 	return result;
 }
 
@@ -226,11 +239,11 @@ std::vector<int> Buffer::readVarIntArray() {
 	}
 	std::vector<int> result;
 	result.reserve(count);
-	
+
 	for (int i = 0; i < count; ++i) {
 		result.push_back(readVarInt());
 	}
-	
+
 	return result;
 }
 
@@ -249,8 +262,8 @@ int32_t Buffer::readInt() {
 }
 
 int64_t Buffer::readVarLong() {
-	int64_t value = 0;
-	int position = 0;
+	int64_t value	 = 0;
+	int		position = 0;
 	uint8_t currentByte;
 
 	do {
@@ -271,21 +284,21 @@ std::vector<Buffer::KnownPack> Buffer::readKnownPacks() {
 	}
 	std::vector<KnownPack> result;
 	result.reserve(count);
-	
+
 	for (int i = 0; i < count; ++i) {
 		KnownPack pack;
 		pack.nameSpace = readString();
-		pack.id = readString();
-		pack.version = readString();
+		pack.id		   = readString();
+		pack.version   = readString();
 		result.push_back(pack);
 	}
-	
+
 	return result;
 }
 
 void Buffer::writeKnownPacks(const std::vector<KnownPack>& packs) {
 	writeVarInt(static_cast<int>(packs.size()));
-	
+
 	for (const auto& pack : packs) {
 		writeString(pack.nameSpace);
 		writeString(pack.id);

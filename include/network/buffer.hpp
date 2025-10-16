@@ -55,6 +55,8 @@ class Buffer {
 	uint16_t			  readUShort();
 	void				  writeUShort(uint16_t value);
 	uint64_t			  readUInt64();
+	uint64_t			  readUnsignedLong();
+	void				  writeUnsignedLong(uint64_t value);
 	long				  readLong();
 	int32_t				  readInt();
 	void				  writeLong(long value);

@@ -4,6 +4,7 @@
 class NetworkManager;
 #include "../config.hpp"
 #include "../player.hpp"
+#include "../world/query.hpp"
 #include "../world/world.hpp"
 #include "id_manager.hpp"
 #include "lib/json.hpp"
@@ -17,17 +18,17 @@ using json = nlohmann::json;
 
 class Server {
   private:
-	std::unordered_map<int, Player*> _playerLst;
-	std::unordered_map<int, Player*> _tempPlayerLst;
-	json							 _playerSample;
-	std::mutex						 _playerLock;
-	std::mutex						 _tempPlayerLock;
-	Config							 _config;
-	NetworkManager*					 _networkManager;
-	IdManager						 _idManager;
-	World::Manager					 _worldManager;
-	World::LevelDat					 _worldData;
-	World::Query					 _worldQuery;
+	std::unordered_map<int, Player*>	   _playerLst;
+	std::unordered_map<int, Player*>	   _tempPlayerLst;
+	json								   _playerSample;
+	std::mutex							   _playerLock;
+	std::mutex							   _tempPlayerLock;
+	Config								   _config;
+	NetworkManager*						   _networkManager;
+	IdManager							   _idManager;
+	World::Manager						   _worldManager;
+	World::LevelDat						   _worldData;
+	std::unique_ptr<World::OptimizedQuery> _worldQuery;
 
   public:
 	Server();
@@ -54,9 +55,18 @@ class Server {
 	NetworkManager&	 getNetworkManager() { return *_networkManager; }
 	World::Manager&	 getWorldManager() { return _worldManager; }
 	World::LevelDat& getWorldData() { return _worldData; }
-	World::Query&	 getWorldQuery() { return _worldQuery; }
+	// Accessor method
+	World::OptimizedQuery&		 getWorldQuery() { return *_worldQuery; }
+	const World::OptimizedQuery& getWorldQuery() const { return *_worldQuery; }
 
 	void printChunkInfo(const World::ChunkData& chunk);
+
+	// World query utility methods
+	std::shared_ptr<World::ChunkData>			   loadChunkForPlayer(int32_t chunkX, int32_t chunkZ);
+	std::vector<std::shared_ptr<World::ChunkData>> loadPlayerViewArea(int32_t centerChunkX, int32_t centerChunkZ, int radius = 5);
+	void										   preloadSpawnArea(int radius = 8);
+	void										   logWorldQueryStats();
+	bool										   isChunkAvailable(int32_t chunkX, int32_t chunkZ);
 };
 
 #endif

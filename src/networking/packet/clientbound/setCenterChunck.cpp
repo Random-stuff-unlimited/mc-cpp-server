@@ -1,31 +1,22 @@
 #include "lib/UUID.hpp"
 #include "network/buffer.hpp"
-#include "network/networking.hpp"
 #include "network/packet.hpp"
-#include "network/server.hpp"
-#include "player.hpp"
 
 #include <iostream>
 
-void writeSetCenterPacket(Packet& packet, Server& server) {
+void writeSetCenterPacket(Packet& packet) {
 	std::cout << "=== center chunk packet write init ===\n";
 
-	Buffer buf;
-	buf.writeVarInt(0);
-	buf.writeVarInt(0);
+	Buffer buff;
+	buff.writeByte(0x57);
+	buff.writeVarInt(0);
+	buff.writeVarInt(0);
 
-	int packetId		 = 0x57;
-	int packetIdSize	 = packet.getVarintSize(packetId);
-	int totalPayloadSize = packetIdSize + buf.getData().size();
+	Buffer final;
+	final.writeVarInt(buff.getData().size());
+	final.writeBytes(buff.getData());
 
-	Buffer finalBuf;
-	finalBuf.writeVarInt(totalPayloadSize);
-	finalBuf.writeVarInt(packetId);
-	finalBuf.writeBytes(buf.getData());
-
-	packet.getData() = finalBuf;
-	packet.setPacketSize(finalBuf.getData().size());
+	packet.getData() = final;
+	packet.setPacketSize(final.getData().size());
 	packet.setReturnPacket(PACKET_SEND);
-
-	(void)server;
 }
