@@ -89,9 +89,9 @@ void NetworkManager::senderThreadLoop() {
 			if (p == nullptr) break;
 
 			try {
-				// g_logger->logNetwork(INFO, "Sending packet to player", "Network Manager");
-				std::cout << "Sending packet 0x" << std::hex << p->getId() << " (" << std::dec << p->getData().getData().size() << " bytes)"
-						  << std::endl;
+				// g_logger->logNetwork(INFO, "to player", "Network Manager");
+				// std::cout << "Sending packet 0x" << std::hex << p->getId() << " (" << std::dec << p->getData().getData().size() << " bytes)"
+						  // << std::endl;
 
 				send(p->getSocket(), p->getData().getData().data(), p->getSize(), MSG_NOSIGNAL);
 				if (p->getPlayer() && p->getPlayer()->getPlayerState() == PlayerState::None) {

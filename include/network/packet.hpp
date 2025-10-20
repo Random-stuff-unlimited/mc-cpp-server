@@ -41,6 +41,7 @@ class Packet {
 	int			getVarintSize(int32_t value);
 	void		setPacketSize(int32_t value);
 	void		setPacketId(uint32_t value);
+	void		sendPacket(int id, Buffer& data, Server& server, bool last);
 };
 
 #endif

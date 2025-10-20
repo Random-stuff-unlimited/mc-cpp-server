@@ -4,7 +4,7 @@
 
 #include <iostream>
 
-void serverboundKnownPacks(Packet& packet) {
+void serverboundKnownPacksPacket(Packet& packet) {
 	int size = packet.getData().readVarInt();
 
 	std::cout << "Received " << size << " known packs." << std::endl;

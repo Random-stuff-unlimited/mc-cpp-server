@@ -1,16 +1,11 @@
-#include "buffer.hpp"
-#include "packet.hpp"
+#include "network/buffer.hpp"
+#include "network/packet.hpp"
+#include "network/server.hpp"
 
-void templateClientBoundPacket(Packet& packet) {
+void templateClientBoundPacket(Packet& packet, Server& server) {
 	Buffer buff;
 
-	// Add packet id, and data.
+	// Add packet data here
 
-	Buffer final;
-	final.writeVarInt(buff.getData().size());
-	final.writeBytes(buff.getData());
-
-	packet.getData() = final;
-	packet.setPacketSize(final.getData().size());
-	packet.setReturnPacket(PACKET_SEND);
+	packet.sendPacket(0x00, buff, server, false); // Replace 0x00 with actual packet ID
 }
