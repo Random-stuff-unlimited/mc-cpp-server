@@ -2,7 +2,7 @@
 #include "network/networking.hpp"
 #include "network/packet.hpp"
 #include "network/server.hpp"
-#include "packetRouter.hpp"
+#include "network/packetRouter.hpp"
 #include "player.hpp"
 
 #include <chrono>

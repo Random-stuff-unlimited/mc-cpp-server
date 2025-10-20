@@ -1,6 +1,6 @@
-#include "buffer.hpp"
+#include "network/buffer.hpp"
 #include "network/packet.hpp"
-#include "server.hpp"
+#include "network/server.hpp"
 
 // If implementing data packs we should actually send datapack info with the loaded datapacks
 void clientboundKnownPacksPacket(Packet& packet, Server& server) {

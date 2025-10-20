@@ -1,6 +1,6 @@
-#include "buffer.hpp"
-#include "packet.hpp"
-#include "server.hpp"
+#include "network/buffer.hpp"
+#include "network/packet.hpp"
+#include "network/server.hpp"
 
 void setHeldItemPacket(Packet& packet, Server& server) {
 	Buffer buff;

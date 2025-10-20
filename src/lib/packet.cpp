@@ -3,7 +3,7 @@
 #include "network/packet.hpp"
 #include "network/server.hpp"
 #include "player.hpp"
-#include "networking.hpp"
+#include "network/networking.hpp"
 
 #include <cstdint>
 #include <errno.h>

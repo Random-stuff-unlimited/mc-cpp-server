@@ -1,9 +1,9 @@
-#include "RegistryDataUtils.hpp"
+#include "data/RegistryDataUtils.hpp"
 
-#include "RegistryData.hpp"
-#include "RegistryIds.hpp"
+#include "data/RegistryData.hpp"
+#include "data/RegistryIds.hpp"
 #include "logger.hpp"
-#include "minecraftRegistries.hpp"
+#include "data/minecraftRegistries.hpp"
 #include "network/buffer.hpp"
 #include "network/networking.hpp"
 

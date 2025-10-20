@@ -1,5 +1,5 @@
-#include "buffer.hpp"
-#include "packet.hpp"
+#include "network/buffer.hpp"
+#include "network/packet.hpp"
 
 void playerAbilitiesPacket(Packet& packet, Server& server) {
 	Buffer buff;
