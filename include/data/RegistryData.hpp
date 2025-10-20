@@ -1,7 +1,7 @@
 #ifndef MC_CPP_SERVER_DATA_REGISTRY_HPP
 #define MC_CPP_SERVER_DATA_REGISTRY_HPP
 
-#include "nbt.hpp"
+#include "lib/nbt.hpp"
 
 #include <memory>
 #include <optional>
