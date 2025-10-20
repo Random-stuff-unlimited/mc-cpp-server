@@ -55,25 +55,12 @@ void sendUpdateTags(Packet& packet, Server& server) {
 								 "Configuration");
 		}
 
-		Buffer finalBuf;
-		int	   packetId			= 0x0D;
-		int	   packetIdSize		= packet.getVarintSize(packetId);
-		int	   totalPayloadSize = packetIdSize + tagBuffer.getData().size();
-
-		finalBuf.writeVarInt(totalPayloadSize);
-		finalBuf.writeVarInt(packetId);
-		finalBuf.writeBytes(tagBuffer.getData());
-
-		Packet* tagsPacket	  = new Packet(packet);
-		tagsPacket->getData() = finalBuf;
-		tagsPacket->setPacketSize(finalBuf.getData().size());
-		tagsPacket->setReturnPacket(PACKET_SEND);
-
-		outgoingPackets->push(tagsPacket);
+		Packet* tagsPacket = new Packet(packet);
+		tagsPacket->sendPacket(0x0D, tagBuffer, server, true);
 
 		g_logger->logNetwork(INFO,
 							 "Update Tags packet sent: " + std::to_string(totalRegistries) + " registries, " + std::to_string(totalTags) + " tags, " +
-									 std::to_string(totalEntries) + " entries, packet size: " + std::to_string(finalBuf.getData().size()) + " bytes",
+									 std::to_string(totalEntries) + " entries",
 							 "Configuration");
 
 		packet.setReturnPacket(PACKET_OK);

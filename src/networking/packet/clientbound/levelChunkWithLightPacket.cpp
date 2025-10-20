@@ -93,11 +93,5 @@ void levelChunkWithLightPacket(Packet& packet, Server& server) {
 		return;
 	}
 
-	// Set packet data (no manual length encoding)
-	packet.setPacketId(0x27); // Level Chunk with Light packet ID
-	packet.getData() = buf;
-	packet.setPacketSize(buf.getData().size());
-	packet.setReturnPacket(PACKET_SEND);
-
-	(void)server;
+	packet.sendPacket(0x27, buf, server, false);
 }

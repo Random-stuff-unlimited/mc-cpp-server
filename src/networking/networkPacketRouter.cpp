@@ -1,9 +1,9 @@
 #include "logger.hpp"
-#include "networking.hpp"
-#include "packet.hpp"
-#include "server.hpp"
+#include "network/networking.hpp"
+#include "network/packet.hpp"
+#include "network/server.hpp"
+#include "network/packetRouter.hpp"
 #include "player.hpp"
-#include "packetRouter.hpp"
 
 #include <string>
 
@@ -12,224 +12,129 @@
 // ========================================
 
 void packetRouter(Packet* packet, Server& server) {
-    // Basic validation checks
-    if (packet == nullptr)
-        return;
+	if (packet == nullptr) return;
+	if (server.getNetworkManager().getOutgoingQueue() == nullptr) return;
 
-    if (server.getNetworkManager().getOutgoingQueue() == nullptr)
-        return;
+	Player* player = packet->getPlayer();
+	if (player == nullptr) {
+		packet->setReturnPacket(PACKET_DISCONNECT);
+		return;
+	}
 
-    // Get player and validate
-    Player* player = packet->getPlayer();
-    if (player == nullptr) {
-        packet->setReturnPacket(PACKET_DISCONNECT);
-        return;
-    }
+	g_logger->logNetwork(INFO,
+						 "Routing packet ID: 0x" + std::to_string(packet->getId()) + " (size: " + std::to_string(packet->getSize()) +
+								 ") for state: " + std::to_string(static_cast<int>(player->getPlayerState())),
+						 "PacketRouter");
 
-    // Route packet based on player's current state
-    switch (player->getPlayerState()) {
-        case PlayerState::Handshake:
-            handleHandshakeState(packet, server);
-            break;
+	switch (player->getPlayerState()) {
+	case PlayerState::Handshake:
+		handleHandshakePacket(*packet, server);
+		break;
+	case PlayerState::Status:
+		if (packet->getId() == 0x00) {
+			handleStatusPacket(*packet, server);
+		} else if (packet->getId() == 0x01) {
+			handlePingPacket(*packet, server);
+		} else {
+			packet->getPlayer()->setPlayerState(PlayerState::None);
+			packet->setReturnPacket(PACKET_DISCONNECT);
+		}
+		break;
+	case PlayerState::Login:
+		if (packet->getSize() > 32767) {
+			g_logger->logNetwork(ERROR, "Packet size too large: " + std::to_string(packet->getSize()), "PacketRouter");
+			packet->setReturnPacket(PACKET_DISCONNECT);
+			return;
+		}
 
-        case PlayerState::Status:
-            handleStatusState(packet, server);
-            break;
+		if (packet->getId() == 0x00) {
+			handleLoginStartPacket(*packet, server);
+		} else if (packet->getId() == 0x02) {
+			g_logger->logNetwork(INFO, "Received Login Plugin Response (0x02) - acknowledging", "PacketRouter");
+			packet->setReturnPacket(PACKET_OK);
+		} else if (packet->getId() == 0x03) {
+			handleLoginAcknowledgedPacket(*packet, server);
+			clientboundKnownPacksPacket(*packet, server);
+		} else if (packet->getId() == 0x04) {
+			g_logger->logNetwork(INFO, "Received Login Cookie Response (0x04) - acknowledging", "PacketRouter");
+			packet->setReturnPacket(PACKET_OK);
+		} else {
+			packet->getPlayer()->setPlayerState(PlayerState::None);
+			packet->setReturnPacket(PACKET_DISCONNECT);
+		}
+		break;
+	case PlayerState::Configuration:
+		if (packet->getId() == 0x00) {
+			// Client Information
+			handleClientInformationPacket(*packet, server);
+		} else if (packet->getId() == 0x01) {
+			// Cookie Response
+			packet->setReturnPacket(PACKET_OK);
+		} else if (packet->getId() == 0x02) {
+			// Serverbound Plugin Message
+			packet->setReturnPacket(PACKET_OK);
+		} else if (packet->getId() == 0x03) {
+			// Acknowledge Finish Configuration -> Enter Play State
+			g_logger->logNetwork(INFO, "Transitioning to Play state", "Configuration");
+			handleAcknowledgeFinishConfigurationPacket(*packet, server);
 
-        case PlayerState::Login:
-            handleLoginState(packet, server);
-            break;
-
-        case PlayerState::Configuration:
-            handleConfigurationState(packet, server);
-            break;
-
-        case PlayerState::Play:
-            handlePlayState(packet, server);
-            break;
-
-        default:
-            g_logger->logNetwork(
-                WARN,
-                "Unknown player state: " + std::to_string(static_cast<int>(player->getPlayerState())) + ", disconnecting",
-                "PacketRouter"
-            );
-            packet->setReturnPacket(PACKET_DISCONNECT);
-            break;
-    }
-}
-
-// ========================================
-// Handshake State Handler
-// ========================================
-
-void handleHandshakeState(Packet* packet, Server& server) {
-    handleHandshakePacket(*packet, server);
-}
-
-// ========================================
-// Status State Handler
-// ========================================
-
-void handleStatusState(Packet* packet, Server& server) {
-    switch (packet->getId()) {
-        case 0x00:
-            // Status request packet
-            handleStatusPacket(*packet, server);
-            break;
-
-        case 0x01:
-            // Ping packet
-            handlePingPacket(*packet, server);
-            break;
-
-        default:
-            // Unknown packet in status state - disconnect
-            // g_logger->logNetwork(WARN, "Unknown packet ID in Status state: 0x" + std::to_string(packet->getId()), "PacketRouter");
-            packet->getPlayer()->setPlayerState(PlayerState::None);
-            packet->setReturnPacket(PACKET_DISCONNECT);
-            break;
-    }
-}
-
-// ========================================
-// Login State Handler
-// ========================================
-
-void handleLoginState(Packet* packet, Server& server) {
-    // Check packet size limit
-    if (packet->getSize() > 32767) {
-        g_logger->logNetwork(ERROR, "Packet size too large: " + std::to_string(packet->getSize()), "PacketRouter");
-        packet->setReturnPacket(PACKET_DISCONNECT);
-        return;
-    }
-
-    switch (packet->getId()) {
-        case 0x00:
-            // Login start packet
-            handleLoginStartPacket(*packet, server);
-            break;
-
-        case 0x02:
-            // Login plugin response
-            g_logger->logNetwork(INFO, "Received Login Plugin Response (0x02) - acknowledging", "PacketRouter");
-            packet->setReturnPacket(PACKET_OK);
-            break;
-
-        case 0x03:
-            // Login acknowledged packet
-            handleLoginAcknowledgedPacket(*packet, server);
-            if (packet->getReturnPacket() == PACKET_DISCONNECT)
-                return;
-            clientboundKnownPacksPacket(*packet, server);
-            break;
-
-        case 0x04:
-            // Login cookie response
-            g_logger->logNetwork(INFO, "Received Login Cookie Response (0x04) - acknowledging", "PacketRouter");
-            packet->setReturnPacket(PACKET_OK);
-            break;
-
-        default:
-            // Unknown packet in login state - disconnect
-            packet->getPlayer()->setPlayerState(PlayerState::None);
-            packet->setReturnPacket(PACKET_DISCONNECT);
-            break;
-    }
-}
-
-// ========================================
-// Configuration State Handler
-// ========================================
-
-void handleConfigurationState(Packet* packet, Server& server) {
-    switch (packet->getId()) {
-        case 0x00:
-            // Client information packet
-            g_logger->logNetwork(INFO, "Received Client Information in Configuration state", "Configuration");
-            handleClientInformationPacket(*packet, server);
-            break;
-
-        case 0x01:
-            // Cookie response in configuration
-            g_logger->logNetwork(INFO, "Received Cookie Response in Configuration state", "Configuration");
-            packet->setReturnPacket(PACKET_OK);
-            break;
-
-        case 0x02:
-            // Serverbound plugin message
-            g_logger->logNetwork(
-                INFO,
-                "Received Serverbound Plugin Message (0x02), size: " + std::to_string(packet->getSize()) + " bytes",
-                "PacketRouter"
-            );
-            packet->setReturnPacket(PACKET_OK);
-            break;
-
-        case 0x03:
-            // Acknowledge finish configuration - transition to play state
-            handleAcknowledgeFinishConfigurationPacket(*packet, server);
-            sendPlayPacket(*packet, server);                      // 1. Send Login (play) packet - 0x2B
-            changeDifficultyPacket(*packet, server);              // 2. Send Change Difficulty - 0x42
-            playerAbilitiesPacket(*packet, server);               // 3. Send Player Abilities - 0x39
-            setHeldItemPacket(*packet, server);                   // 4. Set held item
-            synchronizePlayerPositionPacket(*packet, server);     // 5. Send player position and look - 0x41
-            break;
-
-        case 0x04:
-            // Keep alive in configuration
-            g_logger->logNetwork(INFO, "Received Keep Alive in Configuration state", "Configuration");
-            packet->setReturnPacket(PACKET_OK);
-            break;
-
-        case 0x05:
-            // Pong in configuration
-            g_logger->logNetwork(INFO, "Received Pong in Configuration state", "Configuration");
-            packet->setReturnPacket(PACKET_OK);
-            break;
-
-        case 0x06:
-            // Resource pack response
-            g_logger->logNetwork(INFO, "Received Resource Pack Response in Configuration state", "Configuration");
-            packet->setReturnPacket(PACKET_OK);
-            break;
-
-        case 0x07:
-            // Serverbound known packs - finalize configuration
-            g_logger->logNetwork(INFO, "Received Serverbound Known Packs in Configuration state", "Configuration");
-            serverboundKnownPacksPacket(*packet);
-            packet->setReturnPacket(PACKET_OK);
-            sendRegistryData(*packet, server);    // Send registry data
-            sendUpdateTags(*packet, server);      // Send update tags
-            handleFinishConfigurationPacket(*packet, server);
-            break;
-
-        default:
-            // Unknown packet in configuration state - disconnect
-            packet->getPlayer()->setPlayerState(PlayerState::None);
-            packet->setReturnPacket(PACKET_DISCONNECT);
-            break;
-    }
-}
-
-// ========================================
-// Play State Handler
-// ========================================
-
-void handlePlayState(Packet* packet, Server& server) {
-    switch (packet->getId()) {
-        case 0x00:
-            // Confirm teleportation packet
-            handleConfirmTeleportationPacket(*packet, server);
-            gameEventPacket(*packet, server);     // Send Game Event packet - 0x42
-            setCenterPacket(*packet, server);     // Send Set Center Chunk - 0x57
-            // TODO: Send Level Chunk With Light - 0x22
-            packet->setReturnPacket(PACKET_OK);   // temp
-            break;
-
-        default:
-            // Other play state packets - acknowledge for now
-            packet->setReturnPacket(PACKET_OK);
-            break;
-    }
+			// Send play initialization packets
+			sendPlayPacket(*packet, server);
+			changeDifficultyPacket(*packet, server);
+			playerAbilitiesPacket(*packet, server);
+			setHeldItemPacket(*packet, server);
+			synchronizePlayerPositionPacket(*packet, server); // Last packet
+		} else if (packet->getId() == 0x04) {
+			// Keep Alive
+			packet->setReturnPacket(PACKET_OK);
+		} else if (packet->getId() == 0x05) {
+			// Pong
+			packet->setReturnPacket(PACKET_OK);
+		} else if (packet->getId() == 0x06) {
+			// Resource Pack Response
+			packet->setReturnPacket(PACKET_OK);
+		} else if (packet->getId() == 0x07) {
+			// Serverbound Known Packs -> Send Configuration Data
+			serverboundKnownPacksPacket(*packet);
+			
+			// Send configuration sequence
+			g_logger->logNetwork(INFO, "Sending Registry Data", "Configuration");
+			sendRegistryData(*packet, server);
+			
+			g_logger->logNetwork(INFO, "Sending Update Tags", "Configuration");
+			sendUpdateTags(*packet, server);
+			
+			g_logger->logNetwork(INFO, "Sending Finish Configuration", "Configuration");
+			handleFinishConfigurationPacket(*packet, server);
+		} else if (packet->getId() == 0x08) {
+			// Custom Click Action
+			packet->setReturnPacket(PACKET_OK);
+		} else {
+			// Unknown packet - disconnect
+			Buffer payload;
+			payload.writeString("{\"text\":\"Unknown packet in Configuration state\"}");
+			packet->sendPacket(0x02, payload, server, true);
+			packet->getPlayer()->setPlayerState(PlayerState::None);
+			packet->setReturnPacket(PACKET_DISCONNECT);
+		}
+		break;
+	case PlayerState::Play:
+		if (packet->getId() == 0x00) {
+			// Confirm Teleportation
+			handleConfirmTeleportationPacket(*packet, server);
+			gameEventPacket(*packet, server);
+		} else if (packet->getId() == 0x2B) {
+			// Player Loaded
+			g_logger->logNetwork(DEBUG, "Player fully loaded in game", "Play");
+			packet->setReturnPacket(PACKET_OK);
+		} else {
+			// Other play packets
+			packet->setReturnPacket(PACKET_OK);
+		}
+		break;
+	default:
+		g_logger->logNetwork(WARN, "Unknown player state: " + std::to_string(static_cast<int>(player->getPlayerState())), "PacketRouter");
+		packet->setReturnPacket(PACKET_DISCONNECT);
+		break;
+	}
 }
