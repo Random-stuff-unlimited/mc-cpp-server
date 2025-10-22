@@ -122,7 +122,7 @@ void levelChunkWithLight(Packet& packet, Server& server, int32_t chunkX, int32_t
 		buf.writeUnsignedLong(0); // No empty sections
 
 		std::vector<std::vector<uint8_t>> skyLightArraysToWrite;
-		for (size_t i = 0; i < chunkData.sections.size(); i++) {
+		for (size_t i = 0; i < 5; i++) {
 			if (chunkData.sections[i].hasSkyLight && !chunkData.sections[i].skyLight.empty()) {
 				skyLightArraysToWrite.push_back(chunkData.sections[i].skyLight);
 			}

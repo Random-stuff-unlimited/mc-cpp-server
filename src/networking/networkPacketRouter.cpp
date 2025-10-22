@@ -190,6 +190,7 @@ void handleConfigurationState(Packet* packet, Server& server) {
 			for (int chunkZ = -renderDistance; chunkZ <= renderDistance; chunkZ++) {
 				Packet* levelChunkPacket = new Packet(*packet);
 				levelChunkWithLight(*levelChunkPacket, server, chunkX, chunkZ);
+				std::cout << "=========" << levelChunkPacket->getData().getData().size() << std::endl;
 				server.getNetworkManager().getOutgoingQueue()->push(levelChunkPacket);
 				chunkCount++;
 
