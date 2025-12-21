@@ -1,7 +1,7 @@
 {
 	"version": {
-		"name": "1.21.5",
-		"protocol": 770
+		"name": "1.21.10",
+		"protocol": 773
 	},
 	"server": {
 		"ip-address": "127.0.0.1",

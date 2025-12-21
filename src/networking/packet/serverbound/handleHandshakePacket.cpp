@@ -1,4 +1,3 @@
-#include "logger.hpp"
 #include "network/packet.hpp"
 #include "network/server.hpp"
 #include "player.hpp"
@@ -13,7 +12,7 @@ void handleHandshakePacket(Packet& packet, Server& server) {
 		packet.setReturnPacket(PACKET_DISCONNECT);
 		return;
 	}
-	int			protocolVersion = packet.getData().readVarInt();
+	int			protocolVersion = packet.getData().readVarInt(); (void) protocolVersion;
 	std::string serverAddr		= packet.getData().readString(255);
 	uint16_t	port			= packet.getData().readUShort();
 	int			nextState		= packet.getData().readVarInt();

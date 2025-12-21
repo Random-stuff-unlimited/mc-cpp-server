@@ -9,7 +9,7 @@ void clientboundKnownPacksPacket(Packet& packet, Server& server) {
 	buffer.writeVarInt(1);
 	buffer.writeString("minecraft");
 	buffer.writeString("core");
-	buffer.writeString("1.21.5");
+	buffer.writeString("1.21.10");
 
 	packet.sendPacket(0x0E, buffer, server, true);
 }

@@ -96,14 +96,14 @@ void packetRouter(Packet* packet, Server& server) {
 		} else if (packet->getId() == 0x07) {
 			// Serverbound Known Packs -> Send Configuration Data
 			serverboundKnownPacksPacket(*packet);
-			
+
 			// Send configuration sequence
 			g_logger->logNetwork(INFO, "Sending Registry Data", "Configuration");
 			sendRegistryData(*packet, server);
-			
+
 			g_logger->logNetwork(INFO, "Sending Update Tags", "Configuration");
 			sendUpdateTags(*packet, server);
-			
+
 			g_logger->logNetwork(INFO, "Sending Finish Configuration", "Configuration");
 			handleFinishConfigurationPacket(*packet, server);
 		} else if (packet->getId() == 0x08) {

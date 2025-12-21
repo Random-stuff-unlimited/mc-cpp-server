@@ -10,9 +10,9 @@ void serverboundKnownPacksPacket(Packet& packet) {
 	std::cout << "Received " << size << " known packs." << std::endl;
 
 	for (int i = 0; i < size; ++i) {
-		std::string name	= packet.getData().readString(10000);
-		std::string id		= packet.getData().readString(10000);
-		std::string version = packet.getData().readString(10000);
+		std::string name	= packet.getData().readString(32767);
+		std::string id		= packet.getData().readString(32767);
+		std::string version = packet.getData().readString(32767);
 		std::cout << "Pack " << i + 1 << ": " << name << " | " << id << " | " << version << std::endl;
 	}
 }
