@@ -10,8 +10,8 @@ void gameEventPacket(Packet& packet, Server& server) {
 
 	Buffer buf;
 
-	buf.writeByte(13);
+	buf.writeUByte(13);
 	buf.writeFloat(0);
 
-	packet.sendPacket(0x22, buf, server, true);
+	packet.sendPacket(0x26, buf, server, true);
 }

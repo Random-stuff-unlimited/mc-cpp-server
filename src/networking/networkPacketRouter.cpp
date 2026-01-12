@@ -46,18 +46,17 @@ void packetRouter(Packet* packet, Server& server) {
 			packet->setReturnPacket(PACKET_DISCONNECT);
 			return;
 		}
-
 		if (packet->getId() == 0x00) {
 			handleLoginStartPacket(*packet, server);
-		} else if (packet->getId() == 0x02) {
-			g_logger->logNetwork(INFO, "Received Login Plugin Response (0x02) - acknowledging", "PacketRouter");
-			packet->setReturnPacket(PACKET_OK);
+		// } else if (packet->getId() == 0x02) {
+		// 	g_logger->logNetwork(INFO, "Received Login Plugin Response (0x02) - acknowledging", "PacketRouter");
+		// 	packet->setReturnPacket(PACKET_OK);
 		} else if (packet->getId() == 0x03) {
 			handleLoginAcknowledgedPacket(*packet, server);
 			clientboundKnownPacksPacket(*packet, server);
-		} else if (packet->getId() == 0x04) {
-			g_logger->logNetwork(INFO, "Received Login Cookie Response (0x04) - acknowledging", "PacketRouter");
-			packet->setReturnPacket(PACKET_OK);
+		// } else if (packet->getId() == 0x04) {
+		// 	g_logger->logNetwork(INFO, "Received Login Cookie Response (0x04) - acknowledging", "PacketRouter");
+		// 	packet->setReturnPacket(PACKET_OK);
 		} else {
 			packet->getPlayer()->setPlayerState(PlayerState::None);
 			packet->setReturnPacket(PACKET_DISCONNECT);
@@ -101,8 +100,8 @@ void packetRouter(Packet* packet, Server& server) {
 			g_logger->logNetwork(INFO, "Sending Registry Data", "Configuration");
 			sendRegistryData(*packet, server);
 
-			g_logger->logNetwork(INFO, "Sending Update Tags", "Configuration");
-			sendUpdateTags(*packet, server);
+			// g_logger->logNetwork(INFO, "Sending Update Tags", "Configuration");
+			// sendUpdateTags(*packet, server);
 
 			g_logger->logNetwork(INFO, "Sending Finish Configuration", "Configuration");
 			handleFinishConfigurationPacket(*packet, server);
