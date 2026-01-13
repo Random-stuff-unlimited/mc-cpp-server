@@ -58,7 +58,7 @@ std::vector<uint8_t> RegistryData::serialize() const {
 			// Format "value optional": boolean présent + données NBT si présent
 			if (entry.has_data && entry.data.has_value()) {
 				buffer.writeBool(true); // Données présentes
-				buffer.writeBytes("{}");	// Données NBT (vide pour l'instant)
+				buffer.writeNBT("{}");	// Données NBT (vide pour l'instant)
 			} else {
 				buffer.writeBool(false); // Pas de données NBT optionnelles
 			}
