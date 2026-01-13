@@ -10,7 +10,7 @@
 #include <string>
 #include <thread>
 
-enum LogLevel { DEBUG, INFO, WARN, ERROR };
+enum class LogLevel { Debug, Info, Warn, Error };
 enum LogCategory { NETWORK, GAMEINFO };
 
 struct LogEntry {

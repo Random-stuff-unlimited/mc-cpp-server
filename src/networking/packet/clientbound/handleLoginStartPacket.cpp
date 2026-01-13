@@ -9,7 +9,7 @@
 #include <string>
 
 void handleLoginStartPacket(Packet& packet, Server& server) {
-	g_logger->logNetwork(INFO, "=== Login Start Received ===", "Login");
+	g_logger->logNetwork(LogLevel::Info, "=== Login Start Received ===", "Login");
 	Player* player = packet.getPlayer();
 	if (!player) return;
 

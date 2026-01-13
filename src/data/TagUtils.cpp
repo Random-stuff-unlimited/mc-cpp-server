@@ -71,9 +71,9 @@ void TagUtils::logTagStatistics() {
 	if (!g_logger) return;
 
 	size_t totalTags = getTotalTagCount();
-	g_logger->logGameInfo(INFO, "=== Tag Statistics ===", "TagUtils");
-	g_logger->logGameInfo(INFO, "Total registries: " + std::to_string(RegistriesTags.size()), "TagUtils");
-	g_logger->logGameInfo(INFO, "Total tags: " + std::to_string(totalTags), "TagUtils");
+	g_logger->logGameInfo(LogLevel::Info, "=== Tag Statistics ===", "TagUtils");
+	g_logger->logGameInfo(LogLevel::Info, "Total registries: " + std::to_string(RegistriesTags.size()), "TagUtils");
+	g_logger->logGameInfo(LogLevel::Info, "Total tags: " + std::to_string(totalTags), "TagUtils");
 
 	for (const auto& [registryName, tags] : RegistriesTags) {
 		size_t totalEntries = 0;
@@ -81,6 +81,6 @@ void TagUtils::logTagStatistics() {
 			totalEntries += tag.entries.size();
 		}
 		g_logger->logGameInfo(
-				INFO, registryName + ": " + std::to_string(tags.size()) + " tags, " + std::to_string(totalEntries) + " total entries", "TagUtils");
+				LogLevel::Info, registryName + ": " + std::to_string(tags.size()) + " tags, " + std::to_string(totalEntries) + " total entries", "TagUtils");
 	}
 }

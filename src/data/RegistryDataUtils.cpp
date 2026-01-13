@@ -21,14 +21,14 @@
 bool validateRegistryData(const RegistryData& registry) {
 	if (registry.getRegistryId().empty()) {
 		if (g_logger) {
-			g_logger->logNetwork(ERROR, "Registry validation failed: empty registry ID", "RegistryData");
+			g_logger->logNetwork(LogLevel::Error, "Registry validation failed: empty registry ID", "RegistryData");
 		}
 		return false;
 	}
 
 	if (registry.isEmpty()) {
 		if (g_logger) {
-			g_logger->logNetwork(WARN, "Registry is empty: " + registry.getRegistryId(), "RegistryData");
+			g_logger->logNetwork(LogLevel::Warn, "Registry is empty: " + registry.getRegistryId(), "RegistryData");
 		}
 		return true; // Empty registries are valid in MC 1.21.5
 	}
@@ -38,14 +38,14 @@ bool validateRegistryData(const RegistryData& registry) {
 	for (const auto& entry : registry.getEntries()) {
 		if (entry.entry_id.empty()) {
 			if (g_logger) {
-				g_logger->logNetwork(ERROR, "Entry with empty ID in registry: " + registry.getRegistryId(), "RegistryData");
+				g_logger->logNetwork(LogLevel::Error, "Entry with empty ID in registry: " + registry.getRegistryId(), "RegistryData");
 			}
 			return false;
 		}
 
 		if (!entryIds.insert(entry.entry_id).second) {
 			if (g_logger) {
-				g_logger->logNetwork(ERROR, "Duplicate entry ID '" + entry.entry_id + "' in registry: " + registry.getRegistryId(), "RegistryData");
+				g_logger->logNetwork(LogLevel::Error, "Duplicate entry ID '" + entry.entry_id + "' in registry: " + registry.getRegistryId(), "RegistryData");
 			}
 			return false;
 		}
@@ -83,7 +83,7 @@ std::vector<RegistryData> parseMinecraftRegistries() {
 
 			if (registry.entries.empty()) {
 				if (g_logger) {
-					g_logger->logNetwork(WARN, "Creating empty registry: " + registryName, "RegistryData");
+					g_logger->logNetwork(LogLevel::Warn, "Creating empty registry: " + registryName, "RegistryData");
 				}
 				registries.push_back(std::move(registryData));
 				continue;
@@ -100,24 +100,24 @@ std::vector<RegistryData> parseMinecraftRegistries() {
 				registries.push_back(std::move(registryData));
 
 				if (g_logger) {
-					g_logger->logNetwork(INFO, "Parsed registry: " + registryName + " (" +
+					g_logger->logNetwork(LogLevel::Info, "Parsed registry: " + registryName + " (" +
 					                     std::to_string(registry.entries.size()) + " entries)", "RegistryData");
 				}
 			} else {
 				if (g_logger) {
-					g_logger->logNetwork(ERROR, "Failed to validate registry: " + registryName, "RegistryData");
+					g_logger->logNetwork(LogLevel::Error, "Failed to validate registry: " + registryName, "RegistryData");
 				}
 			}
 		}
 
 		if (g_logger) {
-			g_logger->logNetwork(INFO, "Successfully parsed " + std::to_string(registries.size()) +
+			g_logger->logNetwork(LogLevel::Info, "Successfully parsed " + std::to_string(registries.size()) +
 			                     " registries from minecraft_registries.h", "RegistryData");
 		}
 
 	} catch (const std::exception& e) {
 		if (g_logger) {
-			g_logger->logNetwork(ERROR, "Failed to parse minecraft registries: " + std::string(e.what()), "RegistryData");
+			g_logger->logNetwork(LogLevel::Error, "Failed to parse minecraft registries: " + std::string(e.what()), "RegistryData");
 		}
 		registries.clear();
 	}
@@ -152,14 +152,14 @@ std::vector<RegistryData> createAllEssentialRegistries() {
 
 		if (!registries.empty()) {
 			if (g_logger) {
-				g_logger->logNetwork(INFO, "Using parsed registries from minecraft_registries.h", "RegistryData");
+				g_logger->logNetwork(LogLevel::Info, "Using parsed registries from minecraft_registries.h", "RegistryData");
 			}
 			return registries;
 		}
 
 		// Fallback method
 		if (g_logger) {
-			g_logger->logNetwork(WARN, "parseMinecraftRegistries returned empty, using fallback", "RegistryData");
+			g_logger->logNetwork(LogLevel::Warn, "parseMinecraftRegistries returned empty, using fallback", "RegistryData");
 		}
 
 		std::vector<std::pair<std::string, std::map<std::string, uint32_t>>> sources = {
@@ -179,18 +179,18 @@ std::vector<RegistryData> createAllEssentialRegistries() {
 			if (!data.empty()) {
 				registries.push_back(createRegistryFromMap(name, data, true));
 			} else if (g_logger) {
-				g_logger->logNetwork(WARN, "Empty registry data source for: " + name, "RegistryData");
+				g_logger->logNetwork(LogLevel::Warn, "Empty registry data source for: " + name, "RegistryData");
 			}
 		}
 
 		if (g_logger) {
-			g_logger->logNetwork(INFO, "Created " + std::to_string(registries.size()) +
+			g_logger->logNetwork(LogLevel::Info, "Created " + std::to_string(registries.size()) +
 			                     " essential registries using fallback", "RegistryData");
 		}
 
 	} catch (const std::exception& e) {
 		if (g_logger) {
-			g_logger->logNetwork(ERROR, "Failed to create essential registries: " + std::string(e.what()), "RegistryData");
+			g_logger->logNetwork(LogLevel::Error, "Failed to create essential registries: " + std::string(e.what()), "RegistryData");
 		}
 		registries.clear();
 	}
@@ -205,14 +205,14 @@ std::vector<RegistryData> createAllEssentialRegistries() {
 void sendRegistryDataBatch(Packet& packet, Server& server, const std::vector<RegistryData>& registries) {
 	if (registries.empty()) {
 		if (g_logger) {
-			g_logger->logNetwork(WARN, "No registries to send", "Configuration");
+			g_logger->logNetwork(LogLevel::Warn, "No registries to send", "Configuration");
 		}
 		packet.setReturnPacket(PACKET_OK);
 		return;
 	}
 
 	if (g_logger) {
-		g_logger->logNetwork(INFO, "Sending registry batch: " + std::to_string(registries.size()) + " registries", "Configuration");
+		g_logger->logNetwork(LogLevel::Info, "Sending registry batch: " + std::to_string(registries.size()) + " registries", "Configuration");
 	}
 
 	int successCount = 0;
@@ -221,7 +221,7 @@ void sendRegistryDataBatch(Packet& packet, Server& server, const std::vector<Reg
 	for (const auto& registry : registries) {
 		if (!validateRegistryData(registry)) {
 			if (g_logger) {
-				g_logger->logNetwork(ERROR, "Invalid registry data: " + registry.getRegistryId(), "Configuration");
+				g_logger->logNetwork(LogLevel::Error, "Invalid registry data: " + registry.getRegistryId(), "Configuration");
 			}
 			errorCount++;
 			continue;
@@ -236,21 +236,21 @@ void sendRegistryDataBatch(Packet& packet, Server& server, const std::vector<Reg
 			successCount++;
 
 			if (g_logger) {
-				g_logger->logNetwork(INFO, "Sent registry: " + registry.getRegistryId() +
+				g_logger->logNetwork(LogLevel::Info, "Sent registry: " + registry.getRegistryId() +
 				                     " (" + std::to_string(registry.getEntryCount()) + " entries)", "Configuration");
 			}
 
 		} catch (const std::exception& e) {
 			errorCount++;
 			if (g_logger) {
-				g_logger->logNetwork(ERROR, "Failed to send registry " + registry.getRegistryId() +
+				g_logger->logNetwork(LogLevel::Error, "Failed to send registry " + registry.getRegistryId() +
 				                     ": " + std::string(e.what()), "Configuration");
 			}
 		}
 	}
 
 	if (g_logger) {
-		g_logger->logNetwork(INFO, "Registry batch complete: " + std::to_string(successCount) +
+		g_logger->logNetwork(LogLevel::Info, "Registry batch complete: " + std::to_string(successCount) +
 		                     " sent, " + std::to_string(errorCount) + " errors", "Configuration");
 	}
 
@@ -259,7 +259,7 @@ void sendRegistryDataBatch(Packet& packet, Server& server, const std::vector<Reg
 
 void sendRegistryData(Packet& packet, Server& server) {
 	if (g_logger) {
-		g_logger->logNetwork(INFO, "=== Sending Registry Data (0x07) ===", "Configuration");
+		g_logger->logNetwork(LogLevel::Info, "=== Sending Registry Data (0x07) ===", "Configuration");
 	}
 
 	try {
@@ -267,21 +267,21 @@ void sendRegistryData(Packet& packet, Server& server) {
 
 		if (registries.empty()) {
 			if (g_logger) {
-				g_logger->logNetwork(ERROR, "No registries parsed from minecraft_registries.h", "Configuration");
+				g_logger->logNetwork(LogLevel::Error, "No registries parsed from minecraft_registries.h", "Configuration");
 			}
 			packet.setReturnPacket(PACKET_ERROR);
 			return;
 		}
 
 		if (g_logger) {
-			g_logger->logNetwork(INFO, "Parsed " + std::to_string(registries.size()) + " registries", "Configuration");
+			g_logger->logNetwork(LogLevel::Info, "Parsed " + std::to_string(registries.size()) + " registries", "Configuration");
 		}
 
 		sendRegistryDataBatch(packet, server, registries);
 
 	} catch (const std::exception& e) {
 		if (g_logger) {
-			g_logger->logNetwork(ERROR, "Failed to send registry data: " + std::string(e.what()), "Configuration");
+			g_logger->logNetwork(LogLevel::Error, "Failed to send registry data: " + std::string(e.what()), "Configuration");
 		}
 		packet.setReturnPacket(PACKET_ERROR);
 	}

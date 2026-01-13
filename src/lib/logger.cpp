@@ -181,16 +181,16 @@ std::string LogManager::formatLogEntry(const LogEntry& entry) {
 
 	// Add log level
 	switch (entry.level) {
-	case DEBUG:
+	case LogLevel::Debug:
 		ss << "[DEBUG] ";
 		break;
-	case INFO:
+	case LogLevel::Info:
 		ss << "[INFO] ";
 		break;
-	case WARN:
+	case LogLevel::Warn:
 		ss << "[WARN] ";
 		break;
-	case ERROR:
+	case LogLevel::Error:
 		ss << "[ERROR] ";
 		break;
 	}

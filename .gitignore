@@ -18,3 +18,5 @@ CMakeCache.txt
 CMakeFiles/
 cmake_install.cmake
 CMakeUserPresets.json
+
+mc-server

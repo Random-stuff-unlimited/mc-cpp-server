@@ -101,7 +101,7 @@ namespace World {
 				auto regionPath = _worldManager.locateRegionFileByChunkCoord(chunkX, chunkZ);
 				chunk			= loadChunkFromRegion(regionPath, chunkX, chunkZ);
 			} catch (const std::exception& e) {
-				g_logger->logGameInfo(DEBUG,
+				g_logger->logGameInfo(LogLevel::Debug,
 									  "Chunk (" + std::to_string(chunkX) + ", " + std::to_string(chunkZ) +
 											  ") not found, sending empty chunk: " + e.what(),
 									  "World::Query::fetchChunk");

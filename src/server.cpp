@@ -30,47 +30,47 @@ int Server::start_server() {
 	try {
 		initializeGlobalLogger();
 		if (_config.loadConfig()) {
-			g_logger->logGameInfo(ERROR, "Failed to load config", "SERVER");
+			g_logger->logGameInfo(LogLevel::Error, "Failed to load config", "SERVER");
 			return 1;
 		}
 
 		// Load world data
-		g_logger->logGameInfo(INFO, "Loading world...", "SERVER");
+		g_logger->logGameInfo(LogLevel::Info, "Loading world...", "SERVER");
 		try {
 			std::string			  worldName	   = _config.getWorldName();
 			std::filesystem::path levelDatPath = getPath().parent_path() / worldName / "level.dat";
 
 			if (!std::filesystem::exists(levelDatPath)) {
-				g_logger->logGameInfo(ERROR, "level.dat not found at: " + levelDatPath.string(), "SERVER");
+				g_logger->logGameInfo(LogLevel::Error, "level.dat not found at: " + levelDatPath.string(), "SERVER");
 				return 1;
 			}
 
 			_worldData = _worldManager.loadLevelDat(levelDatPath);
 
 			// Log world information
-			g_logger->logGameInfo(INFO, "World loaded successfully: " + _worldData.LevelName, "SERVER");
-			g_logger->logGameInfo(INFO,
-								  "Spawn Point: X=" + std::to_string(_worldData.SpawnX) + " Y=" + std::to_string(_worldData.SpawnY) +
-										  " Z=" + std::to_string(_worldData.SpawnZ),
-								  "SERVER");
-			g_logger->logGameInfo(INFO, "Random Seed: " + std::to_string(_worldData.RandomSeed), "SERVER");
-			g_logger->logGameInfo(INFO, "Game Type: " + std::to_string(_worldData.GameType), "SERVER");
-			g_logger->logGameInfo(INFO, "Data Version: " + std::to_string(_worldData.DataVersion), "SERVER");
-			g_logger->logGameInfo(INFO, "Difficulty: " + std::to_string(static_cast<int>(_worldData.Difficulty)), "SERVER");
-			g_logger->logGameInfo(INFO, "Hardcore: " + std::string(_worldData.hardcore ? "true" : "false"), "SERVER");
-			g_logger->logGameInfo(INFO, "Time: " + std::to_string(_worldData.Time), "SERVER");
-			g_logger->logGameInfo(INFO, "Day Time: " + std::to_string(_worldData.DayTime), "SERVER");
-			g_logger->logGameInfo(INFO, "Generator: " + _worldData.generatorName, "SERVER");
-			g_logger->logGameInfo(INFO, "Raining: " + std::string(_worldData.raining ? "true" : "false"), "SERVER");
-			g_logger->logGameInfo(INFO, "Thundering: " + std::string(_worldData.thundering ? "true" : "false"), "SERVER");
+			g_logger->logGameInfo(LogLevel::Info, "World loaded successfully: " + _worldData.LevelName, "SERVER");
+		g_logger->logGameInfo(LogLevel::Info,
+							  "Spawn Point: X=" + std::to_string(_worldData.SpawnX) + " Y=" + std::to_string(_worldData.SpawnY) +
+									  " Z=" + std::to_string(_worldData.SpawnZ),
+							  "SERVER");
+		g_logger->logGameInfo(LogLevel::Info, "Random Seed: " + std::to_string(_worldData.RandomSeed), "SERVER");
+		g_logger->logGameInfo(LogLevel::Info, "Game Type: " + std::to_string(_worldData.GameType), "SERVER");
+		g_logger->logGameInfo(LogLevel::Info, "Data Version: " + std::to_string(_worldData.DataVersion), "SERVER");
+		g_logger->logGameInfo(LogLevel::Info, "Difficulty: " + std::to_string(static_cast<int>(_worldData.Difficulty)), "SERVER");
+		g_logger->logGameInfo(LogLevel::Info, "Hardcore: " + std::string(_worldData.hardcore ? "true" : "false"), "SERVER");
+		g_logger->logGameInfo(LogLevel::Info, "Time: " + std::to_string(_worldData.Time), "SERVER");
+		g_logger->logGameInfo(LogLevel::Info, "Day Time: " + std::to_string(_worldData.DayTime), "SERVER");
+		g_logger->logGameInfo(LogLevel::Info, "Generator: " + _worldData.generatorName, "SERVER");
+		g_logger->logGameInfo(LogLevel::Info, "Raining: " + std::string(_worldData.raining ? "true" : "false"), "SERVER");
+		g_logger->logGameInfo(LogLevel::Info, "Thundering: " + std::string(_worldData.thundering ? "true" : "false"), "SERVER");
 
 		} catch (const std::exception& e) {
-			g_logger->logGameInfo(ERROR, "Failed to load world: " + std::string(e.what()), "SERVER");
+			g_logger->logGameInfo(LogLevel::Error, "Failed to load world: " + std::string(e.what()), "SERVER");
 			return 1;
 		}
 
 		std::filesystem::path regionFile = _worldManager.locateRegionFileByChunkCoord(0, 0);
-		g_logger->logGameInfo(INFO, "Region File: " + regionFile.string(), "SERVER");
+		g_logger->logGameInfo(LogLevel::Info, "Region File: " + regionFile.string(), "SERVER");
 		World::ChunkData chunk = _worldQuery.fetchChunk(0, 0);
 		printChunkInfo(chunk);
 
@@ -210,28 +210,28 @@ int	 Server::getAmountOnline() { return _playerLst.size(); }
 json Server::getPlayerSample() { return _playerSample; }
 
 void Server::printChunkInfo(const World::ChunkData& chunk) {
-	g_logger->logGameInfo(INFO, "========== CHUNK DATA INFO ==========", "SERVER");
+	g_logger->logGameInfo(LogLevel::Info, "========== CHUNK DATA INFO ==========", "SERVER");
 
 	// Basic chunk information
-	g_logger->logGameInfo(INFO, "Chunk Coordinates: (" + std::to_string(chunk.chunkX) + ", " + std::to_string(chunk.chunkZ) + ")", "SERVER");
-	g_logger->logGameInfo(INFO, "Chunk Empty: " + std::string(chunk.isEmpty() ? "true" : "false"), "SERVER");
+	g_logger->logGameInfo(LogLevel::Info, "Chunk Coordinates: (" + std::to_string(chunk.chunkX) + ", " + std::to_string(chunk.chunkZ) + ")", "SERVER");
+	g_logger->logGameInfo(LogLevel::Info, "Chunk Empty: " + std::string(chunk.isEmpty() ? "true" : "false"), "SERVER");
 
 	// Data vector sizes
-	g_logger->logGameInfo(INFO, "Block Data Size: " + std::to_string(chunk.blockData.size()) + " bytes", "SERVER");
-	g_logger->logGameInfo(INFO, "Biome Data Size: " + std::to_string(chunk.biomeData.size()) + " bytes", "SERVER");
-	g_logger->logGameInfo(INFO, "Heightmaps Size: " + std::to_string(chunk.heightmaps.size()) + " bytes", "SERVER");
-	g_logger->logGameInfo(INFO, "Block Entities Size: " + std::to_string(chunk.blockEntities.size()) + " bytes", "SERVER");
-	g_logger->logGameInfo(INFO, "Sky Light Size: " + std::to_string(chunk.skyLight.size()) + " bytes", "SERVER");
-	g_logger->logGameInfo(INFO, "Block Light Size: " + std::to_string(chunk.blockLight.size()) + " bytes", "SERVER");
+	g_logger->logGameInfo(LogLevel::Info, "Block Data Size: " + std::to_string(chunk.blockData.size()) + " bytes", "SERVER");
+	g_logger->logGameInfo(LogLevel::Info, "Biome Data Size: " + std::to_string(chunk.biomeData.size()) + " bytes", "SERVER");
+	g_logger->logGameInfo(LogLevel::Info, "Heightmaps Size: " + std::to_string(chunk.heightmaps.size()) + " bytes", "SERVER");
+	g_logger->logGameInfo(LogLevel::Info, "Block Entities Size: " + std::to_string(chunk.blockEntities.size()) + " bytes", "SERVER");
+	g_logger->logGameInfo(LogLevel::Info, "Sky Light Size: " + std::to_string(chunk.skyLight.size()) + " bytes", "SERVER");
+	g_logger->logGameInfo(LogLevel::Info, "Block Light Size: " + std::to_string(chunk.blockLight.size()) + " bytes", "SERVER");
 
 	// Calculate total data size
 	size_t totalSize = chunk.blockData.size() + chunk.biomeData.size() + chunk.heightmaps.size() + chunk.blockEntities.size() +
 					   chunk.skyLight.size() + chunk.blockLight.size();
-	g_logger->logGameInfo(INFO, "Total Chunk Data Size: " + std::to_string(totalSize) + " bytes", "SERVER");
+	g_logger->logGameInfo(LogLevel::Info, "Total Chunk Data Size: " + std::to_string(totalSize) + " bytes", "SERVER");
 
 	// Analyze data content
 	if (!chunk.blockData.empty()) {
-		g_logger->logGameInfo(INFO, "Block Data: Contains " + std::to_string(chunk.blockData.size()) + " bytes of NBT block sections", "SERVER");
+		g_logger->logGameInfo(LogLevel::Info, "Block Data: Contains " + std::to_string(chunk.blockData.size()) + " bytes of NBT block sections", "SERVER");
 
 		// Try to parse some basic NBT info if possible
 		try {
@@ -243,51 +243,51 @@ void Server::printChunkInfo(const World::ChunkData& chunk) {
 					snprintf(hexChar, sizeof(hexChar), "%02X ", static_cast<unsigned char>(chunk.blockData[i]));
 					hexStr += hexChar;
 				}
-				g_logger->logGameInfo(DEBUG, hexStr, "SERVER");
+				g_logger->logGameInfo(LogLevel::Debug, hexStr, "SERVER");
 			}
 		} catch (const std::exception& e) {
-			g_logger->logGameInfo(DEBUG, "Could not analyze block data: " + std::string(e.what()), "SERVER");
+			g_logger->logGameInfo(LogLevel::Debug, "Could not analyze block data: " + std::string(e.what()), "SERVER");
 		}
 	} else {
-		g_logger->logGameInfo(INFO, "Block Data: Empty (chunk not generated or air-only)", "SERVER");
+		g_logger->logGameInfo(LogLevel::Info, "Block Data: Empty (chunk not generated or air-only)", "SERVER");
 	}
 
 	if (!chunk.biomeData.empty()) {
-		g_logger->logGameInfo(INFO, "Biome Data: Contains biome information for 4x4x4 block cells", "SERVER");
+		g_logger->logGameInfo(LogLevel::Info, "Biome Data: Contains biome information for 4x4x4 block cells", "SERVER");
 	} else {
-		g_logger->logGameInfo(INFO, "Biome Data: Empty (default biome used)", "SERVER");
+		g_logger->logGameInfo(LogLevel::Info, "Biome Data: Empty (default biome used)", "SERVER");
 	}
 
 	if (!chunk.heightmaps.empty()) {
-		g_logger->logGameInfo(INFO, "Heightmaps: Contains terrain height data for performance optimization", "SERVER");
+		g_logger->logGameInfo(LogLevel::Info, "Heightmaps: Contains terrain height data for performance optimization", "SERVER");
 	} else {
-		g_logger->logGameInfo(INFO, "Heightmaps: Empty (not calculated)", "SERVER");
+		g_logger->logGameInfo(LogLevel::Info, "Heightmaps: Empty (not calculated)", "SERVER");
 	}
 
 	if (!chunk.blockEntities.empty()) {
-		g_logger->logGameInfo(INFO,
+		g_logger->logGameInfo(LogLevel::Info,
 							  "Block Entities: Contains " + std::to_string(chunk.blockEntities.size()) +
 									  " bytes of special blocks (chests, furnaces, etc.)",
 							  "SERVER");
 	} else {
-		g_logger->logGameInfo(INFO, "Block Entities: No special blocks found", "SERVER");
+		g_logger->logGameInfo(LogLevel::Info, "Block Entities: No special blocks found", "SERVER");
 	}
 
 	if (!chunk.skyLight.empty()) {
-		g_logger->logGameInfo(INFO, "Sky Light: Contains natural lighting data (2048 bytes expected per 16x16x16 section)", "SERVER");
+		g_logger->logGameInfo(LogLevel::Info, "Sky Light: Contains natural lighting data (2048 bytes expected per 16x16x16 section)", "SERVER");
 	} else {
-		g_logger->logGameInfo(INFO, "Sky Light: No sky light data (underground sections or not calculated)", "SERVER");
+		g_logger->logGameInfo(LogLevel::Info, "Sky Light: No sky light data (underground sections or not calculated)", "SERVER");
 	}
 
 	if (!chunk.blockLight.empty()) {
-		g_logger->logGameInfo(INFO, "Block Light: Contains artificial lighting data from torches, glowstone, etc.", "SERVER");
+		g_logger->logGameInfo(LogLevel::Info, "Block Light: Contains artificial lighting data from torches, glowstone, etc.", "SERVER");
 	} else {
-		g_logger->logGameInfo(INFO, "Block Light: No block light sources found", "SERVER");
+		g_logger->logGameInfo(LogLevel::Info, "Block Light: No block light sources found", "SERVER");
 	}
 
 	// Minecraft chunk format info
-	g_logger->logGameInfo(INFO, "Note: Minecraft chunks are 16x384x16 blocks (Overworld) divided into 16x16x16 sections", "SERVER");
-	g_logger->logGameInfo(INFO, "Note: Block data uses palletized format with NBT compression for efficiency", "SERVER");
+	g_logger->logGameInfo(LogLevel::Info, "Note: Minecraft chunks are 16x384x16 blocks (Overworld) divided into 16x16x16 sections", "SERVER");
+	g_logger->logGameInfo(LogLevel::Info, "Note: Block data uses palletized format with NBT compression for efficiency", "SERVER");
 
-	g_logger->logGameInfo(INFO, "====================================", "SERVER");
+	g_logger->logGameInfo(LogLevel::Info, "====================================", "SERVER");
 }

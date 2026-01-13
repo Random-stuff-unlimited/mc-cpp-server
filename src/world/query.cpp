@@ -101,7 +101,7 @@ void World::Query::extractChunkDataFromNBT(const nbt::NBT& chunkNBT, World::Chun
 		}
 
 	} catch (const std::exception& e) {
-		g_logger->logGameInfo(ERROR, "Failed to extract chunk data from NBT: " + std::string(e.what()), "World::Query");
+		g_logger->logGameInfo(LogLevel::Error, "Failed to extract chunk data from NBT: " + std::string(e.what()), "World::Query");
 		// Leave chunk data empty - it will be treated as empty chunk
 	}
 }
@@ -211,7 +211,7 @@ World::ChunkData World::Query::generateEmptyChunk(int chunkX, int chunkZ) {
 	// Leave all vectors empty - this represents an empty chunk
 	// The isEmpty() function will return true for this chunk
 
-	g_logger->logGameInfo(DEBUG, "Generated empty chunk (" + std::to_string(chunkX) + ", " + std::to_string(chunkZ) + ")", "World::Query");
+	g_logger->logGameInfo(LogLevel::Debug, "Generated empty chunk (" + std::to_string(chunkX) + ", " + std::to_string(chunkZ) + ")", "World::Query");
 
 	return emptyChunk;
 }

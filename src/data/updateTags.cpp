@@ -7,18 +7,18 @@
 #include "player.hpp"
 
 void sendUpdateTags(Packet& packet, Server& server) {
-	g_logger->logNetwork(INFO, "=== Sending Update Tags packet (0x0D) ===", "Configuration");
+	g_logger->logNetwork(LogLevel::Info, "=== Sending Update Tags packet (0x0D) ===", "Configuration");
 
 	Player* player = packet.getPlayer();
 	if (!player) {
-		g_logger->logNetwork(ERROR, "No player associated with Update Tags packet", "Configuration");
+		g_logger->logNetwork(LogLevel::Error, "No player associated with Update Tags packet", "Configuration");
 		packet.setReturnPacket(PACKET_DISCONNECT);
 		return;
 	}
 
 	ThreadSafeQueue<Packet*>* outgoingPackets = server.getNetworkManager().getOutgoingQueue();
 	if (!outgoingPackets) {
-		g_logger->logNetwork(ERROR, "No outgoing packet queue available", "Configuration");
+		g_logger->logNetwork(LogLevel::Error, "No outgoing packet queue available", "Configuration");
 		packet.setReturnPacket(PACKET_ERROR);
 		return;
 	}
@@ -49,7 +49,7 @@ void sendUpdateTags(Packet& packet, Server& server) {
 			}
 
 			totalEntries += registryEntries;
-			g_logger->logNetwork(DEBUG,
+			g_logger->logNetwork(LogLevel::Debug,
 								 "Registry: " + registryName + " -> " + std::to_string(tags.size()) + " tags, " + std::to_string(registryEntries) +
 										 " entries",
 								 "Configuration");
@@ -58,7 +58,7 @@ void sendUpdateTags(Packet& packet, Server& server) {
 		Packet* tagsPacket = new Packet(packet);
 		tagsPacket->sendPacket(0x0D, tagBuffer, server, true);
 
-		g_logger->logNetwork(INFO,
+		g_logger->logNetwork(LogLevel::Info,
 							 "Update Tags packet sent: " + std::to_string(totalRegistries) + " registries, " + std::to_string(totalTags) + " tags, " +
 									 std::to_string(totalEntries) + " entries",
 							 "Configuration");
@@ -66,7 +66,7 @@ void sendUpdateTags(Packet& packet, Server& server) {
 		packet.setReturnPacket(PACKET_OK);
 
 	} catch (const std::exception& e) {
-		g_logger->logNetwork(ERROR, "Failed to send Update Tags packet: " + std::string(e.what()), "Configuration");
+		g_logger->logNetwork(LogLevel::Error, "Failed to send Update Tags packet: " + std::string(e.what()), "Configuration");
 		packet.setReturnPacket(PACKET_ERROR);
 	}
 }

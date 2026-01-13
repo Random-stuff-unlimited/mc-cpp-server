@@ -21,7 +21,7 @@ void packetRouter(Packet* packet, Server& server) {
 		return;
 	}
 
-	g_logger->logNetwork(INFO,
+	g_logger->logNetwork(LogLevel::Info,
 						 "Routing packet ID: 0x" + std::to_string(packet->getId()) + " (size: " + std::to_string(packet->getSize()) +
 								 ") for state: " + std::to_string(static_cast<int>(player->getPlayerState())),
 						 "PacketRouter");
@@ -42,7 +42,7 @@ void packetRouter(Packet* packet, Server& server) {
 		break;
 	case PlayerState::Login:
 		if (packet->getSize() > 32767) {
-			g_logger->logNetwork(ERROR, "Packet size too large: " + std::to_string(packet->getSize()), "PacketRouter");
+			g_logger->logNetwork(LogLevel::Error, "Packet size too large: " + std::to_string(packet->getSize()), "PacketRouter");
 			packet->setReturnPacket(PACKET_DISCONNECT);
 			return;
 		}
@@ -74,7 +74,7 @@ void packetRouter(Packet* packet, Server& server) {
 			packet->setReturnPacket(PACKET_OK);
 		} else if (packet->getId() == 0x03) {
 			// Acknowledge Finish Configuration -> Enter Play State
-			g_logger->logNetwork(INFO, "Transitioning to Play state", "Configuration");
+			g_logger->logNetwork(LogLevel::Info, "Transitioning to Play state", "Configuration");
 			handleAcknowledgeFinishConfigurationPacket(*packet, server);
 
 			// Send play initialization packets
@@ -97,13 +97,13 @@ void packetRouter(Packet* packet, Server& server) {
 			serverboundKnownPacksPacket(*packet);
 
 			// Send configuration sequence
-			g_logger->logNetwork(INFO, "Sending Registry Data", "Configuration");
+			g_logger->logNetwork(LogLevel::Info, "Sending Registry Data", "Configuration");
 			sendRegistryData(*packet, server);
 
 			// g_logger->logNetwork(INFO, "Sending Update Tags", "Configuration");
 			// sendUpdateTags(*packet, server);
 
-			g_logger->logNetwork(INFO, "Sending Finish Configuration", "Configuration");
+			g_logger->logNetwork(LogLevel::Info, "Sending Finish Configuration", "Configuration");
 			handleFinishConfigurationPacket(*packet, server);
 		} else if (packet->getId() == 0x08) {
 			// Custom Click Action
@@ -124,7 +124,7 @@ void packetRouter(Packet* packet, Server& server) {
 			gameEventPacket(*packet, server);
 		} else if (packet->getId() == 0x2B) {
 			// Player Loaded
-			g_logger->logNetwork(DEBUG, "Player fully loaded in game", "Play");
+			g_logger->logNetwork(LogLevel::Debug, "Player fully loaded in game", "Play");
 			packet->setReturnPacket(PACKET_OK);
 		} else {
 			// Other play packets
@@ -132,7 +132,7 @@ void packetRouter(Packet* packet, Server& server) {
 		}
 		break;
 	default:
-		g_logger->logNetwork(WARN, "Unknown player state: " + std::to_string(static_cast<int>(player->getPlayerState())), "PacketRouter");
+		g_logger->logNetwork(LogLevel::Warn, "Unknown player state: " + std::to_string(static_cast<int>(player->getPlayerState())), "PacketRouter");
 		packet->setReturnPacket(PACKET_DISCONNECT);
 		break;
 	}

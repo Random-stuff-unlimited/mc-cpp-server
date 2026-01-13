@@ -17,7 +17,7 @@ bool Config::loadConfig() {
 	std::ifstream inputFile(_execPath.parent_path() / "config.json"); // Should change the config path later if needed
 
 	if (!inputFile.is_open()) {
-		g_logger->logGameInfo(DEBUG, "Error: Could not open: config.json", "SERVER");
+		g_logger->logGameInfo(LogLevel::Debug, "Error: Could not open: config.json", "SERVER");
 		return true;
 	}
 
@@ -35,7 +35,7 @@ bool Config::loadConfig() {
 		Config::setGamemode(config["world"]["gamemode"]);
 		Config::setDifficulty(config["world"]["difficulty"]);
 	} catch (json::parse_error& e) {
-		g_logger->logGameInfo(ERROR, "Error parsing config.json: " + std::string(e.what()), "SERVER");
+		g_logger->logGameInfo(LogLevel::Error, "Error parsing config.json: " + std::string(e.what()), "SERVER");
 		inputFile.close();
 		return true;
 	}
@@ -47,7 +47,7 @@ bool Config::reloadConfig() {
 	std::ifstream inputFile(_execPath.root_directory() / "config.json"); // Should change the config path later if needed
 
 	if (!inputFile.is_open()) {
-		g_logger->logGameInfo(DEBUG, "Error: Could not open: config.json", "SERVER");
+		g_logger->logGameInfo(LogLevel::Debug, "Error: Could not open: config.json", "SERVER");
 		return true;
 	}
 
@@ -63,7 +63,7 @@ bool Config::reloadConfig() {
 		Config::setGamemode(config["world"]["gamemode"]);
 		Config::setDifficulty(config["world"]["difficulty"]);
 	} catch (json::parse_error& e) {
-		g_logger->logGameInfo(ERROR, "Error parsing config.json: " + std::string(e.what()), "SERVER");
+		g_logger->logGameInfo(LogLevel::Error, "Error parsing config.json: " + std::string(e.what()), "SERVER");
 		inputFile.close();
 		return true;
 	}

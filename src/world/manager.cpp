@@ -141,7 +141,7 @@ std::filesystem::path World::Manager::locateRegionFileByChunkCoord(int localX, i
 	if (std::filesystem::exists(path)) {
 		return path;
 	} else {
-		g_logger->logGameInfo(ERROR, "Cannot find the region file asked" + path.string());
+		g_logger->logGameInfo(LogLevel::Error, "Cannot find the region file asked" + path.string());
 		throw std::runtime_error("Cannot find the region file asked");
 	}
 }
