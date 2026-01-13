@@ -1,3 +1,4 @@
+#include "PacketIds.hpp"
 #include "lib/UUID.hpp"
 #include "network/buffer.hpp"
 #include "network/networking.hpp"
@@ -11,5 +12,5 @@ void setCenterPacket(Packet& packet, Server& server) {
 	buf.writeVarInt(0);
 	buf.writeVarInt(0);
 
-	packet.sendPacket(0x57, buf, server, false);
+	packet.sendPacket(PacketId::Play::Clientbound::SET_CENTER_CHUNK, buf, server, false);
 }

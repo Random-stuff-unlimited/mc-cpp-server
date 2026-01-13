@@ -1,3 +1,4 @@
+#include "PacketIds.hpp"
 #include "network/buffer.hpp"
 #include "network/packet.hpp"
 #include "player.hpp"
@@ -93,5 +94,5 @@ void levelChunkWithLightPacket(Packet& packet, Server& server) {
 		return;
 	}
 
-	packet.sendPacket(0x27, buf, server, false);
+	packet.sendPacket(PacketId::Play::Clientbound::CHUNK_DATA_AND_UPDATE_LIGHT, buf, server, false);
 }

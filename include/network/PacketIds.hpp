@@ -203,7 +203,7 @@ namespace PacketId {
 			constexpr int32_t HIT_ANIMATION = 0x24;
 			constexpr int32_t INITIALIZE_WORLD_BORDER = 0x25;
 			constexpr int32_t KEEP_ALIVE = 0x26;
-			constexpr int32_t CHUNK_DATA_AND_UPDATE_LIGHT = 0x27;
+			constexpr int32_t CHUNK_DATA_AND_UPDATE_LIGHT = 0x2C;
 			constexpr int32_t WORLD_EVENT = 0x28;
 			constexpr int32_t PARTICLE = 0x29;
 			constexpr int32_t UPDATE_LIGHT = 0x2A;
@@ -220,7 +220,7 @@ namespace PacketId {
 			constexpr int32_t PING = 0x35;
 			constexpr int32_t PONG_RESPONSE = 0x36;
 			constexpr int32_t PLACE_GHOST_RECIPE = 0x37;
-			constexpr int32_t PLAYER_ABILITIES = 0x38;
+			constexpr int32_t PLAYER_ABILITIES = 0x3E;
 			constexpr int32_t PLAYER_CHAT_MESSAGE = 0x39;
 			constexpr int32_t END_COMBAT = 0x3A;
 			constexpr int32_t ENTER_COMBAT = 0x3B;
@@ -247,8 +247,8 @@ namespace PacketId {
 			constexpr int32_t SET_BORDER_WARNING_DELAY = 0x50;
 			constexpr int32_t SET_BORDER_WARNING_DISTANCE = 0x51;
 			constexpr int32_t SET_CAMERA = 0x52;
-			constexpr int32_t SET_HELD_ITEM = 0x53;
-			constexpr int32_t SET_CENTER_CHUNK = 0x54;
+			constexpr int32_t SET_HELD_ITEM = 0x67;
+			constexpr int32_t SET_CENTER_CHUNK = 0x5C;
 			constexpr int32_t SET_RENDER_DISTANCE = 0x55;
 			constexpr int32_t SET_DEFAULT_SPAWN_POSITION = 0x56;
 			constexpr int32_t DISPLAY_OBJECTIVE = 0x57;
