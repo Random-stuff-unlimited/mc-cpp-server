@@ -23,7 +23,7 @@ namespace PacketId {
 			constexpr int32_t STATUS_REQUEST = 0x00;
 			constexpr int32_t PING_REQUEST = 0x01;
 		}
-		
+
 		// Clientbound
 		namespace Clientbound {
 			constexpr int32_t STATUS_RESPONSE = 0x00;
@@ -44,7 +44,7 @@ namespace PacketId {
 			constexpr int32_t LOGIN_ACKNOWLEDGED = 0x03;
 			constexpr int32_t COOKIE_RESPONSE = 0x04;
 		}
-		
+
 		// Clientbound
 		namespace Clientbound {
 			constexpr int32_t DISCONNECT = 0x00;
@@ -72,7 +72,7 @@ namespace PacketId {
 			constexpr int32_t RESOURCE_PACK_RESPONSE = 0x06;
 			constexpr int32_t KNOWN_PACKS = 0x07;
 		}
-		
+
 		// Clientbound
 		namespace Clientbound {
 			constexpr int32_t COOKIE_REQUEST = 0x00;
@@ -161,7 +161,7 @@ namespace PacketId {
 			constexpr int32_t USE_ITEM_ON = 0x38;
 			constexpr int32_t USE_ITEM = 0x39;
 		}
-		
+
 		// Clientbound
 		namespace Clientbound {
 			constexpr int32_t BUNDLE_DELIMITER = 0x00;
@@ -175,7 +175,7 @@ namespace PacketId {
 			constexpr int32_t BLOCK_ACTION = 0x08;
 			constexpr int32_t BLOCK_UPDATE = 0x09;
 			constexpr int32_t BOSS_BAR = 0x0A;
-			constexpr int32_t CHANGE_DIFFICULTY = 0x0B;
+			constexpr int32_t CHANGE_DIFFICULTY = 0x0A;
 			constexpr int32_t CHUNK_BATCH_FINISHED = 0x0C;
 			constexpr int32_t CHUNK_BATCH_START = 0x0D;
 			constexpr int32_t CHUNK_BIOMES = 0x0E;
@@ -198,7 +198,7 @@ namespace PacketId {
 			constexpr int32_t ENTITY_EVENT = 0x1F;
 			constexpr int32_t EXPLOSION = 0x20;
 			constexpr int32_t UNLOAD_CHUNK = 0x21;
-			constexpr int32_t GAME_EVENT = 0x22;
+			constexpr int32_t GAME_EVENT = 0x26;
 			constexpr int32_t OPEN_HORSE_SCREEN = 0x23;
 			constexpr int32_t HIT_ANIMATION = 0x24;
 			constexpr int32_t INITIALIZE_WORLD_BORDER = 0x25;
@@ -207,7 +207,7 @@ namespace PacketId {
 			constexpr int32_t WORLD_EVENT = 0x28;
 			constexpr int32_t PARTICLE = 0x29;
 			constexpr int32_t UPDATE_LIGHT = 0x2A;
-			constexpr int32_t LOGIN = 0x2B;
+			constexpr int32_t LOGIN = 0x30;
 			constexpr int32_t MAP_DATA = 0x2C;
 			constexpr int32_t MERCHANT_OFFERS = 0x2D;
 			constexpr int32_t UPDATE_ENTITY_POSITION = 0x2E;
@@ -228,7 +228,7 @@ namespace PacketId {
 			constexpr int32_t PLAYER_INFO_REMOVE = 0x3D;
 			constexpr int32_t PLAYER_INFO_UPDATE = 0x3E;
 			constexpr int32_t LOOK_AT = 0x3F;
-			constexpr int32_t SYNCHRONIZE_PLAYER_POSITION = 0x40;
+			constexpr int32_t SYNCHRONIZE_PLAYER_POSITION = 0x46;
 			constexpr int32_t UPDATE_RECIPE_BOOK = 0x41;
 			constexpr int32_t REMOVE_ENTITIES = 0x42;
 			constexpr int32_t REMOVE_ENTITY_EFFECT = 0x43;
@@ -239,7 +239,7 @@ namespace PacketId {
 			constexpr int32_t SET_HEAD_ROTATION = 0x48;
 			constexpr int32_t UPDATE_SECTION_BLOCKS = 0x49;
 			constexpr int32_t SELECT_ADVANCEMENTS_TAB = 0x4A;
-			constexpr int32_t SERVER_DATA = 0x4B;
+			constexpr int32_t SERVER_DATA = 0x0D;
 			constexpr int32_t SET_ACTION_BAR_TEXT = 0x4C;
 			constexpr int32_t SET_BORDER_CENTER = 0x4D;
 			constexpr int32_t SET_BORDER_LERP_SIZE = 0x4E;

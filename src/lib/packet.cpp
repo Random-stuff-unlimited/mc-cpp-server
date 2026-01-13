@@ -247,6 +247,26 @@ void Packet::sendPacket(int id, Buffer& data, Server& server, bool last) {
     server.getNetworkManager().getOutgoingQueue()->push(this);
 }
 
+void Packet::sendPacket2(int id, Buffer& data, Server& server, bool last) {
+    if (!last) {
+        Packet* newPacket = new Packet(*this);
+        newPacket->sendPacket(id, data, server, true);
+        return;
+    }
+    Buffer buf;
+
+    buf.writeByte(0);
+    buf.writeVarInt(id);
+    buf.writeBytes(data.getData());
+    buf.prependVarInt(buf.getData().size());
+
+    _data = buf;
+    _id = id;
+    _size = buf.getData().size();
+    _returnPacket = PACKET_SEND;
+    server.getNetworkManager().getOutgoingQueue()->push(this);
+}
+
 Player*	 Packet::getPlayer() const { return (_player); }
 uint32_t Packet::getSize() { return (_size); }
 uint32_t Packet::getId() { return (_id); }

@@ -1,3 +1,4 @@
+#include "PacketIds.hpp"
 #include "network/buffer.hpp"
 #include "network/networking.hpp"
 #include "network/packet.hpp"
@@ -37,5 +38,5 @@ void synchronizePlayerPositionPacket(Packet& packet, Server& server) {
 	// Flags (0x00 = absolute positioning)
 	buf.writeInt(0x00);
 
-	packet.sendPacket(0x41, buf, server, true);
+	packet.sendPacket(PacketId::Play::Clientbound::SYNCHRONIZE_PLAYER_POSITION, buf, server, true);
 }

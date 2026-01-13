@@ -1,3 +1,4 @@
+#include "PacketIds.hpp"
 #include "network/buffer.hpp"
 #include "network/packet.hpp"
 #include "player.hpp"
@@ -48,5 +49,5 @@ void sendPlayPacket(Packet& packet, Server& server) {
 	buf.writeVarInt(63); // 21. Sea level
 	buf.writeBool(false); // 22. Enforces Secure Chat
 
-	packet.sendPacket(0x2B, buf, server, false);
+	packet.sendPacket(PacketId::Play::Clientbound::LOGIN, buf, server, false);
 }

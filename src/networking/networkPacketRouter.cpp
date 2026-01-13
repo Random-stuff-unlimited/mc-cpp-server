@@ -53,6 +53,7 @@ void packetRouter(Packet* packet, Server& server) {
 		// 	packet->setReturnPacket(PACKET_OK);
 		} else if (packet->getId() == 0x03) {
 			handleLoginAcknowledgedPacket(*packet, server);
+			clientboundFeatureFlagsPacket(*packet, server);
 			clientboundKnownPacksPacket(*packet, server);
 		// } else if (packet->getId() == 0x04) {
 		// 	g_logger->logNetwork(INFO, "Received Login Cookie Response (0x04) - acknowledging", "PacketRouter");
@@ -96,12 +97,14 @@ void packetRouter(Packet* packet, Server& server) {
 			// Serverbound Known Packs -> Send Configuration Data
 			serverboundKnownPacksPacket(*packet);
 
+
+
 			// Send configuration sequence
 			g_logger->logNetwork(INFO, "Sending Registry Data", "Configuration");
 			sendRegistryData(*packet, server);
 
-			// g_logger->logNetwork(INFO, "Sending Update Tags", "Configuration");
-			// sendUpdateTags(*packet, server);
+			g_logger->logNetwork(INFO, "Sending Update Tags", "Configuration");
+			sendUpdateTags(*packet, server);
 
 			g_logger->logNetwork(INFO, "Sending Finish Configuration", "Configuration");
 			handleFinishConfigurationPacket(*packet, server);

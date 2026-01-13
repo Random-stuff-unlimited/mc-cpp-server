@@ -8,7 +8,6 @@
 void changeDifficultyPacket(Packet& packet, Server& server);
 void clientboundKnownPacksPacket(Packet& packet, Server& server);
 void gameEventPacket(Packet& packet, Server& server);
-void handleCookieRequestPacket(Packet& packet, Server& server);
 void handleFinishConfigurationPacket(Packet& packet, Server& server);
 void handleLoginStartPacket(Packet& packet, Server& server);
 void handlePingPacket(Packet& packet, Server& server);
@@ -19,6 +18,7 @@ void sendPlayPacket(Packet& packet, Server& server);
 void setHeldItemPacket(Packet& packet, Server& server);
 void synchronizePlayerPositionPacket(Packet& packet, Server& server);
 void setCenterPacket(Packet& packet, Server& server);
+void clientboundFeatureFlagsPacket(Packet& packet, Server& server);
 
 // serverbound
 void handleAcknowledgeFinishConfigurationPacket(Packet& packet, Server& server);

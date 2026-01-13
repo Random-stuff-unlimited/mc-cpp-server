@@ -232,7 +232,7 @@ void sendRegistryDataBatch(Packet& packet, Server& server, const std::vector<Reg
 			std::vector<uint8_t> registryBytes = registry.serialize();
 			buff.writeBytes(registryBytes);
 
-			packet.sendPacket(PacketId::Configuration::Clientbound::REGISTRY_DATA, buff, server, false);
+			packet.sendPacket2(PacketId::Configuration::Clientbound::REGISTRY_DATA, buff, server, false);
 			successCount++;
 
 			if (g_logger) {

@@ -264,6 +264,26 @@ void Buffer::writeBool(bool value) {
 	writeUByte(value ? 1 : 0);
 }
 
+void Buffer::writeNBT(const std::string& nbtData) {
+	// Format anonymousNbt pour MC 1.21.5 - compound NBT minimal mais valide
+	if (nbtData == "{}") {
+		// Compound NBT vide mais valide:
+		// TAG_String + nom vide + valeur vide + TAG_End
+		writeByte(0x08); // TAG_String
+		writeVarInt(0);	 // Nom de longueur 0 (anonyme)
+		writeVarInt(0);	 // Valeur string vide
+		writeByte(0x00); // TAG_End pour fermer le compound
+	} else {
+		// Pour autres données NBT, utiliser la même structure minimale
+		writeByte(0x08); // TAG_String
+		writeVarInt(0);	 // Nom de longueur 0
+		writeVarInt(0);	 // Valeur string vide
+		writeByte(0x00); // TAG_End
+	}
+}
+
+void Buffer::writeIdentifier(const std::string& id) { writeString(id); }
+
 void Buffer::writeByte(int8_t value) {
 	_data.push_back(static_cast<uint8_t>(value));
 }

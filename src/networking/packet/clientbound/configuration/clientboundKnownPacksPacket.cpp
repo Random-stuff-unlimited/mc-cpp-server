@@ -1,3 +1,4 @@
+#include "PacketIds.hpp"
 #include "network/buffer.hpp"
 #include "network/packet.hpp"
 #include "network/server.hpp"
@@ -11,5 +12,5 @@ void clientboundKnownPacksPacket(Packet& packet, Server& server) {
 	buffer.writeString("core");
 	buffer.writeString("1.21.10");
 
-	packet.sendPacket(0x0E, buffer, server, true);
+	packet.sendPacket(PacketId::Configuration::Clientbound::KNOWN_PACKS, buffer, server, true);
 }
