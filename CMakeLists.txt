@@ -21,6 +21,15 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 # Export compile_commands.json for LSP support
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+# Copy compile_commands.json to project root for LSP (runs at configure time)
+if(CMAKE_EXPORT_COMPILE_COMMANDS)
+    execute_process(
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            ${CMAKE_BINARY_DIR}/compile_commands.json
+            ${CMAKE_SOURCE_DIR}/compile_commands.json
+    )
+endif()
+
 # Set default build type if not specified
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     message(STATUS "Setting build type to 'Release' as none was specified.")
@@ -48,7 +57,7 @@ if(NOT ZLIB_FOUND)
     set(ZLIB_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
     set(SKIP_INSTALL_ALL ON CACHE BOOL "" FORCE)
     FetchContent_MakeAvailable(zlib)
-    
+
     # Create an alias target to match the system zlib interface
     if(NOT TARGET ZLIB::ZLIB)
         add_library(ZLIB::ZLIB ALIAS zlibstatic)
@@ -90,7 +99,7 @@ if(ZLIB_FOUND)
     target_link_libraries(${PROJECT_NAME} PRIVATE ZLIB::ZLIB)
 else()
     target_link_libraries(${PROJECT_NAME} PRIVATE zlibstatic)
-    target_include_directories(${PROJECT_NAME} PRIVATE 
+    target_include_directories(${PROJECT_NAME} PRIVATE
         ${zlib_SOURCE_DIR}
         ${zlib_BINARY_DIR}
     )
