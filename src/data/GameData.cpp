@@ -26,6 +26,11 @@ namespace {
 			state.requiresCorrectTool = value != 0;
 		} else if (property == "occludes") {
 			state.occludes = value != 0;
+		} else if (property == "light_block") {
+			if (value < 0 || value > 15) throw std::runtime_error("light_block must be between 0 and 15");
+			state.lightBlock = static_cast<uint8_t>(value);
+		} else if (property == "propagates_skylight_down") {
+			state.propagatesSkylightDown = value != 0;
 		} else {
 			throw std::runtime_error("unknown block property \"" + property + "\"");
 		}
@@ -120,6 +125,12 @@ void GameData::load(const std::filesystem::path& directory) {
 
 	const Registry& items = _staticRegistries.at("minecraft:item");
 	_itemPlacedStates.assign(items.entries.size(), -1);
+	_itemProperties.resize(items.entries.size());
+	json itemStats = readJson(directory / "items.json");
+	for (const auto& [item, properties] : itemStats.items()) {
+		for (const auto& [property, value] : properties.items()) setItemProperty(item, property, value);
+	}
+
 	json blockItems		  = readJson(directory / "block_items.json");
 	for (const auto& [item, block] : blockItems.items()) {
 		int itemId = getStaticId("minecraft:item", item);
@@ -183,6 +194,11 @@ void GameData::applyOverrides(const std::filesystem::path& file) {
 				for (const auto& [property, value] : properties.items()) setBlockProperty(block, property, value);
 			}
 		}
+		if (overrides.contains("items")) {
+			for (const auto& [item, properties] : overrides["items"].items()) {
+				for (const auto& [property, value] : properties.items()) setItemProperty(item, property, value);
+			}
+		}
 		if (overrides.contains("block_items")) {
 			for (const auto& [item, block] : overrides["block_items"].items()) {
 				int itemId = getStaticId("minecraft:item", item);
@@ -201,6 +217,40 @@ void GameData::addBlockState(const std::string& key, int id) {
 	_blockStates[key] = id;
 	if (static_cast<size_t>(id) >= _blockStateNames.size()) _blockStateNames.resize(id + 1);
 	_blockStateNames[id] = key;
+}
+
+void GameData::setItemProperty(const std::string& item, const std::string& property, const json& value) {
+	int itemId = getStaticId("minecraft:item", item);
+	if (itemId < 0) throw std::runtime_error("unknown item " + item);
+	ItemProperties& props = _itemProperties[itemId];
+
+	static const std::map<std::string, EquipmentSlot> SLOTS = {
+			{"mainhand", EquipmentSlot::MainHand}, {"offhand", EquipmentSlot::OffHand}, {"head", EquipmentSlot::Head},
+			{"chest", EquipmentSlot::Chest},	   {"legs", EquipmentSlot::Legs},		{"feet", EquipmentSlot::Feet},
+			{"body", EquipmentSlot::Body},		   {"saddle", EquipmentSlot::Saddle}};
+	static const std::map<std::string, float ItemProperties::*> STATS = {
+			{"attack_damage", &ItemProperties::attackDamage},	  {"attack_speed", &ItemProperties::attackSpeed},
+			{"armor", &ItemProperties::armor},					  {"armor_toughness", &ItemProperties::armorToughness},
+			{"knockback_resistance", &ItemProperties::knockbackResistance}};
+
+	if (property == "equipment_slot") {
+		auto slot = value.is_string() ? SLOTS.find(value.get<std::string>()) : SLOTS.end();
+		if (slot == SLOTS.end()) throw std::runtime_error(item + ": unknown equipment_slot " + value.dump());
+		props.equipmentSlot = slot->second;
+	} else if (property == "max_stack_size") {
+		int size = static_cast<int>(toNumber(value));
+		if (size < 1 || size > 99) throw std::runtime_error(item + ": max_stack_size must be between 1 and 99");
+		props.maxStackSize = size;
+	} else if (auto stat = STATS.find(property); stat != STATS.end()) {
+		props.*(stat->second) = static_cast<float>(toNumber(value));
+	} else {
+		throw std::runtime_error("unknown item property \"" + property + "\"");
+	}
+}
+
+const GameData::ItemProperties* GameData::getItemProperties(int itemId) const {
+	if (itemId < 0 || static_cast<size_t>(itemId) >= _itemProperties.size()) return nullptr;
+	return &_itemProperties[itemId];
 }
 
 int GameData::getPlacedBlockState(int itemId) const {

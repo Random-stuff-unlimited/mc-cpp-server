@@ -40,8 +40,15 @@ Player::~Player() {
 	delete _config;
 }
 
-std::string Player::getPlayerName(void) { return (this->_name); };
-void		Player::setPlayerName(const std::string& name) { this->_name = name; }
+std::string Player::getPlayerName(void) {
+	std::lock_guard<std::mutex> lock(_nameMutex);
+	return _name;
+}
+
+void Player::setPlayerName(const std::string& name) {
+	std::lock_guard<std::mutex> lock(_nameMutex);
+	_name = name;
+}
 PlayerState Player::getPlayerState() { return (this->_state); }
 void		Player::setPlayerState(PlayerState state) { this->_state = state; }
 void		Player::setSocketFd(int socket) { this->_socketFd = socket; }

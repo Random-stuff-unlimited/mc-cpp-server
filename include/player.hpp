@@ -5,6 +5,7 @@
 
 #include <array>
 #include <atomic>
+#include <mutex>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -12,6 +13,28 @@ class Server;
 class ChunkStreamer;
 
 enum class PlayerState { None, Configuration, Handshake, Status, Login, Play };
+
+// Health and combat. Changed by other players' attacks (their worker threads) and by the server tick,
+// so always used with `mutex` held
+struct CombatState {
+	std::mutex mutex;
+	float	   health	  = 20;
+	int		   food		  = 20;
+	float	   saturation = 5;
+	bool	   dead		  = false;
+
+	int64_t invulnerableUntil = 0; // Milliseconds (steady clock): 0.5 s after a hit, only stronger hits get through
+	float	lastDamage		  = 0;
+	double	fallDistance	  = 0;
+	int64_t lastRegeneration  = 0;
+
+	bool	inCombat	= false;
+	int64_t combatStart = 0;
+	int64_t lastCombat	= 0;
+
+	bool hasDeathLocation = false; // Where the player last died (recovery compass)
+	int	 deathX = 0, deathY = 0, deathZ = 0;
+};
 
 // Protocol ids
 enum class GameMode : uint8_t { Survival = 0, Creative = 1, Adventure = 2, Spectator = 3 };
@@ -55,6 +78,7 @@ class PlayerConfig {
 class Player : public std::enable_shared_from_this<Player> {
   private:
 	std::string				 _name;
+	mutable std::mutex		 _nameMutex; // The name is set at login while other logins look for duplicates
 	std::atomic<PlayerState> _state;
 	int						 _socketFd;
 	std::atomic<bool>		 _disconnected;
@@ -65,12 +89,18 @@ class Player : public std::enable_shared_from_this<Player> {
 	std::unique_ptr<ChunkStreamer> _chunkStreamer;
 
 	// Game state. Only touched by the worker thread handling this player's packets
-	GameMode				_gameMode = GameMode::Survival;
-	double					_posX = 0, _posY = 0, _posZ = 0;
-	float					_yaw  = 0; // Degrees, 0 = looking south (+z), 90 = west
+	// Written by this player's worker, read by others (attacks, tracking): atomic
+	std::atomic<GameMode>	_gameMode{GameMode::Survival};
+	std::atomic<double>		_posX{0}, _posY{0}, _posZ{0};
+	std::atomic<float>		_yaw{0};   // Degrees, 0 = looking south (+z), 90 = west
+	std::atomic<float>		_pitch{0}; // Degrees, -90 = looking up
+	std::atomic<bool>		_onGround{false};
 	std::array<int32_t, 46> _inventory;		  // Item id per inventory slot (window numbering: hotbar is 36-44, offhand 45), -1 = empty
 	int						_selectedSlot = 3; // Hotbar index 0-8
 	bool					_digging	  = false;
+	std::atomic<bool>		_sprinting{false};
+	int64_t					_lastAttack	  = 0; // Milliseconds: the attack strength recharges from there
+	CombatState				_combat;
 	int						_digX = 0, _digY = 0, _digZ = 0;
 	int			  x, y, z;
 	int			  health;
@@ -114,7 +144,13 @@ class Player : public std::enable_shared_from_this<Player> {
 	double getY() const { return _posY; }
 	double getZ() const { return _posZ; }
 	float  getYaw() const { return _yaw; }
-	void   setYaw(float yaw) { _yaw = yaw; }
+	float  getPitch() const { return _pitch; }
+	bool   isOnGround() const { return _onGround; }
+	void   setRotation(float yaw, float pitch) {
+		  _yaw	 = yaw;
+		  _pitch = pitch;
+	}
+	void   setOnGround(bool onGround) { _onGround = onGround; }
 
 	void	setInventorySlot(int slot, int32_t item) {
 		   if (slot >= 0 && slot < static_cast<int>(_inventory.size())) _inventory[slot] = item;
@@ -122,6 +158,13 @@ class Player : public std::enable_shared_from_this<Player> {
 	int		getSelectedSlot() const { return _selectedSlot; }
 	void	setSelectedSlot(int slot) { _selectedSlot = slot; }
 	int32_t getItemInHand(int hand) const { return hand == 0 ? _inventory[36 + _selectedSlot] : _inventory[45]; }
+	int32_t getInventoryItem(int slot) const { return slot >= 0 && slot < static_cast<int>(_inventory.size()) ? _inventory[slot] : -1; }
+
+	CombatState& combat() { return _combat; }
+	bool		 isSprinting() const { return _sprinting; }
+	void		 setSprinting(bool sprinting) { _sprinting = sprinting; }
+	int64_t		 getLastAttack() const { return _lastAttack; }
+	void		 setLastAttack(int64_t time) { _lastAttack = time; }
 
 	// Block being mined in survival (between the start and finish digging actions)
 	void startDigging(int x, int y, int z) {
@@ -149,6 +192,7 @@ class Player : public std::enable_shared_from_this<Player> {
 	PlayerConfig* getPlayerConfig() { return _config; }
 	int			  getPlayerID() const;
 	void		  setUUID(UUID uuid);
+	const UUID&	  getUUID() const { return _uuid; }
 };
 
 #endif

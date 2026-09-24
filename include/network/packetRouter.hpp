@@ -14,6 +14,7 @@ void handlePingPacket(Packet& packet, Server& server);
 void handleStatusPacket(Packet& packet, Server& server);
 void playerAbilitiesPacket(Packet& packet, Server& server);
 void sendPlayPacket(Packet& packet, Server& server);
+void writeSpawnInfo(Buffer& buf, Player& player, Server& server);
 void setHeldItemPacket(Packet& packet, Server& server);
 void synchronizePlayerPositionPacket(Packet& packet, Server& server);
 void clientboundFeatureFlagsPacket(Packet& packet, Server& server);

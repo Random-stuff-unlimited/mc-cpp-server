@@ -1,3 +1,5 @@
+#include <algorithm>
+#include <cmath>
 #include "network/buffer.hpp"
 #include "lib/UUID.hpp"
 
@@ -382,6 +384,30 @@ void Buffer::writePosition(int32_t x, int32_t y, int32_t z) {
 	                 ((static_cast<int64_t>(z) & 0x3FFFFFF) << 12) |
 	                 (static_cast<int64_t>(y) & 0xFFF);
 	writeLong(packed);
+}
+
+void Buffer::writeLpVec3(double x, double y, double z) {
+	auto sanitize = [](double v) { return std::isnan(v) ? 0.0 : std::clamp(v, -1.7179869183E10, 1.7179869183E10); };
+	x = sanitize(x);
+	y = sanitize(y);
+	z = sanitize(z);
+	double maxAbs = std::max(std::abs(x), std::max(std::abs(y), std::abs(z)));
+	if (maxAbs < 3.051944088384301E-5) {
+		writeUByte(0); // No movement
+		return;
+	}
+
+	int64_t scale = static_cast<int64_t>(maxAbs);
+	if (maxAbs > static_cast<double>(scale)) scale++; // ceil
+	bool	 hasContinuation = (scale & 3) != scale;
+	uint64_t header			 = hasContinuation ? ((scale & 3) | 4) : scale;
+	auto	 pack			 = [scale](double v) { return static_cast<uint64_t>(std::llround((v / scale * 0.5 + 0.5) * 32766.0)); };
+	uint64_t packed			 = header | (pack(x) << 3) | (pack(y) << 18) | (pack(z) << 33);
+
+	writeUByte(static_cast<uint8_t>(packed));
+	writeUByte(static_cast<uint8_t>(packed >> 8));
+	writeInt(static_cast<int32_t>(packed >> 16));
+	if (hasContinuation) writeVarInt(static_cast<int32_t>(scale >> 2));
 }
 
 void Buffer::writeAngle(uint8_t value) {

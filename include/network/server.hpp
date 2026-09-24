@@ -3,6 +3,7 @@
 
 class NetworkManager;
 class World;
+#include "../world/PlayerTracker.hpp"
 #include "../config.hpp"
 #include "../data/GameData.hpp"
 #include "../player.hpp"
@@ -32,9 +33,18 @@ class Server {
 	NetworkManager*					 _networkManager;
 	IdManager						 _idManager;
 	std::unique_ptr<World>			 _world;
+	PlayerTracker					 _playerTracker;
 
 	void tickKeepAlive();
 	std::vector<std::shared_ptr<Player>> playersInGame();
+
+  public:
+	// Disconnects a player with a message (a translation key of the game, e.g. "multiplayer.disconnect.kicked")
+	void kick(Player* player, const std::string& translationKey);
+	// Logged-in players (login, configuration or play) with this name, ignoring case
+	std::vector<std::shared_ptr<Player>> findPlayersByName(const std::string& name);
+
+  private:
 
   public:
 	Server();
@@ -58,6 +68,7 @@ class Server {
 
 	NetworkManager& getNetworkManager() { return *_networkManager; }
 	World&			getWorld() { return *_world; }
+	PlayerTracker&	getPlayerTracker() { return _playerTracker; }
 
 	// Sends a packet to every player that has this chunk, except `except`
 	void broadcastToChunk(int chunkX, int chunkZ, int packetId, Buffer& data, const Player* except = nullptr);

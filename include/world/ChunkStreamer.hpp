@@ -14,6 +14,9 @@ class Server;
 
 // Sends a player the chunks around them and keeps them loaded while they are in view.
 //
+// Chunks are loaded one ring further than the view distance: a chunk can only be lit, and so sent, once its 8
+// neighbors are loaded. That outer ring is never sent.
+//
 // Chunks are sent nearest first, in batches (Chunk Batch Start / Finished). The client acknowledges each batch with
 // the rate it can handle; at most MAX_BATCHES_IN_FLIGHT unacknowledged batches are outstanding, so a slow client
 // isn't flooded. Chunks leaving the view distance are released and forgotten client-side.
@@ -45,7 +48,8 @@ class ChunkStreamer {
 	int														 _viewDistance	  = 0;
 	int														 _batchesInFlight = 0;
 	int														 _batchSize		  = 16;
-	std::unordered_set<int64_t>								 _inView; // Chunks we hold a ticket for
+	std::unordered_set<int64_t>								 _tickets; // Chunks kept loaded: view distance + 1
+	std::unordered_set<int64_t>								 _inView;  // Chunks to send: view distance
 	std::unordered_map<int64_t, std::shared_ptr<Chunk>> _ready;	 // Loaded, not sent yet
 	std::unordered_set<int64_t>								 _sent;
 
@@ -53,7 +57,8 @@ class ChunkStreamer {
 	void sendBatchesLocked();
 	void acquire(const std::vector<int64_t>& keys);
 	void release(const std::vector<int64_t>& keys);
-	std::vector<int64_t> viewAround(int centerX, int centerZ) const;
+	void waitForLight(const std::vector<int64_t>& keys);
+	std::vector<int64_t> viewAround(int centerX, int centerZ, int radius) const;
 };
 
 #endif

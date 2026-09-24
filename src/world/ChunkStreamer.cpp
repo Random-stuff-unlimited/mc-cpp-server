@@ -20,11 +20,11 @@ ChunkStreamer::ChunkStreamer(Server& server, Player& player) : _server(server), 
 
 ChunkStreamer::~ChunkStreamer() { stop(); }
 
-std::vector<int64_t> ChunkStreamer::viewAround(int centerX, int centerZ) const {
+std::vector<int64_t> ChunkStreamer::viewAround(int centerX, int centerZ, int radius) const {
 	std::vector<int64_t> keys;
-	keys.reserve((2 * _viewDistance + 1) * (2 * _viewDistance + 1));
-	for (int dz = -_viewDistance; dz <= _viewDistance; dz++) {
-		for (int dx = -_viewDistance; dx <= _viewDistance; dx++) keys.push_back(Chunk::key(centerX + dx, centerZ + dz));
+	keys.reserve((2 * radius + 1) * (2 * radius + 1));
+	for (int dz = -radius; dz <= radius; dz++) {
+		for (int dx = -radius; dx <= radius; dx++) keys.push_back(Chunk::key(centerX + dx, centerZ + dz));
 	}
 	// Nearest first: the I/O threads load in submission order
 	std::sort(keys.begin(), keys.end(), [centerX, centerZ](int64_t a, int64_t b) {
@@ -36,7 +36,8 @@ std::vector<int64_t> ChunkStreamer::viewAround(int centerX, int centerZ) const {
 }
 
 void ChunkStreamer::start(double x, double z, int viewDistance) {
-	std::vector<int64_t> keys;
+	std::vector<int64_t> tickets;
+	std::vector<int64_t> view;
 	{
 		std::lock_guard<std::mutex> lock(_mutex);
 		_active		  = true;
@@ -49,16 +50,19 @@ void ChunkStreamer::start(double x, double z, int viewDistance) {
 		center.writeVarInt(_centerZ);
 		Packet::send(_player.shared_from_this(), PacketId::Play::Clientbound::SET_CHUNK_CACHE_CENTER, center, _server);
 
-		keys = viewAround(_centerX, _centerZ);
-		_inView.insert(keys.begin(), keys.end());
+		tickets = viewAround(_centerX, _centerZ, _viewDistance + 1);
+		view	= viewAround(_centerX, _centerZ, _viewDistance);
+		_tickets.insert(tickets.begin(), tickets.end());
+		_inView.insert(view.begin(), view.end());
 	}
-	// World calls happen without our lock: a loaded chunk calls onChunkLoaded right away
-	acquire(keys);
+	// World calls happen without our lock: a lit chunk calls onChunkLoaded right away
+	acquire(tickets);
+	waitForLight(view);
 }
 
 void ChunkStreamer::onPlayerMove(double x, double z) {
-	std::vector<int64_t> entering;
-	std::vector<int64_t> leaving;
+	std::vector<int64_t> entering, leaving;			  // Tickets
+	std::vector<int64_t> enteringView;				  // Chunks to send once lit
 	{
 		std::lock_guard<std::mutex> lock(_mutex);
 		int							newX = toChunk(x);
@@ -72,11 +76,22 @@ void ChunkStreamer::onPlayerMove(double x, double z) {
 		center.writeVarInt(_centerZ);
 		Packet::send(_player.shared_from_this(), PacketId::Play::Clientbound::SET_CHUNK_CACHE_CENTER, center, _server);
 
-		std::vector<int64_t>		newView = viewAround(_centerX, _centerZ);
-		std::unordered_set<int64_t> newSet(newView.begin(), newView.end());
+		std::vector<int64_t>		newTickets = viewAround(_centerX, _centerZ, _viewDistance + 1);
+		std::vector<int64_t>		newView	   = viewAround(_centerX, _centerZ, _viewDistance);
+		std::unordered_set<int64_t> newTicketSet(newTickets.begin(), newTickets.end());
+		std::unordered_set<int64_t> newViewSet(newView.begin(), newView.end());
+		for (int64_t key : _tickets) {
+			if (!newTicketSet.count(key)) leaving.push_back(key);
+		}
+		for (int64_t key : leaving) _tickets.erase(key);
+		for (int64_t key : newTickets) {
+			if (_tickets.insert(key).second) entering.push_back(key);
+		}
+
+		std::vector<int64_t> leavingView;
 		for (int64_t key : _inView) {
-			if (newSet.count(key)) continue;
-			leaving.push_back(key);
+			if (newViewSet.count(key)) continue;
+			leavingView.push_back(key);
 			_ready.erase(key);
 			if (_sent.erase(key)) {
 				// ChunkPos as a long: z in the high 32 bits
@@ -85,15 +100,16 @@ void ChunkStreamer::onPlayerMove(double x, double z) {
 				Packet::send(_player.shared_from_this(), PacketId::Play::Clientbound::FORGET_LEVEL_CHUNK, forget, _server);
 			}
 		}
-		for (int64_t key : leaving) _inView.erase(key);
+		for (int64_t key : leavingView) _inView.erase(key);
 		for (int64_t key : newView) {
-			if (_inView.insert(key).second) entering.push_back(key);
+			if (_inView.insert(key).second) enteringView.push_back(key);
 		}
 		// Chunks loaded for the old position may now be further than the new nearest ones
 		sendBatchesLocked();
 	}
 	release(leaving);
 	acquire(entering);
+	waitForLight(enteringView);
 }
 
 void ChunkStreamer::onBatchReceived(float chunksPerTick) {
@@ -111,7 +127,8 @@ void ChunkStreamer::stop() {
 		std::lock_guard<std::mutex> lock(_mutex);
 		if (!_active) return;
 		_active = false;
-		keys.assign(_inView.begin(), _inView.end());
+		keys.assign(_tickets.begin(), _tickets.end());
+		_tickets.clear();
 		_inView.clear();
 		_ready.clear();
 		_sent.clear();
@@ -165,9 +182,14 @@ void ChunkStreamer::sendBatchesLocked() {
 }
 
 void ChunkStreamer::acquire(const std::vector<int64_t>& keys) {
+	for (int64_t key : keys) _server.getWorld().acquireChunk(chunkX(key), chunkZ(key));
+}
+
+// Chunks are sent once lit (their neighbors are loaded then)
+void ChunkStreamer::waitForLight(const std::vector<int64_t>& keys) {
 	std::weak_ptr<Player> weakPlayer = _player.shared_from_this();
 	for (int64_t key : keys) {
-		_server.getWorld().acquireChunk(chunkX(key), chunkZ(key), [weakPlayer](const std::shared_ptr<Chunk>& chunk) {
+		_server.getWorld().whenLit(chunkX(key), chunkZ(key), [weakPlayer](const std::shared_ptr<Chunk>& chunk) {
 			std::shared_ptr<Player> player = weakPlayer.lock();
 			if (player && player->getChunkStreamer()) player->getChunkStreamer()->onChunkLoaded(chunk);
 		});

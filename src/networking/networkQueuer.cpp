@@ -305,6 +305,7 @@ void NetworkManager::enqueueOutgoingPacket(Packet* p) { _outgoingPackets.push(p)
 bool NetworkManager::detachPlayer(Player* player) {
 	if (!player->markDisconnected()) return false;
 	if (ChunkStreamer* streamer = player->getChunkStreamer()) streamer->stop();
+	getServer().getPlayerTracker().leave(player);
 	getServer().removePlayerFromAnyList(player);
 	epoll_ctl(_epollFd, EPOLL_CTL_DEL, player->getSocketFd(), nullptr);
 	return true;

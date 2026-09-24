@@ -33,6 +33,12 @@ class PalettedContainer {
 	bool	 isSingleValue() const { return _bits == 0; }
 	uint32_t singleValue() const { return _single; }
 
+	// Raw access for hot loops: indices packed with bits() bits per entry into data(), mapped through palette()
+	// (empty palette = values are stored directly)
+	uint8_t						 bits() const { return _bits; }
+	const std::vector<uint32_t>& palette() const { return _palette; }
+	const std::vector<uint64_t>& data() const { return _data; }
+
 	// Every value, in index order
 	std::vector<uint32_t> values() const;
 	// Distinct values actually used (the palette may keep values that were overwritten)

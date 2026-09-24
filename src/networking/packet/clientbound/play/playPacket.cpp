@@ -1,9 +1,35 @@
 #include "PacketIds.hpp"
 #include "network/buffer.hpp"
 #include "network/packet.hpp"
+#include "network/server.hpp"
 #include "player.hpp"
+#include "world/World.hpp"
 
 #include <string>
+
+// Part shared by Login (play) and Respawn (CommonPlayerSpawnInfo)
+void writeSpawnInfo(Buffer& buf, Player& player, Server& server) {
+	const World& world = server.getWorld();
+	buf.writeVarInt(server.getGameData().getSyncedId("minecraft:dimension_type", world.getDimensionName())); // Dimension type
+	buf.writeString(world.getDimensionName());							   // Dimension name
+	buf.writeLong(1);													   // Hashed seed (biome noise on the client)
+	buf.writeUByte(static_cast<uint8_t>(player.getGameMode()));			   // Game mode
+	buf.writeByte(-1);													   // Previous game mode: none
+	buf.writeBool(false);												   // Debug world
+	buf.writeBool(true);												   // Flat world (lower horizon)
+
+	// Death location, used by the recovery compass
+	CombatState&				combat = player.combat();
+	std::lock_guard<std::mutex> lock(combat.mutex);
+	buf.writeBool(combat.hasDeathLocation);
+	if (combat.hasDeathLocation) {
+		buf.writeString(world.getDimensionName());
+		buf.writePosition(combat.deathX, combat.deathY, combat.deathZ);
+	}
+
+	buf.writeVarInt(0);	 // Portal cooldown
+	buf.writeVarInt(63); // Sea level
+}
 
 void sendPlayPacket(Packet& packet, Server& server) {
 	Player* player = packet.getPlayer();
@@ -26,27 +52,7 @@ void sendPlayPacket(Packet& packet, Server& server) {
 	buf.writeBool(false); // 7. Reduced Debug Info
 	buf.writeBool(true); // 8. Enable respawn screen
 	buf.writeBool(false); // 9. Do limited crafting
-	buf.writeVarInt(server.getGameData().getSyncedId("minecraft:dimension_type", "minecraft:overworld")); // 10. Dimension Type
-	buf.writeString("minecraft:overworld"); // 11. Dimension Name (Identifier)
-	buf.writeInt64(1L); // 12. Hashed seed
-	buf.writeUByte(static_cast<uint8_t>(player->getGameMode())); // 13. Game mode
-	buf.writeByte(-1); // 14. Previous Game mode (Byte) | Undefined
-	buf.writeBool(false); // 15. Is Debug
-	buf.writeBool(true); // 16. Is Flat
-
-	// 17. Has death location
-	bool hasDeathLocation = false; // Set to true if player has died
-	buf.writeBool(hasDeathLocation);
-
-	// 18. Death dimension name (Optional - only if hasDeathLocation is true)
-	// 19. Death location (Optional - only if hasDeathLocation is true)
-	if (hasDeathLocation) {
-		buf.writeString("minecraft:overworld"); // Death dimension name
-		buf.writeInt64(0); // Death location as Position (packed long)
-	}
-
-	buf.writeVarInt(0); // 20. Portal cooldown
-	buf.writeVarInt(63); // 21. Sea level
+	writeSpawnInfo(buf, *player, server); // 10-21: dimension, seed, game mode, death location...
 	buf.writeBool(false); // 22. Enforces Secure Chat
 
 	packet.sendPacket(PacketId::Play::Clientbound::LOGIN, buf, server);

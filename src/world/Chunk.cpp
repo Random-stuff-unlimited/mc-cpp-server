@@ -30,6 +30,7 @@ void Chunk::setBiome(int x, int y, int z, uint32_t biome) {
 
 void Chunk::markModified() {
 	_dirty.store(true);
+	_version.fetch_add(1);
 	_cachedPacket.reset();
 }
 
@@ -39,5 +40,6 @@ size_t Chunk::memoryUsage() const {
 		total += section.blocks.memoryUsage() + section.biomes.memoryUsage() - 2 * sizeof(PalettedContainer);
 	}
 	if (_cachedPacket) total += _cachedPacket->capacity();
+	total += _light.memoryUsage() - sizeof(ChunkLight);
 	return total;
 }

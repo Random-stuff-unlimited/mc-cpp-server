@@ -164,7 +164,8 @@ void World::loadLevel() {
 							  "World");
 	}
 
-	_storage = std::make_unique<ChunkStorage>(_settings.directory, _layout, *_blockPalette, *_biomePalette);
+	_lightTables = std::make_unique<LightTables>(_gameData);
+	_storage	 = std::make_unique<ChunkStorage>(_settings.directory, _layout, *_blockPalette, *_biomePalette);
 	_anvil	 = std::make_unique<AnvilImporter>(_settings.directory, _gameData, _layout);
 
 	_generatorOptions = level.value("generator", defaultGenerator());
@@ -211,7 +212,7 @@ void World::acquireChunk(int x, int z, ChunkCallback onReady) {
 		if (entry.chunk) {
 			ready = entry.chunk;
 		} else {
-			entry.waiters.push_back(std::move(onReady));
+			if (onReady) entry.waiters.push_back(std::move(onReady));
 			if (!entry.loading) {
 				entry.loading = true;
 				startLoad	  = true;
@@ -220,7 +221,7 @@ void World::acquireChunk(int x, int z, ChunkCallback onReady) {
 	}
 	// Callbacks always run without the world lock: they may call back into the world
 	if (ready) {
-		onReady(ready);
+		if (onReady) onReady(ready);
 		return;
 	}
 	if (startLoad) {
@@ -257,7 +258,8 @@ std::shared_ptr<Chunk> World::loadOrGenerate(int x, int z) {
 }
 
 void World::finishLoad(int x, int z, std::shared_ptr<Chunk> chunk) {
-	std::vector<ChunkCallback> waiters;
+	std::vector<ChunkCallback>		 waiters;
+	std::vector<std::pair<int, int>> toLight;
 	{
 		std::lock_guard<std::mutex> lock(_chunksMutex);
 		Entry&						entry = _chunks[Chunk::key(x, z)];
@@ -265,8 +267,76 @@ void World::finishLoad(int x, int z, std::shared_ptr<Chunk> chunk) {
 		entry.loading					  = false;
 		waiters.swap(entry.waiters);
 		if (entry.tickets == 0) entry.releasedAt = std::chrono::steady_clock::now();
+
+		// This chunk may complete the neighborhood of itself or of a neighbor: those can now be lit
+		for (int dz = -1; dz <= 1; dz++) {
+			for (int dx = -1; dx <= 1; dx++) {
+				if (readyToLight(Chunk::key(x + dx, z + dz))) toLight.emplace_back(x + dx, z + dz);
+			}
+		}
 	}
 	for (ChunkCallback& callback : waiters) callback(chunk);
+	for (auto [lx, lz] : toLight) _io.submitLoad([this, lx, lz] { light(lx, lz); });
+}
+
+bool World::readyToLight(int64_t key) {
+	auto it = _chunks.find(key);
+	if (it == _chunks.end() || !it->second.chunk || it->second.lit || it->second.lighting) return false;
+	int x = static_cast<int32_t>(key & 0xFFFFFFFF), z = static_cast<int32_t>(key >> 32);
+	for (int dz = -1; dz <= 1; dz++) {
+		for (int dx = -1; dx <= 1; dx++) {
+			auto neighbor = _chunks.find(Chunk::key(x + dx, z + dz));
+			if (neighbor == _chunks.end() || !neighbor->second.chunk) return false;
+		}
+	}
+	it->second.lighting = true;
+	return true;
+}
+
+// Runs on an I/O thread once the chunk and its 8 neighbors are loaded
+void World::light(int x, int z) {
+	std::shared_ptr<Chunk> area[9];
+	{
+		std::lock_guard<std::mutex> lock(_chunksMutex);
+		for (int i = 0; i < 9; i++) {
+			auto it = _chunks.find(Chunk::key(x + i % 3 - 1, z + i / 3 - 1));
+			if (it != _chunks.end()) area[i] = it->second.chunk; // A neighbor unloaded meanwhile is treated as opaque
+		}
+	}
+	if (!area[4]) return;
+	const Chunk* pointers[9];
+	for (int i = 0; i < 9; i++) pointers[i] = area[i].get();
+	ChunkLight light = LightEngine::compute(pointers, *_lightTables);
+	{
+		std::lock_guard<std::mutex> lock(area[4]->mutex());
+		area[4]->setLight(std::move(light));
+	}
+
+	std::vector<ChunkCallback> waiters;
+	{
+		std::lock_guard<std::mutex> lock(_chunksMutex);
+		auto						it = _chunks.find(Chunk::key(x, z));
+		if (it == _chunks.end() || it->second.chunk != area[4]) return; // Unloaded meanwhile
+		it->second.lit		= true;
+		it->second.lighting = false;
+		waiters.swap(it->second.litWaiters);
+	}
+	for (ChunkCallback& callback : waiters) callback(area[4]);
+}
+
+void World::whenLit(int x, int z, ChunkCallback onLit) {
+	std::shared_ptr<Chunk> lit;
+	{
+		std::lock_guard<std::mutex> lock(_chunksMutex);
+		auto						it = _chunks.find(Chunk::key(x, z));
+		if (it == _chunks.end()) return;
+		if (it->second.lit) {
+			lit = it->second.chunk;
+		} else {
+			it->second.litWaiters.push_back(std::move(onLit));
+		}
+	}
+	if (lit) onLit(lit);
 }
 
 size_t World::getLoadedChunkCount() {
@@ -460,47 +530,42 @@ std::vector<uint8_t> World::encodeChunkData(const Chunk& chunk) const {
 
 	buf.writeVarInt(0); // Block entities
 
-	// Light sections: one below the world, the world's sections, one above
-	int lightSections = sectionCount + 2;
-	int lowestTop	  = *std::min_element(heights.begin(), heights.end());
-	int highestTop	  = *std::max_element(heights.begin(), heights.end());
+	// Light sections: one below the world (dark), the world's sections, one above (open sky)
+	const ChunkLight& light			= chunk.light();
+	int				  lightSections = sectionCount + 2;
+	std::vector<bool> skyMask(lightSections, false), blockMask(lightSections, false);
+	std::vector<bool> emptySkyMask(lightSections, false), emptyBlockMask(lightSections, false);
+	std::vector<std::vector<uint8_t>> skyArrays, blockArrays;
 
-	std::vector<bool>				  skyMask(lightSections, false);
-	std::vector<bool>				  emptySkyMask(lightSections, false);
-	std::vector<bool>				  emptyBlockMask(lightSections, true);
-	std::vector<std::vector<uint8_t>> skyArrays;
+	auto addSection = [](const SectionLight& section, int index, std::vector<bool>& mask, std::vector<bool>& emptyMask,
+						 std::vector<std::vector<uint8_t>>& arrays) {
+		if (section.isUniform() && section.uniform == 0) {
+			emptyMask[index] = true;
+			return;
+		}
+		mask[index] = true;
+		arrays.push_back(section.isUniform() ? std::vector<uint8_t>(2048, static_cast<uint8_t>(section.uniform * 0x11)) : section.nibbles);
+	};
+	SectionLight dark, openSky;
+	openSky.uniform = 15;
 	for (int i = 0; i < lightSections; i++) {
-		int base = (i - 1) * 16; // Relative to minY
-		if (base + 16 <= lowestTop) {
-			emptySkyMask[i] = true; // Fully underground
-			continue;
-		}
-		skyMask[i] = true;
-		if (base >= highestTop) {
-			skyArrays.emplace_back(2048, 0xFF); // Fully in the open
-			continue;
-		}
-		std::vector<uint8_t> light(2048, 0);
-		for (int y = 0; y < 16; y++) {
-			for (int column = 0; column < 256; column++) {
-				if (base + y < heights[column]) continue;
-				int index = (y << 8) | column;
-				light[index >> 1] |= (index & 1) ? 0xF0 : 0x0F;
-			}
-		}
-		skyArrays.push_back(std::move(light));
+		bool below = i == 0, above = i == lightSections - 1;
+		bool computed = !below && !above && static_cast<size_t>(i - 1) < light.sky.size();
+		addSection(computed ? light.sky[i - 1] : (above ? openSky : dark), i, skyMask, emptySkyMask, skyArrays);
+		addSection(computed ? light.block[i - 1] : dark, i, blockMask, emptyBlockMask, blockArrays);
 	}
 
 	writeBitSet(buf, skyMask);
-	writeBitSet(buf, std::vector<bool>(lightSections, false)); // Block light mask
+	writeBitSet(buf, blockMask);
 	writeBitSet(buf, emptySkyMask);
 	writeBitSet(buf, emptyBlockMask);
-	buf.writeVarInt(static_cast<int32_t>(skyArrays.size()));
-	for (const auto& light : skyArrays) {
-		buf.writeVarInt(2048);
-		buf.writeBytes(light);
+	for (auto* arrays : {&skyArrays, &blockArrays}) {
+		buf.writeVarInt(static_cast<int32_t>(arrays->size()));
+		for (const auto& array : *arrays) {
+			buf.writeVarInt(2048);
+			buf.writeBytes(array);
+		}
 	}
-	buf.writeVarInt(0); // Block light arrays
 
 	return std::move(buf.getData());
 }

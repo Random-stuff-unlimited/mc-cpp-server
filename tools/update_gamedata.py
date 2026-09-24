@@ -13,7 +13,11 @@ and writes compact JSON files the server loads at startup:
     resources/gamedata/blocks.json             block states: default state id and id of every property combination
     resources/gamedata/dimensions.json         min_y and height of every dimension type
     resources/gamedata/block_items.json        item -> block it places ("minecraft:redstone" -> "minecraft:redstone_wire")
-    resources/gamedata/block_states.json       per block state (index = state id): light_emission, requires_correct_tool, occludes
+    resources/gamedata/block_states.json       per block state (index = state id): light_emission, requires_correct_tool, occludes,
+                                               light_block (light absorbed, 0-15), propagates_skylight_down
+    resources/gamedata/items.json              per item: max_stack_size, equipment_slot and combat stats (attack_damage,
+                                               attack_speed, armor, armor_toughness, knockback_resistance: bonuses
+                                               given while the item is in its slot, from the reports)
 
 blocks.json also holds each block's properties (destroy_time, explosion_resistance, friction, speed_factor,
 jump_factor, and shape: single, double_height for doors/tall plants, double_length for beds). These and block_states.json come from the game's code, not from the reports:
@@ -154,6 +158,26 @@ def detect_shape(properties):
     return "single"
 
 
+ITEM_ATTRIBUTES = {
+    "minecraft:attack_damage": "attack_damage",
+    "minecraft:attack_speed": "attack_speed",
+    "minecraft:armor": "armor",
+    "minecraft:armor_toughness": "armor_toughness",
+    "minecraft:knockback_resistance": "knockback_resistance",
+}
+
+
+def item_properties(components):
+    """Stats of an item from its default components: attribute bonuses apply while it is held or worn"""
+    slot = components.get("minecraft:equippable", {}).get("slot", "mainhand")
+    props = {"max_stack_size": components.get("minecraft:max_stack_size", 64), "equipment_slot": slot}
+    for modifier in components.get("minecraft:attribute_modifiers", []):
+        name = ITEM_ATTRIBUTES.get(modifier["type"])
+        if name and modifier["operation"] == "add_value" and modifier.get("slot") in (slot, "any", "hand", "armor"):
+            props[name] = round(props.get(name, 0) + modifier["amount"], 4)
+    return props
+
+
 def write(name, data):
     with open(OUT_DIR / name, "w") as f:
         json.dump(data, f, separators=(",", ":"), sort_keys=False)
@@ -251,6 +275,8 @@ def main():
     write("blocks.json", blocks)
     write("dimensions.json", dimensions)
     write("block_items.json", extracted["block_items"])
+    items = {name: item_properties(content["components"]) for name, content in json.load(open(reports / "items.json")).items()}
+    write("items.json", items)
     state_count = 1 + max(max(s[0] for s in b.get("states", [[b["default"]]])) for b in blocks.values())
     for name, values in extracted["states"].items():
         if len(values) != state_count:
@@ -258,7 +284,7 @@ def main():
     write("block_states.json", extracted["states"])
     overrides = OUT_DIR / "overrides.json"
     if not overrides.exists():
-        overrides.write_text(json.dumps({"blocks": {}, "block_items": {}}, indent=2) + "\n")
+        overrides.write_text(json.dumps({"blocks": {}, "items": {}, "block_items": {}}, indent=2) + "\n")
     write_packet_ids(json.load(open(reports / "packets.json")), info["name"])
 
     state_count = sum(len(b.get("states", [0])) for b in blocks.values())

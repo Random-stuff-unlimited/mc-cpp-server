@@ -17,9 +17,11 @@
 //   {
 //     "blocks":      { "minecraft:obsidian": { "destroy_time": 10, "light_emission": 7 },
 //                      "minecraft:rose_bush": { "shape": "single" } },
+//     "items":       { "minecraft:diamond_sword": { "attack_damage": 10 } },
 //     "block_items": { "minecraft:stick": "minecraft:torch" }
 //   }
 // Block keys: any BlockProperties or StateProperties field below, by its JSON name (state ones apply to every state).
+// Item keys: any ItemProperties field below, by its JSON name.
 //
 // Static registries (block, item, entity_type...) have ids fixed in the client.
 // Synced registries (biome, dimension_type, enchantment...) are sent in Registry Data: an entry's id is its position in that packet.
@@ -52,6 +54,23 @@ class GameData {
 		uint8_t lightEmission		= 0;	 // 0-15 ("light_emission")
 		bool	requiresCorrectTool = false; // Drops nothing without the right tool ("requires_correct_tool")
 		bool	occludes			= false; // Full opaque block ("occludes")
+		uint8_t lightBlock			= 0;	 // Light absorbed when passing through, 0-15 ("light_block"): air 0, leaves 1, stone 15
+		bool	propagatesSkylightDown = true; // Sky light goes straight down through it without loss ("propagates_skylight_down")
+	};
+
+	// Where an item is worn or held for its stats to apply
+	enum class EquipmentSlot { MainHand, OffHand, Head, Chest, Legs, Feet, Body, Saddle };
+
+	// Per item, from the reports. Combat stats are bonuses added to the player's base values while the item is in
+	// its equipment slot (a sword in the main hand, a chestplate on the chest)
+	struct ItemProperties {
+		int			  maxStackSize		  = 64;
+		EquipmentSlot equipmentSlot		  = EquipmentSlot::MainHand;
+		float		  attackDamage		  = 0; // "attack_damage": the hand does 1, a diamond sword adds 6
+		float		  attackSpeed		  = 0; // "attack_speed": attacks per second bonus (base 4, a sword adds -2.4)
+		float		  armor				  = 0;
+		float		  armorToughness	  = 0; // "armor_toughness"
+		float		  knockbackResistance = 0; // "knockback_resistance", 0-1
 	};
 
 	struct Dimension {
@@ -97,6 +116,8 @@ class GameData {
 
 	// Default state of the block an item places, -1 for items that aren't blocks
 	int getPlacedBlockState(int itemId) const;
+	// nullptr for an unknown item id
+	const ItemProperties* getItemProperties(int itemId) const;
 
 	// Whether an entry (id in its registry) is in a tag, e.g. isInTag("minecraft:block", "minecraft:replaceable", blockId)
 	bool isInTag(const std::string& registry, const std::string& tag, int entryId) const;
@@ -122,6 +143,7 @@ class GameData {
 	std::vector<BlockProperties> _blockProperties;
 	std::vector<StateProperties> _stateProperties;
 	std::vector<int>	_itemPlacedStates;
+	std::vector<ItemProperties> _itemProperties;
 	std::unordered_map<std::string, std::unordered_set<int>> _tagSets; // "registry#tag" -> ids
 
 	std::unordered_map<std::string, Dimension> _dimensions;
@@ -129,6 +151,7 @@ class GameData {
 	void			   addBlockState(const std::string& key, int id);
 	void			   applyOverrides(const std::filesystem::path& file);
 	void			   setBlockProperty(const std::string& block, const std::string& property, const nlohmann::ordered_json& value);
+	void			   setItemProperty(const std::string& item, const std::string& property, const nlohmann::ordered_json& value);
 	static std::string blockStateKey(const std::string& block, const std::map<std::string, std::string>& properties);
 	const Registry*	   findRegistry(const std::string& registry) const;
 };

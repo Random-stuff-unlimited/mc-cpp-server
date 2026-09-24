@@ -7,8 +7,10 @@
 #include "player.hpp"
 #include "world/World.hpp"
 #include "world/ChunkStreamer.hpp"
+#include "world/Combat.hpp"
 #include "PacketIds.hpp"
 #include "network/packet.hpp"
+#include "network/TextComponent.hpp"
 #include <algorithm>
 
 #include <chrono>
@@ -28,7 +30,7 @@ static volatile std::sig_atomic_t g_stopRequested = 0;
 
 static void handleStopSignal(int) { g_stopRequested = 1; }
 
-Server::Server() : _playerLst(), _config(), _networkManager(nullptr) {}
+Server::Server() : _playerLst(), _config(), _networkManager(nullptr), _playerTracker(*this) {}
 
 Server::~Server() {
 	// No more packets first, then save the world, then drop the players (they release their chunks)
@@ -46,6 +48,45 @@ std::vector<std::shared_ptr<Player>> Server::playersInGame() {
 		if (player->getPlayerState() == PlayerState::Play && !player->isDisconnected()) players.push_back(player);
 	}
 	return players;
+}
+
+void Server::kick(Player* player, const std::string& translationKey) {
+	if (!player || player->isDisconnected()) return;
+	std::shared_ptr<Player> target = player->shared_from_this();
+	Buffer					reason;
+	switch (player->getPlayerState()) {
+	case PlayerState::Login:
+		// The login state still uses JSON text
+		reason.writeString("{\"translate\":\"" + translationKey + "\"}");
+		Packet::send(target, PacketId::Login::Clientbound::LOGIN_DISCONNECT, reason, *this);
+		break;
+	case PlayerState::Configuration:
+		TextComponent::writeTranslatable(reason, translationKey, {});
+		Packet::send(target, PacketId::Configuration::Clientbound::DISCONNECT, reason, *this);
+		break;
+	case PlayerState::Play:
+		TextComponent::writeTranslatable(reason, translationKey, {});
+		Packet::send(target, PacketId::Play::Clientbound::DISCONNECT, reason, *this);
+		break;
+	default:
+		break;
+	}
+	g_logger->logNetwork(INFO, player->getPlayerName() + " kicked: " + translationKey, "SERVER");
+	_networkManager->requestDisconnect(player); // After the message is sent
+}
+
+std::vector<std::shared_ptr<Player>> Server::findPlayersByName(const std::string& name) {
+	auto lower = [](std::string s) {
+		for (char& c : s) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+		return s;
+	};
+	std::string							 wanted = lower(name);
+	std::vector<std::shared_ptr<Player>> found;
+	std::lock_guard<std::mutex>			 lock(_playerLock);
+	for (const auto& [socket, player] : _playerLst) {
+		if (!player->isDisconnected() && lower(player->getPlayerName()) == wanted) found.push_back(player);
+	}
+	return found;
 }
 
 void Server::broadcastToChunk(int chunkX, int chunkZ, int packetId, Buffer& data, const Player* except) {
@@ -130,6 +171,7 @@ int Server::start_server() {
 			lastTick = now;
 			_world->tick();
 			tickKeepAlive();
+			for (const auto& player : playersInGame()) Combat::tick(*this, *player);
 		}
 		g_logger->logGameInfo(INFO, "Stopping server...", "SERVER");
 	} catch (const std::exception& e) {

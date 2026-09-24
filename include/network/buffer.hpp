@@ -99,6 +99,8 @@ class Buffer {
 	void writeUUID(const UUID& uuid);
 	void writePosition(int32_t x, int32_t y, int32_t z);
 	void writeAngle(uint8_t value);
+	// Velocity in the compressed format of 1.21.9+ (LpVec3): scale, then 3 components quantized on 15 bits
+	void writeLpVec3(double x, double y, double z);
 
 	// Arrays
 	void writeBytes(const std::vector<uint8_t>& data);

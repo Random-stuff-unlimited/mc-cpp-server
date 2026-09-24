@@ -15,6 +15,12 @@ void handleLoginStartPacket(Packet& packet, Server& server) {
 	if (!player) return;
 
 	std::string username = packet.getData().readString(16);
+
+	// Same name = same offline UUID: both clients would take the other for themselves. Like vanilla, the new
+	// connection wins and the old one is kicked
+	for (const auto& existing : server.findPlayersByName(username)) {
+		if (existing.get() != player) server.kick(existing.get(), "multiplayer.disconnect.duplicate_login");
+	}
 	player->setPlayerName(username);
 
 	UUID uuid = UUID::fromOfflinePlayer(username);

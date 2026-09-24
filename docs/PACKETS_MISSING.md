@@ -2,7 +2,7 @@
 
 Minecraft 1.21.10. Généré par `tools/packet_status.py` (`make packets`), ne pas modifier à la main.
 
-**53 paquets gérés sur 251** (198 manquants).
+**80 paquets gérés sur 251** (171 manquants).
 
 ## Handshake
 
@@ -65,13 +65,11 @@ _Aucun._
 
 ## Play
 
-### Serveur → client (124 manquants sur 139)
+### Serveur → client (102 manquants sur 139)
 
 | Paquet | ID |
 |---|---|
 | `BUNDLE_DELIMITER` | 0x00 |
-| `ADD_ENTITY` | 0x01 |
-| `ANIMATE` | 0x02 |
 | `AWARD_STATS` | 0x03 |
 | `BLOCK_DESTRUCTION` | 0x05 |
 | `BLOCK_ENTITY_DATA` | 0x06 |
@@ -89,30 +87,22 @@ _Aucun._
 | `COOLDOWN` | 0x16 |
 | `CUSTOM_CHAT_COMPLETIONS` | 0x17 |
 | `CUSTOM_PAYLOAD` | 0x18 |
-| `DAMAGE_EVENT` | 0x19 |
 | `DEBUG_BLOCK_VALUE` | 0x1A |
 | `DEBUG_CHUNK_VALUE` | 0x1B |
 | `DEBUG_ENTITY_VALUE` | 0x1C |
 | `DEBUG_EVENT` | 0x1D |
 | `DEBUG_SAMPLE` | 0x1E |
 | `DELETE_CHAT` | 0x1F |
-| `DISCONNECT` | 0x20 |
 | `DISGUISED_CHAT` | 0x21 |
-| `ENTITY_EVENT` | 0x22 |
-| `ENTITY_POSITION_SYNC` | 0x23 |
 | `EXPLODE` | 0x24 |
 | `GAME_TEST_HIGHLIGHT_POS` | 0x27 |
 | `HORSE_SCREEN_OPEN` | 0x28 |
-| `HURT_ANIMATION` | 0x29 |
 | `INITIALIZE_BORDER` | 0x2A |
 | `LEVEL_PARTICLES` | 0x2E |
 | `LIGHT_UPDATE` | 0x2F |
 | `MAP_ITEM_DATA` | 0x31 |
 | `MERCHANT_OFFERS` | 0x32 |
-| `MOVE_ENTITY_POS` | 0x33 |
-| `MOVE_ENTITY_POS_ROT` | 0x34 |
 | `MOVE_MINECART_ALONG_TRACK` | 0x35 |
-| `MOVE_ENTITY_ROT` | 0x36 |
 | `MOVE_VEHICLE` | 0x37 |
 | `OPEN_BOOK` | 0x38 |
 | `OPEN_SCREEN` | 0x39 |
@@ -121,23 +111,15 @@ _Aucun._
 | `PONG_RESPONSE` | 0x3C |
 | `PLACE_GHOST_RECIPE` | 0x3D |
 | `PLAYER_CHAT` | 0x3F |
-| `PLAYER_COMBAT_END` | 0x40 |
-| `PLAYER_COMBAT_ENTER` | 0x41 |
-| `PLAYER_COMBAT_KILL` | 0x42 |
-| `PLAYER_INFO_REMOVE` | 0x43 |
-| `PLAYER_INFO_UPDATE` | 0x44 |
 | `PLAYER_LOOK_AT` | 0x45 |
 | `PLAYER_ROTATION` | 0x47 |
 | `RECIPE_BOOK_ADD` | 0x48 |
 | `RECIPE_BOOK_REMOVE` | 0x49 |
 | `RECIPE_BOOK_SETTINGS` | 0x4A |
-| `REMOVE_ENTITIES` | 0x4B |
 | `REMOVE_MOB_EFFECT` | 0x4C |
 | `RESET_SCORE` | 0x4D |
 | `RESOURCE_PACK_POP` | 0x4E |
 | `RESOURCE_PACK_PUSH` | 0x4F |
-| `RESPAWN` | 0x50 |
-| `ROTATE_HEAD` | 0x51 |
 | `SECTION_BLOCKS_UPDATE` | 0x52 |
 | `SELECT_ADVANCEMENTS_TAB` | 0x53 |
 | `SERVER_DATA` | 0x54 |
@@ -152,12 +134,9 @@ _Aucun._
 | `SET_CURSOR_ITEM` | 0x5E |
 | `SET_DEFAULT_SPAWN_POSITION` | 0x5F |
 | `SET_DISPLAY_OBJECTIVE` | 0x60 |
-| `SET_ENTITY_DATA` | 0x61 |
 | `SET_ENTITY_LINK` | 0x62 |
-| `SET_ENTITY_MOTION` | 0x63 |
 | `SET_EQUIPMENT` | 0x64 |
 | `SET_EXPERIENCE` | 0x65 |
-| `SET_HEALTH` | 0x66 |
 | `SET_OBJECTIVE` | 0x68 |
 | `SET_PASSENGERS` | 0x69 |
 | `SET_PLAYER_INVENTORY` | 0x6A |
@@ -173,7 +152,6 @@ _Aucun._
 | `START_CONFIGURATION` | 0x74 |
 | `STOP_SOUND` | 0x75 |
 | `STORE_COOKIE` | 0x76 |
-| `SYSTEM_CHAT` | 0x77 |
 | `TAB_LIST` | 0x78 |
 | `TAG_QUERY` | 0x79 |
 | `TAKE_ITEM_ENTITY` | 0x7A |
@@ -194,7 +172,7 @@ _Aucun._
 | `CLEAR_DIALOG` | 0x89 |
 | `SHOW_DIALOG` | 0x8A |
 
-### Client → serveur (55 manquants sur 66)
+### Client → serveur (50 manquants sur 66)
 
 | Paquet | ID |
 |---|---|
@@ -207,7 +185,6 @@ _Aucun._
 | `CHAT_COMMAND_SIGNED` | 0x07 |
 | `CHAT` | 0x08 |
 | `CHAT_SESSION_UPDATE` | 0x09 |
-| `CLIENT_COMMAND` | 0x0B |
 | `CLIENT_TICK_END` | 0x0C |
 | `CLIENT_INFORMATION` | 0x0D |
 | `COMMAND_SUGGESTION` | 0x0E |
@@ -221,10 +198,8 @@ _Aucun._
 | `DEBUG_SUBSCRIPTION_REQUEST` | 0x16 |
 | `EDIT_BOOK` | 0x17 |
 | `ENTITY_TAG_QUERY` | 0x18 |
-| `INTERACT` | 0x19 |
 | `JIGSAW_GENERATE` | 0x1A |
 | `LOCK_DIFFICULTY` | 0x1C |
-| `MOVE_PLAYER_STATUS_ONLY` | 0x20 |
 | `MOVE_VEHICLE` | 0x21 |
 | `PADDLE_BOAT` | 0x22 |
 | `PICK_ITEM_FROM_BLOCK` | 0x23 |
@@ -232,7 +207,6 @@ _Aucun._
 | `PING_REQUEST` | 0x25 |
 | `PLACE_RECIPE` | 0x26 |
 | `PLAYER_ABILITIES` | 0x27 |
-| `PLAYER_COMMAND` | 0x29 |
 | `PLAYER_INPUT` | 0x2A |
 | `PONG` | 0x2C |
 | `RECIPE_BOOK_CHANGE_SETTINGS` | 0x2D |
@@ -248,7 +222,6 @@ _Aucun._
 | `SET_STRUCTURE_BLOCK` | 0x39 |
 | `SET_TEST_BLOCK` | 0x3A |
 | `SIGN_UPDATE` | 0x3B |
-| `SWING` | 0x3C |
 | `TELEPORT_TO_ENTITY` | 0x3D |
 | `TEST_INSTANCE_BLOCK_ACTION` | 0x3E |
 | `USE_ITEM` | 0x40 |

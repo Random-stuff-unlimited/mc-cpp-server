@@ -63,9 +63,12 @@ class World {
 	World(const GameData& gameData, const Settings& settings);
 	~World();
 
-	// onReady is called once the chunk is loaded: right away if it already is, otherwise on an I/O thread
-	void acquireChunk(int x, int z, ChunkCallback onReady);
+	// onReady (optional) is called once the chunk is loaded: right away if it already is, otherwise on an I/O thread
+	void acquireChunk(int x, int z, ChunkCallback onReady = nullptr);
 	void releaseChunk(int x, int z);
+	// Called once the chunk is lit, which needs its 8 neighbors loaded too: only lit chunks can be sent to players.
+	// The caller must hold a ticket on the chunk
+	void whenLit(int x, int z, ChunkCallback onLit);
 
 	// Block state at a world position, -1 if its chunk isn't loaded or y is outside the world
 	int getBlock(int x, int y, int z);
@@ -94,6 +97,9 @@ class World {
 		int									  tickets = 0;
 		bool								  loading = false;
 		bool								  saving  = false;
+		bool								  lit	  = false;
+		bool								  lighting = false;
+		std::vector<ChunkCallback>			  litWaiters;
 		std::chrono::steady_clock::time_point releasedAt;
 		std::vector<ChunkCallback>			  waiters;
 	};
@@ -107,6 +113,7 @@ class World {
 	PalettedContainer::Config		_biomeConfig{};
 	ChunkStorage::Layout			_layout{};
 	std::vector<uint32_t>			_airStates;
+	std::unique_ptr<LightTables>	_lightTables;
 	std::unique_ptr<DiskPalette>	_blockPalette;
 	std::unique_ptr<DiskPalette>	_biomePalette;
 	std::unique_ptr<ChunkStorage>	_storage;
@@ -123,6 +130,8 @@ class World {
 	void				   loadLevel();
 	std::shared_ptr<Chunk> loadOrGenerate(int x, int z);
 	void				   finishLoad(int x, int z, std::shared_ptr<Chunk> chunk);
+	bool				   readyToLight(int64_t key); // Called with _chunksMutex held
+	void				   light(int x, int z);
 	void				   save(int64_t key, const std::shared_ptr<Chunk>& chunk, bool unloadAfter);
 	bool				   writeChunk(const std::shared_ptr<Chunk>& chunk);
 	std::vector<uint8_t>   encodeChunkData(const Chunk& chunk) const;

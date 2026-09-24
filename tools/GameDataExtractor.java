@@ -45,9 +45,10 @@ public class GameDataExtractor {
 									 method(block, "getSpeedFactor", ""), method(block, "getJumpFactor", "")};
 		// Per block state, indexed by state id
 		String	 stateBase		  = "net.minecraft.world.level.block.state.BlockBehaviour$BlockStateBase";
-		String[] stateProperties  = {"light_emission", "requires_correct_tool", "occludes"};
+		String[] stateProperties  = {"light_emission", "requires_correct_tool", "occludes", "light_block", "propagates_skylight_down"};
 		Method[] stateGetters	  = {method(stateBase, "getLightEmission", ""), method(stateBase, "requiresCorrectToolForDrops", ""),
-									 method(stateBase, "canOcclude", "")};
+									 method(stateBase, "canOcclude", ""), method(stateBase, "getLightBlock", ""),
+									 method(stateBase, "propagatesSkylightDown", "")};
 		Method	 stateDefinition  = method(block, "getStateDefinition", "");
 		Method	 possibleStates	  = method("net.minecraft.world.level.block.state.StateDefinition", "getPossibleStates", "");
 		Method	 stateId		  = method(block, "getId", "net.minecraft.world.level.block.state.BlockState");

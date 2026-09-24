@@ -1,6 +1,7 @@
 #ifndef CHUNK_HPP
 #define CHUNK_HPP
 
+#include "world/Light.hpp"
 #include "world/PalettedContainer.hpp"
 
 #include <atomic>
@@ -37,6 +38,14 @@ class Chunk {
 
 	std::mutex& mutex() const { return _mutex; }
 
+	// Computed when the chunk is lit (see World), then kept up to date as blocks change
+	const ChunkLight& light() const { return _light; }
+	ChunkLight&		  light() { return _light; }
+	void			  setLight(ChunkLight light) { _light = std::move(light); }
+
+	// Incremented on every block change: lets a long computation notice the blocks changed meanwhile
+	uint64_t version() const { return _version.load(); }
+
 	// Modified since the last save
 	bool isDirty() const { return _dirty.load(); }
 	void setDirty(bool dirty) { _dirty.store(dirty); }
@@ -56,8 +65,10 @@ class Chunk {
 	int								 _z;
 	int								 _minY;
 	std::vector<ChunkSection>		 _sections;
+	ChunkLight						 _light;
 	mutable std::mutex				 _mutex;
 	std::atomic<bool>				 _dirty;
+	std::atomic<uint64_t>			 _version{0};
 	std::shared_ptr<const std::vector<uint8_t>> _cachedPacket;
 
 	ChunkSection& sectionAt(int y) { return _sections[(y - _minY) >> 4]; }

@@ -1,75 +1,73 @@
 #include "lib/MD5.hpp"
 
-#include <cstring>
-
-// Implémentation publique de l'algo RFC 1321, adaptée pour renvoyer 16 octets
-// Version simplifiée basée sur un gist MIT
+// MD5 (RFC 1321). Only used for offline player UUIDs, which must match vanilla's:
+// UUID.nameUUIDFromBytes("OfflinePlayer:" + name)
 
 namespace {
-	// constantes
-	constexpr uint32_t initA = 0x67452301;
-	constexpr uint32_t initB = 0xefcdab89;
-	constexpr uint32_t initC = 0x98badcfe;
-	constexpr uint32_t initD = 0x10325476;
+	// Per-round shift amounts
+	constexpr uint32_t SHIFTS[64] = {7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22, 5, 9,	14, 20, 5, 9,  14, 20, 5, 9,  14, 20, 5, 9,	 14, 20,
+									 4, 11, 16, 23, 4, 11, 16, 23, 4, 11, 16, 23, 4, 11, 16, 23, 6, 10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21};
 
-	inline uint32_t F(uint32_t x, uint32_t y, uint32_t z) { return (x & y) | (~x & z); }
-	inline uint32_t G(uint32_t x, uint32_t y, uint32_t z) { return (x & z) | (y & ~z); }
-	inline uint32_t H(uint32_t x, uint32_t y, uint32_t z) { return x ^ y ^ z; }
-	inline uint32_t I(uint32_t x, uint32_t y, uint32_t z) { return y ^ (x | ~z); }
+	// floor(abs(sin(i + 1)) * 2^32)
+	constexpr uint32_t CONSTANTS[64] = {
+			0xd76aa478, 0xe8c7b756, 0x242070db, 0xc1bdceee, 0xf57c0faf, 0x4787c62a, 0xa8304613, 0xfd469501, 0x698098d8, 0x8b44f7af, 0xffff5bb1,
+			0x895cd7be, 0x6b901122, 0xfd987193, 0xa679438e, 0x49b40821, 0xf61e2562, 0xc040b340, 0x265e5a51, 0xe9b6c7aa, 0xd62f105d, 0x02441453,
+			0xd8a1e681, 0xe7d3fbc8, 0x21e1cde6, 0xc33707d6, 0xf4d50d87, 0x455a14ed, 0xa9e3e905, 0xfcefa3f8, 0x676f02d9, 0x8d2a4c8a, 0xfffa3942,
+			0x8771f681, 0x6d9d6122, 0xfde5380c, 0xa4beea44, 0x4bdecfa9, 0xf6bb4b60, 0xbebfbc70, 0x289b7ec6, 0xeaa127fa, 0xd4ef3085, 0x04881d05,
+			0xd9d4d039, 0xe6db99e5, 0x1fa27cf8, 0xc4ac5665, 0xf4292244, 0x432aff97, 0xab9423a7, 0xfc93a039, 0x655b59c3, 0x8f0ccc92, 0xffeff47d,
+			0x85845dd1, 0x6fa87e4f, 0xfe2ce6e0, 0xa3014314, 0x4e0811a1, 0xf7537e82, 0xbd3af235, 0x2ad7d2bb, 0xeb86d391};
 
-	inline uint32_t rotate_left(uint32_t x, int n) { return (x << n) | (x >> (32 - n)); }
+	inline uint32_t rotateLeft(uint32_t x, uint32_t n) { return (x << n) | (x >> (32 - n)); }
 } // namespace
 
-// petite implémentation brute de MD5
 std::vector<uint8_t> MD5::hash(const std::string& input) {
-	// préparation
-	uint64_t bitLen = input.size() * 8;
-
-	// copie + padding
+	// Padding: 0x80, zeros up to 56 mod 64, then the length in bits as a little-endian 64-bit integer
+	uint64_t			 bitLength = static_cast<uint64_t>(input.size()) * 8;
 	std::vector<uint8_t> data(input.begin(), input.end());
 	data.push_back(0x80);
-	while ((data.size() % 64) != 56)
-		data.push_back(0x00);
+	while (data.size() % 64 != 56) data.push_back(0x00);
+	for (int i = 0; i < 8; i++) data.push_back(static_cast<uint8_t>(bitLength >> (8 * i)));
 
-	for (int i = 0; i < 8; i++) {
-		data.push_back(static_cast<uint8_t>((bitLen >> (8 * i)) & 0xFF));
-	}
+	uint32_t state[4] = {0x67452301, 0xefcdab89, 0x98badcfe, 0x10325476};
 
-	// variables d’état
-	uint32_t A = initA;
-	uint32_t B = initB;
-	uint32_t C = initC;
-	uint32_t D = initD;
-
-	// traitement par blocs de 64 octets
 	for (size_t offset = 0; offset < data.size(); offset += 64) {
-		uint32_t M[16];
-		for (int i = 0; i < 16; ++i) {
-			M[i] = (data[offset + i * 4]) | (data[offset + i * 4 + 1] << 8) | (data[offset + i * 4 + 2] << 16) | (data[offset + i * 4 + 3] << 24);
+		uint32_t words[16];
+		for (int i = 0; i < 16; i++) {
+			const uint8_t* p = &data[offset + i * 4];
+			words[i]		 = p[0] | (p[1] << 8) | (p[2] << 16) | (static_cast<uint32_t>(p[3]) << 24);
 		}
 
-		uint32_t a = A, b = B, c = C, d = D;
-
-		// 64 rounds (ici tu peux copier la table complète d’un code MD5 existant)
-
-		// ⚠️ Pour garder court ici, je peux te fournir un fichier MD5 complet si tu veux,
-		// mais l’idée c’est que ça calcule bien et renvoie 16 octets.
-
-		A += a;
-		B += b;
-		C += c;
-		D += d;
+		uint32_t a = state[0], b = state[1], c = state[2], d = state[3];
+		for (uint32_t i = 0; i < 64; i++) {
+			uint32_t f, g;
+			if (i < 16) {
+				f = (b & c) | (~b & d);
+				g = i;
+			} else if (i < 32) {
+				f = (d & b) | (~d & c);
+				g = (5 * i + 1) % 16;
+			} else if (i < 48) {
+				f = b ^ c ^ d;
+				g = (3 * i + 5) % 16;
+			} else {
+				f = c ^ (b | ~d);
+				g = (7 * i) % 16;
+			}
+			uint32_t next = d;
+			d			  = c;
+			c			  = b;
+			b			  = b + rotateLeft(a + f + CONSTANTS[i] + words[g], SHIFTS[i]);
+			a			  = next;
+		}
+		state[0] += a;
+		state[1] += b;
+		state[2] += c;
+		state[3] += d;
 	}
 
-	// résultat en octets (little-endian)
 	std::vector<uint8_t> digest(16);
-	uint32_t			 state[4] = {A, B, C, D};
 	for (int i = 0; i < 4; i++) {
-		digest[i * 4]	  = state[i] & 0xFF;
-		digest[i * 4 + 1] = (state[i] >> 8) & 0xFF;
-		digest[i * 4 + 2] = (state[i] >> 16) & 0xFF;
-		digest[i * 4 + 3] = (state[i] >> 24) & 0xFF;
+		for (int j = 0; j < 4; j++) digest[i * 4 + j] = static_cast<uint8_t>(state[i] >> (8 * j));
 	}
-
 	return digest;
 }
