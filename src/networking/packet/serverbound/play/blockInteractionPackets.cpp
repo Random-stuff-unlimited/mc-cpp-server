@@ -98,6 +98,17 @@ namespace {
 		server.broadcastToChunk(x >> 4, z >> 4, PacketId::Play::Clientbound::BLOCK_UPDATE, buf);
 	}
 
+	// Changes a block and tells everyone who has it: the block, then the light around it
+	void changeBlock(Server& server, int x, int y, int z, uint32_t state) {
+		std::vector<World::LightUpdate> lightUpdates;
+		server.getWorld().setBlock(x, y, z, state, &lightUpdates);
+		broadcastBlockUpdate(server, x, y, z, static_cast<int>(state));
+		for (World::LightUpdate& update : lightUpdates) {
+			Buffer light(update.packet);
+			server.broadcastToChunk(update.chunkX, update.chunkZ, PacketId::Play::Clientbound::LIGHT_UPDATE, light);
+		}
+	}
+
 	// Vanilla allows 4.5 blocks in survival, 5 in creative, plus a margin for latency
 	bool inReach(const Player& player, int x, int y, int z) {
 		double range = (player.getGameMode() == GameMode::Creative ? 5.0 : 4.5) + 1.0;
@@ -114,8 +125,7 @@ namespace {
 		if (state < 0 || world.isAir(state)) return false;
 		if (player.getGameMode() != GameMode::Creative && server.getGameData().getDestroyTime(state) < 0) return false; // Bedrock...
 
-		world.setBlock(x, y, z, world.airState());
-		broadcastBlockUpdate(server, x, y, z, world.airState());
+		changeBlock(server, x, y, z, world.airState());
 
 		// Breaking one half of a door, tall plant or bed removes the other one
 		const GameData& gameData = server.getGameData();
@@ -123,8 +133,7 @@ namespace {
 		if (otherPart(gameData, state, otherX, otherY, otherZ)) {
 			int other = world.getBlock(otherX, otherY, otherZ);
 			if (other >= 0 && gameData.getBlockOfState(other) == gameData.getBlockOfState(state)) {
-				world.setBlock(otherX, otherY, otherZ, world.airState());
-				broadcastBlockUpdate(server, otherX, otherY, otherZ, world.airState());
+				changeBlock(server, otherX, otherY, otherZ, world.airState());
 			}
 		}
 
@@ -225,8 +234,7 @@ void handleUseItemOnPacket(Packet& packet, Server& server) {
 
 	for (const BlockChange& part : parts) {
 		if (fits) {
-			world.setBlock(part.x, part.y, part.z, static_cast<uint32_t>(part.state));
-			broadcastBlockUpdate(server, part.x, part.y, part.z, part.state);
+			changeBlock(server, part.x, part.y, part.z, static_cast<uint32_t>(part.state));
 		} else if (int actual = world.getBlock(part.x, part.y, part.z); actual >= 0) {
 			sendBlockUpdate(self, server, part.x, part.y, part.z, actual); // Undo the client's prediction
 		}

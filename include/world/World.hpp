@@ -6,6 +6,8 @@
 #include "world/ChunkStorage.hpp"
 #include "world/WorldGenerator.hpp"
 
+class Buffer;
+
 #include <chrono>
 #include <condition_variable>
 #include <deque>
@@ -72,8 +74,14 @@ class World {
 
 	// Block state at a world position, -1 if its chunk isn't loaded or y is outside the world
 	int getBlock(int x, int y, int z);
-	// Returns the previous state, -1 (and changes nothing) if the chunk isn't loaded or y is outside the world
-	int setBlock(int x, int y, int z, uint32_t state);
+	// Light Update packet body for a chunk whose light changed
+	struct LightUpdate {
+		int					 chunkX, chunkZ;
+		std::vector<uint8_t> packet;
+	};
+	// Returns the previous state, -1 (and changes nothing) if the chunk isn't loaded or y is outside the world.
+	// The light around is updated; the chunks whose light changed are added to lightUpdates, to send to their viewers
+	int setBlock(int x, int y, int z, uint32_t state, std::vector<LightUpdate>* lightUpdates = nullptr);
 	bool	 isAir(uint32_t state) const;
 	uint32_t airState() const { return _layout.air; }
 
@@ -136,6 +144,11 @@ class World {
 	bool				   writeChunk(const std::shared_ptr<Chunk>& chunk);
 	std::vector<uint8_t>   encodeChunkData(const Chunk& chunk) const;
 	std::shared_ptr<Chunk> loadedChunk(int chunkX, int chunkZ);
+	void				   relight(int x, int y, int z, std::vector<LightUpdate>* lightUpdates);
+	// Light data as in Chunk Data and Light Update: only the sections flagged in skySections / blockSections, or
+	// all of them (with the ones below and above the world) when these are null
+	void writeLightData(Buffer& buf, const ChunkLight& light, int sectionCount, const std::vector<bool>* skySections,
+						const std::vector<bool>* blockSections) const;
 };
 
 #endif

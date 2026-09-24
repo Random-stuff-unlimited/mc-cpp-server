@@ -306,10 +306,19 @@ void World::light(int x, int z) {
 	if (!area[4]) return;
 	const Chunk* pointers[9];
 	for (int i = 0; i < 9; i++) pointers[i] = area[i].get();
-	ChunkLight light = LightEngine::compute(pointers, *_lightTables);
-	{
+	auto versions = [&] {
+		uint64_t sum = 0;
+		for (const auto& chunk : area) sum += chunk ? chunk->version() : 0;
+		return sum;
+	};
+	// A block may change while computing (its own light update then finds the chunk not lit yet): start again
+	for (int attempt = 0; attempt < 3; attempt++) {
+		uint64_t   before = versions();
+		ChunkLight light  = LightEngine::compute(pointers, *_lightTables);
 		std::lock_guard<std::mutex> lock(area[4]->mutex());
 		area[4]->setLight(std::move(light));
+		area[4]->setCachedPacket(nullptr);
+		if (versions() == before) break;
 	}
 
 	std::vector<ChunkCallback> waiters;
@@ -362,14 +371,79 @@ int World::getBlock(int x, int y, int z) {
 	return static_cast<int>(chunk->getBlock(x & 15, y, z & 15));
 }
 
-int World::setBlock(int x, int y, int z, uint32_t state) {
+int World::setBlock(int x, int y, int z, uint32_t state, std::vector<LightUpdate>* lightUpdates) {
 	if (y < _layout.minY || y >= _layout.minY + _layout.sectionCount * 16) return -1;
 	std::shared_ptr<Chunk> chunk = loadedChunk(x >> 4, z >> 4);
 	if (!chunk) return -1;
-	std::lock_guard<std::mutex> lock(chunk->mutex());
-	int							previous = static_cast<int>(chunk->getBlock(x & 15, y, z & 15));
-	if (previous != static_cast<int>(state)) chunk->setBlock(x & 15, y, z & 15, state); // Marks it for saving
+	int previous;
+	{
+		std::lock_guard<std::mutex> lock(chunk->mutex());
+		previous = static_cast<int>(chunk->getBlock(x & 15, y, z & 15));
+		if (previous == static_cast<int>(state)) return previous;
+		chunk->setBlock(x & 15, y, z & 15, state); // Marks it for saving
+	}
+	relight(x, y, z, lightUpdates);
 	return previous;
+}
+
+// Light around a changed block. Incremental when the 3x3 chunks around are lit (the usual case: a player only
+// changes chunks it has, and those are lit); otherwise the lit ones are recomputed from scratch
+void World::relight(int x, int y, int z, std::vector<LightUpdate>* lightUpdates) {
+	int					   chunkX = x >> 4, chunkZ = z >> 4;
+	std::shared_ptr<Chunk> window[9];
+	bool				   lit[9] = {};
+	bool				   allLit = true;
+	{
+		std::lock_guard<std::mutex> lock(_chunksMutex);
+		for (int i = 0; i < 9; i++) {
+			auto it = _chunks.find(Chunk::key(chunkX + i % 3 - 1, chunkZ + i / 3 - 1));
+			if (it != _chunks.end() && it->second.chunk) {
+				window[i] = it->second.chunk;
+				lit[i]	  = it->second.lit;
+			}
+			allLit = allLit && lit[i];
+		}
+	}
+
+	if (allLit) {
+		// Lock the 9 chunks in a fixed order, so two updates side by side can't deadlock
+		int order[9] = {0, 1, 2, 3, 4, 5, 6, 7, 8};
+		std::sort(order, order + 9, [&](int a, int b) { return window[a].get() < window[b].get(); });
+		std::unique_lock<std::mutex> locks[9];
+		for (int i = 0; i < 9; i++) locks[i] = std::unique_lock<std::mutex>(window[order[i]]->mutex());
+
+		Chunk* raw[9];
+		for (int i = 0; i < 9; i++) raw[i] = window[i].get();
+		LightEngine::Changes changes = LightEngine::update(raw, x & 15, y - _layout.minY, z & 15, *_lightTables);
+		for (int i = 0; i < 9; i++) {
+			bool changed = std::find(changes.sky[i].begin(), changes.sky[i].end(), true) != changes.sky[i].end() ||
+						   std::find(changes.block[i].begin(), changes.block[i].end(), true) != changes.block[i].end();
+			if (!changed) continue;
+			window[i]->setCachedPacket(nullptr);
+			if (lightUpdates) {
+				Buffer buf;
+				buf.writeVarInt(window[i]->x());
+				buf.writeVarInt(window[i]->z());
+				writeLightData(buf, window[i]->light(), _layout.sectionCount, &changes.sky[i], &changes.block[i]);
+				lightUpdates->push_back({window[i]->x(), window[i]->z(), std::move(buf.getData())});
+			}
+		}
+		return;
+	}
+
+	// Rare: near chunks still waiting for their neighbors. Recompute the lit ones entirely
+	for (int i = 0; i < 9; i++) {
+		if (!lit[i]) continue;
+		light(window[i]->x(), window[i]->z());
+		if (lightUpdates) {
+			std::lock_guard<std::mutex> lock(window[i]->mutex());
+			Buffer						buf;
+			buf.writeVarInt(window[i]->x());
+			buf.writeVarInt(window[i]->z());
+			writeLightData(buf, window[i]->light(), _layout.sectionCount, nullptr, nullptr);
+			lightUpdates->push_back({window[i]->x(), window[i]->z(), std::move(buf.getData())});
+		}
+	}
 }
 
 // ----- Saving and unloading -----
@@ -530,11 +604,18 @@ std::vector<uint8_t> World::encodeChunkData(const Chunk& chunk) const {
 
 	buf.writeVarInt(0); // Block entities
 
-	// Light sections: one below the world (dark), the world's sections, one above (open sky)
-	const ChunkLight& light			= chunk.light();
-	int				  lightSections = sectionCount + 2;
-	std::vector<bool> skyMask(lightSections, false), blockMask(lightSections, false);
-	std::vector<bool> emptySkyMask(lightSections, false), emptyBlockMask(lightSections, false);
+	writeLightData(buf, chunk.light(), sectionCount, nullptr, nullptr);
+
+	return std::move(buf.getData());
+}
+
+void World::writeLightData(Buffer& buf, const ChunkLight& light, int sectionCount, const std::vector<bool>* skySections,
+						   const std::vector<bool>* blockSections) const {
+	// Light sections: one below the world (dark), the world's sections, one above (open sky). Masks: which sections
+	// have an array (skyMask/blockMask), which are all 0 (empty masks); a section in neither is left unchanged
+	int								  lightSections = sectionCount + 2;
+	std::vector<bool>				  skyMask(lightSections, false), blockMask(lightSections, false);
+	std::vector<bool>				  emptySkyMask(lightSections, false), emptyBlockMask(lightSections, false);
 	std::vector<std::vector<uint8_t>> skyArrays, blockArrays;
 
 	auto addSection = [](const SectionLight& section, int index, std::vector<bool>& mask, std::vector<bool>& emptyMask,
@@ -548,11 +629,16 @@ std::vector<uint8_t> World::encodeChunkData(const Chunk& chunk) const {
 	};
 	SectionLight dark, openSky;
 	openSky.uniform = 15;
+	bool computed	= light.sky.size() == static_cast<size_t>(sectionCount);
 	for (int i = 0; i < lightSections; i++) {
 		bool below = i == 0, above = i == lightSections - 1;
-		bool computed = !below && !above && static_cast<size_t>(i - 1) < light.sky.size();
-		addSection(computed ? light.sky[i - 1] : (above ? openSky : dark), i, skyMask, emptySkyMask, skyArrays);
-		addSection(computed ? light.block[i - 1] : dark, i, blockMask, emptyBlockMask, blockArrays);
+		bool world = !below && !above;
+		if (!skySections || (world && (*skySections)[i - 1])) {
+			addSection(world && computed ? light.sky[i - 1] : (above ? openSky : dark), i, skyMask, emptySkyMask, skyArrays);
+		}
+		if (!blockSections || (world && (*blockSections)[i - 1])) {
+			addSection(world && computed ? light.block[i - 1] : dark, i, blockMask, emptyBlockMask, blockArrays);
+		}
 	}
 
 	writeBitSet(buf, skyMask);
@@ -566,6 +652,4 @@ std::vector<uint8_t> World::encodeChunkData(const Chunk& chunk) const {
 			buf.writeBytes(array);
 		}
 	}
-
-	return std::move(buf.getData());
 }
