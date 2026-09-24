@@ -8,5 +8,5 @@ void clientboundFeatureFlagsPacket(Packet& packet, Server& server) {
 	buffer.writeVarInt(1);
 	buffer.writeString("minecraft:vanilla");
 
-	packet.sendPacket(PacketId::Configuration::Clientbound::FEATURE_FLAGS, buffer, server, false);
+	packet.sendPacket(PacketId::Configuration::Clientbound::UPDATE_ENABLED_FEATURES, buffer, server);
 }

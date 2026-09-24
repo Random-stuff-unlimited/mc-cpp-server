@@ -7,32 +7,31 @@
 
 #include <chrono>
 #include <exception>
-#include <iostream>
-#include <sys/epoll.h>
-#include <unistd.h>
+#include <string>
 
-void NetworkManager::workerThreadLoop() {
+void NetworkManager::workerThreadLoop(size_t index) {
+	ThreadSafeQueue<Packet*>& queue = *_workerQueues[index];
+
 	while (!_shutdownFlag.load()) {
 		Packet* packet = nullptr;
 
-		if (_incomingPackets.waitAndPopTimeout(packet, std::chrono::milliseconds(100))) {
-			if (packet == nullptr) break;
+		if (!queue.waitAndPopTimeout(packet, std::chrono::milliseconds(100))) continue;
+		if (packet == nullptr) break;
+
+		Player* player = packet->getPlayer();
+		// Packets still queued for a player that is being disconnected are dropped
+		if (player && !player->isDisconnected()) {
 			try {
 				packetRouter(packet, getServer());
-				if (packet->getReturnPacket() == PACKET_SEND) {
-					packet = nullptr;
-				} else if (packet->getReturnPacket() == PACKET_DISCONNECT) {
-					Player* player = packet->getPlayer();
-					if (player) {
-						getServer().removePlayerFromAnyList(player);
-						epoll_ctl(_epollFd, EPOLL_CTL_DEL, packet->getSocket(), nullptr);
-						close(packet->getSocket());
-					}
+				if (packet->getReturnPacket() == PACKET_DISCONNECT) {
+					requestDisconnect(player);
 				}
 			} catch (const std::exception& e) {
-				std::cerr << "Error processing packet: " << e.what() << std::endl;
+				g_logger->logNetwork(ERROR, "Error processing packet: " + std::string(e.what()), "Worker");
+				requestDisconnect(player);
 			}
 		}
-		if (packet != nullptr) delete packet;
+		// Handlers never keep the incoming packet: anything sent was copied by sendPacket
+		delete packet;
 	}
 }

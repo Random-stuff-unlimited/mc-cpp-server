@@ -3,9 +3,59 @@
 #include "network/packet.hpp"
 #include "network/server.hpp"
 #include "network/packetRouter.hpp"
+#include "PacketIds.hpp"
+#include "world/ChunkStreamer.hpp"
+#include "world/World.hpp"
+
+#include <algorithm>
 #include "player.hpp"
 
 #include <string>
+
+namespace {
+	GameMode gameModeFromConfig(const std::string& name) {
+		if (name == "creative") return GameMode::Creative;
+		if (name == "adventure") return GameMode::Adventure;
+		if (name == "spectator") return GameMode::Spectator;
+		return GameMode::Survival;
+	}
+
+	void disconnect(Packet* packet) {
+		packet->getPlayer()->setPlayerState(PlayerState::None);
+		packet->setReturnPacket(PACKET_DISCONNECT);
+	}
+
+	void enterPlay(Packet* packet, Server& server) {
+		g_logger->logNetwork(INFO, "Transitioning to Play state", "Configuration");
+		handleAcknowledgeFinishConfigurationPacket(*packet, server);
+
+		Player*				player = packet->getPlayer();
+		const World::Spawn& spawn  = server.getWorld().getSpawn();
+		player->setGameMode(gameModeFromConfig(server.getConfig().getGamemode()));
+		player->setPosition(spawn.x, spawn.y, spawn.z);
+
+		sendPlayPacket(*packet, server);
+		changeDifficultyPacket(*packet, server);
+		playerAbilitiesPacket(*packet, server);
+		setHeldItemPacket(*packet, server);
+		synchronizePlayerPositionPacket(*packet, server);
+
+		// Stream the chunks around the spawn, within the smaller of the server's and the client's view distance
+		int viewDistance = std::min<int>(server.getConfig().getViewDistance(), player->getPlayerConfig()->getViewDistance());
+		player->createChunkStreamer();
+		player->getChunkStreamer()->start(spawn.x, spawn.z, std::max(2, viewDistance));
+	}
+
+	void handleMove(Packet* packet, bool withRotation) {
+		Buffer& data = packet->getData();
+		double	x	 = data.readDouble();
+		double	y	 = data.readDouble(); // Feet
+		double	z	 = data.readDouble();
+		if (withRotation) packet->getPlayer()->setYaw(data.readFloat());
+		packet->getPlayer()->setPosition(x, y, z);
+		if (ChunkStreamer* streamer = packet->getPlayer()->getChunkStreamer()) streamer->onPlayerMove(x, z);
+	}
+} // namespace
 
 // ========================================
 // Main Packet Router
@@ -13,7 +63,6 @@
 
 void packetRouter(Packet* packet, Server& server) {
 	if (packet == nullptr) return;
-	if (server.getNetworkManager().getOutgoingQueue() == nullptr) return;
 
 	Player* player = packet->getPlayer();
 	if (player == nullptr) {
@@ -21,119 +70,114 @@ void packetRouter(Packet* packet, Server& server) {
 		return;
 	}
 
-	g_logger->logNetwork(INFO,
+	g_logger->logNetwork(DEBUG,
 						 "Routing packet ID: 0x" + std::to_string(packet->getId()) + " (size: " + std::to_string(packet->getSize()) +
 								 ") for state: " + std::to_string(static_cast<int>(player->getPlayerState())),
 						 "PacketRouter");
 
+	int32_t id = static_cast<int32_t>(packet->getId());
 	switch (player->getPlayerState()) {
 	case PlayerState::Handshake:
-		handleHandshakePacket(*packet, server);
-		break;
-	case PlayerState::Status:
-		if (packet->getId() == 0x00) {
-			handleStatusPacket(*packet, server);
-		} else if (packet->getId() == 0x01) {
-			handlePingPacket(*packet, server);
+		if (id == PacketId::Handshake::Serverbound::INTENTION) {
+			handleHandshakePacket(*packet, server);
 		} else {
-			packet->getPlayer()->setPlayerState(PlayerState::None);
-			packet->setReturnPacket(PACKET_DISCONNECT);
+			disconnect(packet);
 		}
 		break;
+
+	case PlayerState::Status:
+		if (id == PacketId::Status::Serverbound::STATUS_REQUEST) {
+			handleStatusPacket(*packet, server);
+		} else if (id == PacketId::Status::Serverbound::PING_REQUEST) {
+			handlePingPacket(*packet, server);
+		} else {
+			disconnect(packet);
+		}
+		break;
+
 	case PlayerState::Login:
 		if (packet->getSize() > 32767) {
 			g_logger->logNetwork(ERROR, "Packet size too large: " + std::to_string(packet->getSize()), "PacketRouter");
 			packet->setReturnPacket(PACKET_DISCONNECT);
 			return;
 		}
-		if (packet->getId() == 0x00) {
+		if (id == PacketId::Login::Serverbound::HELLO) {
 			handleLoginStartPacket(*packet, server);
-		// } else if (packet->getId() == 0x02) {
-		// 	g_logger->logNetwork(INFO, "Received Login Plugin Response (0x02) - acknowledging", "PacketRouter");
-		// 	packet->setReturnPacket(PACKET_OK);
-		} else if (packet->getId() == 0x03) {
+		} else if (id == PacketId::Login::Serverbound::LOGIN_ACKNOWLEDGED) {
 			handleLoginAcknowledgedPacket(*packet, server);
 			clientboundFeatureFlagsPacket(*packet, server);
 			clientboundKnownPacksPacket(*packet, server);
-		// } else if (packet->getId() == 0x04) {
-		// 	g_logger->logNetwork(INFO, "Received Login Cookie Response (0x04) - acknowledging", "PacketRouter");
-		// 	packet->setReturnPacket(PACKET_OK);
+		} else if (id == PacketId::Login::Serverbound::CUSTOM_QUERY_ANSWER || id == PacketId::Login::Serverbound::COOKIE_RESPONSE) {
+			// Answers to requests the server doesn't send yet: nothing to do
 		} else {
-			packet->getPlayer()->setPlayerState(PlayerState::None);
-			packet->setReturnPacket(PACKET_DISCONNECT);
+			disconnect(packet);
 		}
 		break;
+
 	case PlayerState::Configuration:
-		if (packet->getId() == 0x00) {
-			// Client Information
+		if (id == PacketId::Configuration::Serverbound::CLIENT_INFORMATION) {
 			handleClientInformationPacket(*packet, server);
-		} else if (packet->getId() == 0x01) {
-			// Cookie Response
-			packet->setReturnPacket(PACKET_OK);
-		} else if (packet->getId() == 0x02) {
-			// Serverbound Plugin Message
-			packet->setReturnPacket(PACKET_OK);
-		} else if (packet->getId() == 0x03) {
-			// Acknowledge Finish Configuration -> Enter Play State
-			g_logger->logNetwork(INFO, "Transitioning to Play state", "Configuration");
-			handleAcknowledgeFinishConfigurationPacket(*packet, server);
-
-			// Send play initialization packets
-			sendPlayPacket(*packet, server);
-			changeDifficultyPacket(*packet, server);
-			playerAbilitiesPacket(*packet, server);
-			setHeldItemPacket(*packet, server);
-			synchronizePlayerPositionPacket(*packet, server); // Last packet
-		} else if (packet->getId() == 0x04) {
-			// Keep Alive
-			packet->setReturnPacket(PACKET_OK);
-		} else if (packet->getId() == 0x05) {
-			// Pong
-			packet->setReturnPacket(PACKET_OK);
-		} else if (packet->getId() == 0x06) {
-			// Resource Pack Response
-			packet->setReturnPacket(PACKET_OK);
-		} else if (packet->getId() == 0x07) {
-			// Serverbound Known Packs -> Send Configuration Data
+		} else if (id == PacketId::Configuration::Serverbound::SELECT_KNOWN_PACKS) {
 			serverboundKnownPacksPacket(*packet);
-
-
-
-			// Send configuration sequence
-			g_logger->logNetwork(INFO, "Sending Registry Data", "Configuration");
 			sendRegistryData(*packet, server);
-
-			g_logger->logNetwork(INFO, "Sending Update Tags", "Configuration");
 			sendUpdateTags(*packet, server);
-
-			g_logger->logNetwork(INFO, "Sending Finish Configuration", "Configuration");
 			handleFinishConfigurationPacket(*packet, server);
-		} else if (packet->getId() == 0x08) {
-			// Custom Click Action
-			packet->setReturnPacket(PACKET_OK);
+		} else if (id == PacketId::Configuration::Serverbound::FINISH_CONFIGURATION) {
+			enterPlay(packet, server);
+		} else if (id == PacketId::Configuration::Serverbound::COOKIE_RESPONSE || id == PacketId::Configuration::Serverbound::CUSTOM_PAYLOAD ||
+				   id == PacketId::Configuration::Serverbound::KEEP_ALIVE || id == PacketId::Configuration::Serverbound::PONG ||
+				   id == PacketId::Configuration::Serverbound::RESOURCE_PACK ||
+				   id == PacketId::Configuration::Serverbound::CUSTOM_CLICK_ACTION) {
+			// Nothing to do yet
 		} else {
-			// Unknown packet - disconnect
 			Buffer payload;
 			payload.writeString("{\"text\":\"Unknown packet in Configuration state\"}");
-			packet->sendPacket(0x02, payload, server, true);
-			packet->getPlayer()->setPlayerState(PlayerState::None);
-			packet->setReturnPacket(PACKET_DISCONNECT);
+			packet->sendPacket(PacketId::Configuration::Clientbound::DISCONNECT, payload, server);
+			disconnect(packet);
 		}
 		break;
+
 	case PlayerState::Play:
-		if (packet->getId() == 0x00) {
-			// Confirm Teleportation
+		switch (id) {
+		case PacketId::Play::Serverbound::ACCEPT_TELEPORTATION:
 			handleConfirmTeleportationPacket(*packet, server);
 			gameEventPacket(*packet, server);
-		} else if (packet->getId() == 0x2B) {
-			// Player Loaded
+			break;
+		case PacketId::Play::Serverbound::MOVE_PLAYER_POS:
+			handleMove(packet, false);
+			break;
+		case PacketId::Play::Serverbound::MOVE_PLAYER_POS_ROT:
+			handleMove(packet, true);
+			break;
+		case PacketId::Play::Serverbound::MOVE_PLAYER_ROT:
+			player->setYaw(packet->getData().readFloat());
+			break;
+		case PacketId::Play::Serverbound::CHUNK_BATCH_RECEIVED:
+			if (ChunkStreamer* streamer = player->getChunkStreamer()) streamer->onBatchReceived(packet->getData().readFloat());
+			break;
+		case PacketId::Play::Serverbound::KEEP_ALIVE:
+			player->onKeepAliveResponse(packet->getData().readLong());
+			break;
+		case PacketId::Play::Serverbound::PLAYER_ACTION:
+			handlePlayerActionPacket(*packet, server);
+			break;
+		case PacketId::Play::Serverbound::USE_ITEM_ON:
+			handleUseItemOnPacket(*packet, server);
+			break;
+		case PacketId::Play::Serverbound::SET_CARRIED_ITEM:
+			handleSetCarriedItemPacket(*packet, server);
+			break;
+		case PacketId::Play::Serverbound::SET_CREATIVE_MODE_SLOT:
+			handleSetCreativeModeSlotPacket(*packet, server);
+			break;
+		case PacketId::Play::Serverbound::PLAYER_LOADED:
 			g_logger->logNetwork(DEBUG, "Player fully loaded in game", "Play");
-			packet->setReturnPacket(PACKET_OK);
-		} else {
-			// Other play packets
-			packet->setReturnPacket(PACKET_OK);
+			break;
+		default:
+			break; // Not handled yet (see docs/PACKETS_MISSING.md)
 		}
 		break;
+
 	default:
 		g_logger->logNetwork(WARN, "Unknown player state: " + std::to_string(static_cast<int>(player->getPlayerState())), "PacketRouter");
 		packet->setReturnPacket(PACKET_DISCONNECT);

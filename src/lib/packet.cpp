@@ -4,16 +4,12 @@
 #include "network/server.hpp"
 #include "player.hpp"
 #include "network/networking.hpp"
+#include "lib/compression.hpp"
 
 #include <cstdint>
-#include <errno.h>
 #include <exception>
 #include <iostream>
-#include <poll.h>
 #include <stdexcept>
-#include <sys/poll.h>
-#include <sys/types.h>
-#include <unistd.h>
 #include <vector>
 
 using json = nlohmann::json;
@@ -36,92 +32,15 @@ Packet& Packet::operator=(const Packet& other) {
 	return (*this);
 }
 
-Packet::Packet(Player* player) : _player(player), _socketFd(-1), _returnPacket(0) {
+Packet::Packet(std::shared_ptr<Player> player, int32_t id, const std::vector<uint8_t>& payload, int32_t size)
+	: _size(size), _id(id), _data(payload), _player(std::move(player)), _socketFd(-1), _returnPacket(PACKET_OK) {
 	if (_player == nullptr) throw std::runtime_error("Packet init with null player");
 	_socketFd = _player->getSocketFd();
-	// g_logger->logNetwork(INFO, "Constructor: Socket FD = " + std::to_string(_socketFd),
-	// "Packet");
-
-	_size = readVarint(_socketFd);
-	if (_size == -1) throw std::runtime_error("Failed to read packet size");
-	// g_logger->logNetwork(INFO, "Read size: " + std::to_string(_size), "Packet");
-
-	int idBytesRead = 0;
-	_id				= readVarint(_socketFd, &idBytesRead);
-	if (_id == -1) throw std::runtime_error("Failed to read packet id");
-	// g_logger->logNetwork(INFO, "Read ID: " + std::to_string(_id), "Packet");
-
-	int remaining = _size - idBytesRead;
-	// g_logger->logNetwork(INFO, "Calculated remaining: " + std::to_string(remaining) + " (size=" +
-	// std::to_string(_size) + " - idBytes=" + std::to_string(idBytesRead) + ")", "Packet");
-
-	if (remaining < 0) throw std::runtime_error("Invalid packet size");
-	if (remaining > 0) {
-		std::vector<uint8_t> tmp(remaining);
-		ssize_t				 totalRead = 0;
-
-		while (totalRead < remaining) {
-			ssize_t bytesRead = ::read(_socketFd, tmp.data() + totalRead, remaining - totalRead);
-			if (bytesRead <= 0) {
-				throw std::runtime_error("error on packet reading (socket closed or error)");
-			}
-			totalRead += bytesRead;
-		}
-
-		// g_logger->logNetwork(INFO, "Packet total size: " + std::to_string(_size), "Packet");
-		// g_logger->logNetwork(INFO, "Packet id: " + std::to_string(_id), "Packet");
-		// g_logger->logNetwork(INFO, "Data size: " + std::to_string(remaining), "Packet");
-		// g_logger->logNetwork(INFO, "Read size: " + std::to_string(totalRead), "Packet");
-
-		_data = Buffer(tmp);
-	}
 }
 
-Packet::Packet(int socketFd, Server& server) : _player(nullptr), _socketFd(socketFd), _returnPacket(0) {
-	// g_logger->logNetwork(INFO, "Constructor (socket): Socket FD = " + std::to_string(_socketFd),
-	// "Packet");
-
-	_size = readVarint(_socketFd);
-	if (_size == -1) throw std::runtime_error("Failed to read packet size");
-	// g_logger->logNetwork(INFO, "Read size: " + std::to_string(_size), "Packet");
-
-	int idBytesRead = 0;
-	_id				= readVarint(_socketFd, &idBytesRead);
-	if (_id == -1) throw std::runtime_error("Failed to read packet id");
-	// g_logger->logNetwork(INFO, "Read ID: " + std::to_string(_id), "Packet");
-
-	int remaining = _size - idBytesRead;
-	// g_logger->logNetwork(INFO, "Calculated remaining: " + std::to_string(remaining) + " (size=" +
-	// std::to_string(_size) + " - idBytes=" + std::to_string(idBytesRead) + ")", "Packet");
-
-	if (remaining < 0) throw std::runtime_error("Invalid packet size");
-
-	try {
-		_player = server.addTempPlayer("None", PlayerState::Handshake, socketFd);
-	} catch (const std::exception& e) {
-		_player = nullptr;
-		throw std::runtime_error("error on packet player init");
-	}
-
-	if (remaining > 0) {
-		std::vector<uint8_t> tmp(remaining);
-		ssize_t				 totalRead = 0;
-
-		while (totalRead < remaining) {
-			ssize_t bytesRead = ::read(_socketFd, tmp.data() + totalRead, remaining - totalRead);
-			if (bytesRead <= 0) {
-				throw std::runtime_error("error on packet reading (socket closed or error)");
-			}
-			totalRead += bytesRead;
-		}
-
-		// g_logger->logNetwork(INFO, "Packet total size: " + std::to_string(_size), "Packet");
-		// g_logger->logNetwork(INFO, "Packet id: " + std::to_string(_id), "Packet");
-		// g_logger->logNetwork(INFO, "Data size: " + std::to_string(remaining), "Packet");
-		// g_logger->logNetwork(INFO, "Read size: " + std::to_string(totalRead), "Packet");
-
-		_data = Buffer(tmp);
-	}
+Packet::Packet(std::shared_ptr<Player> player) : _size(0), _id(0), _data(), _player(std::move(player)), _socketFd(-1), _returnPacket(PACKET_OK) {
+	if (_player == nullptr) throw std::runtime_error("Packet init with null player");
+	_socketFd = _player->getSocketFd();
 }
 
 int Packet::getVarintSize(int32_t value) {
@@ -140,82 +59,6 @@ int Packet::getVarintSize(int32_t value) {
 	return size;
 }
 
-int Packet::readVarint(int sock, int* bytesRead) {
-	if (!isSocketValid(sock)) {
-		return -1;
-	}
-
-	int		value = 0, position = 0;
-	uint8_t byte;
-	int		localBytesRead = 0;
-
-	while (true) {
-		ssize_t result = ::read(sock, &byte, 1);
-		if (result <= 0) {
-			std::cerr << "readVarint: Failed to read byte " << localBytesRead << " from socket " << sock << " (errno: " << errno << ")" << std::endl;
-			return -1;
-		}
-
-		localBytesRead++;
-		value |= (byte & 0x7F) << position;
-
-		if (!(byte & 0x80)) break; // Last byte of varint
-
-		position += 7;
-		if (position >= 32) {
-			std::cerr << "readVarint: Varint too long (> 32 bits) after " << localBytesRead << " bytes" << std::endl;
-			return -1;
-		}
-
-		// Safety check to prevent infinite loops
-		if (localBytesRead > 5) {
-			std::cerr << "readVarint: Too many bytes read (" << localBytesRead << "), corrupted varint" << std::endl;
-			return -1;
-		}
-	}
-
-	if (bytesRead) {
-		*bytesRead = localBytesRead;
-	}
-
-	// g_logger->logNetwork(INFO, "readVarint: Successfully read " + std::to_string(value) + " (" +
-	// std::to_string(localBytesRead) + " bytes)", "Packet");
-	return value;
-}
-
-int Packet::readVarint(int sock) { return readVarint(sock, nullptr); }
-
-void Packet::writeVarint(int sock, int value) {
-	std::vector<uint8_t> tmp;
-	Buffer				 buf(tmp);
-	buf.writeVarInt(value);
-	(void)!::write(sock, buf.getData().data(), buf.getData().size());
-}
-
-bool Packet::isSocketValid(int sock) {
-	if (sock < 0) {
-		std::cerr << "Socket validation: Invalid descriptor " << sock << std::endl;
-		return false;
-	}
-
-	struct pollfd pfd;
-	pfd.fd	   = sock;
-	pfd.events = POLLIN;
-
-	int result = poll(&pfd, 1, 0);
-	if (result < 0) {
-		std::cerr << "Socket validation: poll() failed with errno " << errno << std::endl;
-		return false;
-	}
-
-	if (pfd.revents & (POLLHUP | POLLERR)) {
-		std::cerr << "Socket validation: Socket " << sock << " is disconnected or has error" << std::endl;
-		return false;
-	}
-
-	return true;
-}
-
 void Packet::setReturnPacket(int value) { this->_returnPacket = value; }
 int	 Packet::getReturnPacket() { return (this->_returnPacket); }
 
@@ -228,26 +71,51 @@ int Packet::varintLen(int value) {
 	return (len);
 }
 
-void Packet::sendPacket(int id, Buffer& data, Server& server, bool last) {
-    if (!last) {
-        Packet* newPacket = new Packet(*this);
-        newPacket->sendPacket(id, data, server, true);
-        return;
-    }
-    Buffer buf;
+void Packet::sendPacket(int id, Buffer& data, Server& server) { send(_player, id, data, server); }
 
-    buf.writeVarInt(id);
-    buf.writeBytes(data.getData());
-    buf.prependVarInt(buf.getData().size());
-
-    _data = buf;
-    _id = id;
-    _size = buf.getData().size();
-    _returnPacket = PACKET_SEND;
-    server.getNetworkManager().getOutgoingQueue()->push(this);
+void Packet::send(const std::shared_ptr<Player>& player, int id, Buffer& data, Server& server) {
+	Packet* out = new Packet(player);
+	out->_data	= Buffer(buildFrame(id, data.getData(), player->getCompressionThreshold()));
+	out->_id	= id;
+	out->_size	= out->_data.getData().size();
+	out->_returnPacket = PACKET_SEND;
+	server.getNetworkManager().enqueueOutgoingPacket(out);
 }
 
-Player*	 Packet::getPlayer() const { return (_player); }
+void Packet::sendFrame(const std::shared_ptr<Player>& player, std::vector<uint8_t> frame, Server& server) {
+	Packet* out = new Packet(player);
+	out->_size	= frame.size();
+	out->_data	= Buffer(std::move(frame));
+	out->_returnPacket = PACKET_SEND;
+	server.getNetworkManager().enqueueOutgoingPacket(out);
+}
+
+std::vector<uint8_t> Packet::buildFrame(int id, const std::vector<uint8_t>& data, int compressionThreshold, int compressionLevel) {
+	Buffer body;
+	body.writeVarInt(id);
+	body.writeBytes(data);
+
+	Buffer frame;
+	if (compressionThreshold < 0) {
+		frame.writeVarInt(static_cast<int32_t>(body.getData().size()));
+		frame.writeBytes(body.getData());
+		return std::move(frame.getData());
+	}
+
+	Buffer inner;
+	if (static_cast<int>(body.getData().size()) < compressionThreshold) {
+		inner.writeVarInt(0); // Not compressed
+		inner.writeBytes(body.getData());
+	} else {
+		inner.writeVarInt(static_cast<int32_t>(body.getData().size()));
+		inner.writeBytes(compression::zlibCompress(body.getData().data(), body.getData().size(), compressionLevel));
+	}
+	frame.writeVarInt(static_cast<int32_t>(inner.getData().size()));
+	frame.writeBytes(inner.getData());
+	return std::move(frame.getData());
+}
+
+Player*	 Packet::getPlayer() const { return (_player.get()); }
 uint32_t Packet::getSize() { return (_size); }
 uint32_t Packet::getId() { return (_id); }
 Buffer&	 Packet::getData() { return (_data); }

@@ -1,14 +1,21 @@
-.obj
-engine
-.deps
+# Build output
 build
+.obj
+.deps
+engine
 
 # Generated LSP files
 compile_commands.json
 .cache
 .vscode
+
+# Local server started by make run (its world, config, logs...), and the old name of that folder
+debug_server
+test-server
 logs
 
-# Test server directory
-test-server
+# Minecraft launcher data (HMCL started from the repo)
+.hmcl
+.minecraft
+
 include/external

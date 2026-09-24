@@ -10,7 +10,7 @@ void clientboundKnownPacksPacket(Packet& packet, Server& server) {
 	buffer.writeVarInt(1);
 	buffer.writeString("minecraft");
 	buffer.writeString("core");
-	buffer.writeString("1.21.10");
+	buffer.writeString(server.getGameData().getVersionName());
 
-	packet.sendPacket(PacketId::Configuration::Clientbound::KNOWN_PACKS, buffer, server, true);
+	packet.sendPacket(PacketId::Configuration::Clientbound::SELECT_KNOWN_PACKS, buffer, server);
 }

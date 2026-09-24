@@ -7,5 +7,5 @@ void templateClientBoundPacket(Packet& packet, Server& server) {
 
 	// Add packet data here
 
-	packet.sendPacket(0x00, buff, server, false); // Replace 0x00 with actual packet ID
+	packet.sendPacket(0x00, buff, server); // Replace 0x00 with actual packet ID
 }

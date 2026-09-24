@@ -20,16 +20,16 @@ void sendPlayPacket(Packet& packet, Server& server) {
 	buf.writeString("minecraft:overworld");
 	buf.writeString("minecraft:the_nether");
 	buf.writeString("minecraft:the_end");
-	buf.writeVarInt(20); // 4. Max Players
-	buf.writeVarInt(10); // 5. View Distance
-	buf.writeVarInt(10); // 6. Simulation Distance
+	buf.writeVarInt(server.getConfig().getServerSize());   // 4. Max Players
+	buf.writeVarInt(server.getConfig().getViewDistance()); // 5. View Distance
+	buf.writeVarInt(server.getConfig().getViewDistance()); // 6. Simulation Distance
 	buf.writeBool(false); // 7. Reduced Debug Info
 	buf.writeBool(true); // 8. Enable respawn screen
 	buf.writeBool(false); // 9. Do limited crafting
-	buf.writeVarInt(0); // 10. Dimension Type (VarInt - registry ID) | overworld dimension type ID
+	buf.writeVarInt(server.getGameData().getSyncedId("minecraft:dimension_type", "minecraft:overworld")); // 10. Dimension Type
 	buf.writeString("minecraft:overworld"); // 11. Dimension Name (Identifier)
 	buf.writeInt64(1L); // 12. Hashed seed
-	buf.writeByte(0); // 13. Game mode (Unsigned Byte) | Creative
+	buf.writeUByte(static_cast<uint8_t>(player->getGameMode())); // 13. Game mode
 	buf.writeByte(-1); // 14. Previous Game mode (Byte) | Undefined
 	buf.writeBool(false); // 15. Is Debug
 	buf.writeBool(true); // 16. Is Flat
@@ -49,5 +49,5 @@ void sendPlayPacket(Packet& packet, Server& server) {
 	buf.writeVarInt(63); // 21. Sea level
 	buf.writeBool(false); // 22. Enforces Secure Chat
 
-	packet.sendPacket(PacketId::Play::Clientbound::LOGIN, buf, server, false);
+	packet.sendPacket(PacketId::Play::Clientbound::LOGIN, buf, server);
 }

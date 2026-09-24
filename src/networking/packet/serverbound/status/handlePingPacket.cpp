@@ -1,3 +1,4 @@
+#include "PacketIds.hpp"
 #include "network/buffer.hpp"
 #include "network/networking.hpp"
 #include "network/packet.hpp"
@@ -19,5 +20,5 @@ void handlePingPacket(Packet& packet, Server& server) {
 
 	buf.writeInt64(timestamp);
 
-	packet.sendPacket(0x01, buf, server, true);
+	packet.sendPacket(PacketId::Status::Clientbound::PONG_RESPONSE, buf, server);
 }

@@ -12,12 +12,10 @@ void handleFinishConfigurationPacket(Packet& packet, Server& server);
 void handleLoginStartPacket(Packet& packet, Server& server);
 void handlePingPacket(Packet& packet, Server& server);
 void handleStatusPacket(Packet& packet, Server& server);
-void levelChunkWithLightPacket(Packet& packet, Server& server);
 void playerAbilitiesPacket(Packet& packet, Server& server);
 void sendPlayPacket(Packet& packet, Server& server);
 void setHeldItemPacket(Packet& packet, Server& server);
 void synchronizePlayerPositionPacket(Packet& packet, Server& server);
-void setCenterPacket(Packet& packet, Server& server);
 void clientboundFeatureFlagsPacket(Packet& packet, Server& server);
 
 // serverbound
@@ -27,6 +25,10 @@ void handleConfirmTeleportationPacket(Packet& packet, Server& server);
 void handleHandshakePacket(Packet& packet, Server& server);
 void handleLoginAcknowledgedPacket(Packet& packet, Server& server);
 void serverboundKnownPacksPacket(Packet& packet);
+void handlePlayerActionPacket(Packet& packet, Server& server);
+void handleUseItemOnPacket(Packet& packet, Server& server);
+void handleSetCarriedItemPacket(Packet& packet, Server& server);
+void handleSetCreativeModeSlotPacket(Packet& packet, Server& server);
 
 void packetRouter(Packet* packet, Server& server);
 

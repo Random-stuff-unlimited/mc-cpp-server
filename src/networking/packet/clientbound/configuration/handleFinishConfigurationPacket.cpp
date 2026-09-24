@@ -17,5 +17,5 @@ void handleFinishConfigurationPacket(Packet& packet, Server& server) {
 
 	Buffer buf;
 
-	packet.sendPacket(PacketId::Configuration::Clientbound::FINISH_CONFIGURATION, buf, server, true);
+	packet.sendPacket(PacketId::Configuration::Clientbound::FINISH_CONFIGURATION, buf, server);
 }

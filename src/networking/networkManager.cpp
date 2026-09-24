@@ -13,9 +13,12 @@
 #include <unistd.h>
 
 NetworkManager::NetworkManager(size_t workerCount, Server& s)
-	: _incomingPackets(), _outgoingPackets(), _workerThreads(), _shutdownFlag(false), _receiverThread(), _senderThread(), _receiverThreadInit(0),
-	  _senderThreadInit(0), _server(s), _epollFd(-1), _serverSocket(-1) {
-	_workerThreads.reserve(workerCount);
+	: _workerQueues(), _outgoingPackets(), _recvBuffers(), _workerThreads(), _shutdownFlag(false), _receiverThread(), _senderThread(), _receiverThreadInit(0),
+	  _senderThreadInit(0), _server(s), _epollFd(-1), _serverSocket(-1), _workerCount(workerCount == 0 ? 1 : workerCount) {
+	_workerThreads.reserve(_workerCount);
+	for (size_t i = 0; i < _workerCount; i++) {
+		_workerQueues.push_back(std::make_unique<ThreadSafeQueue<Packet*>>());
+	}
 
 	setupEpoll();
 	start();
@@ -41,9 +44,8 @@ void NetworkManager::startThreads() {
 			_senderThread	  = std::thread(&NetworkManager::senderThreadLoop, this);
 			_senderThreadInit = 1;
 		}
-		size_t workerCount = _workerThreads.capacity();
-		for (size_t i = 0; i < workerCount; i++) {
-			_workerThreads.emplace_back(&NetworkManager::workerThreadLoop, this);
+		for (size_t i = 0; i < _workerCount; i++) {
+			_workerThreads.emplace_back(&NetworkManager::workerThreadLoop, this, i);
 		}
 
 	} catch (const std::exception& e) {
@@ -55,7 +57,9 @@ void NetworkManager::startThreads() {
 void NetworkManager::stopThreads() {
 	_shutdownFlag = true;
 
-	_incomingPackets.push(nullptr);
+	for (auto& queue : _workerQueues) {
+		queue->push(nullptr);
+	}
 	_outgoingPackets.push(nullptr);
 
 	for (auto& worker : _workerThreads) {

@@ -1,3 +1,4 @@
+#include "PacketIds.hpp"
 #include "lib/json.hpp"
 #include "network/buffer.hpp"
 #include "network/networking.hpp"
@@ -18,7 +19,7 @@ void handleStatusPacket(Packet& packet, Server& server) {
 	}
 
 	json jres = {
-			{"version", {{"name", server.getConfig().getVersion()}, {"protocol", server.getConfig().getProtocolVersion()}}},
+			{"version", {{"name", server.getGameData().getVersionName()}, {"protocol", server.getGameData().getProtocolVersion()}}},
 			{"players", {{"max", server.getConfig().getServerSize()}, {"online", server.getAmountOnline()}, {"sample", server.getPlayerSample()}}},
 			{"description", {{"text", server.getConfig().getServerMotd()}}}};
 	std::string payload = jres.dump();
@@ -30,5 +31,5 @@ void handleStatusPacket(Packet& packet, Server& server) {
 	buf.writeVarInt(jsonLen);
 	buf.writeBytes(payload.c_str());
 
-	packet.sendPacket(0x00, buf, server, true);
+	packet.sendPacket(PacketId::Status::Clientbound::STATUS_RESPONSE, buf, server);
 }

@@ -14,5 +14,5 @@ void gameEventPacket(Packet& packet, Server& server) {
 	buf.writeUByte(13);
 	buf.writeFloat(0);
 
-	packet.sendPacket(PacketId::Play::Clientbound::GAME_EVENT, buf, server, true);
+	packet.sendPacket(PacketId::Play::Clientbound::GAME_EVENT, buf, server);
 }

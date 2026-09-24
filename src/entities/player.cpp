@@ -2,16 +2,20 @@
 
 #include "lib/UUID.hpp"
 #include "network/server.hpp"
+#include "world/ChunkStreamer.hpp"
 
 #include <string>
 
 Player::Player(Server& server)
-	: _name("Player_entity"), _state(PlayerState::None), _socketFd(-1), x(0), y(0), z(0), health(0), _uuid(),
-	  _playerId(server.getIdManager().allocate()), _server(server), _config(new PlayerConfig()) {}
+	: _name("Player_entity"), _state(PlayerState::None), _socketFd(-1), _disconnected(false), _socketClosed(false), x(0), y(0), z(0), health(0), _uuid(),
+	  _playerId(server.getIdManager().allocate()), _server(server), _config(new PlayerConfig()) {
+	_inventory.fill(-1);
+}
 
 Player::Player(const std::string& name, const PlayerState state, const int socket, Server& server)
-	: _state(state), _socketFd(socket), x(0), y(0), z(0), health(20), _uuid(), _playerId(server.getIdManager().allocate()), _server(server),
+	: _state(state), _socketFd(socket), _disconnected(false), _socketClosed(false), x(0), y(0), z(0), health(20), _uuid(), _playerId(server.getIdManager().allocate()), _server(server),
 	  _config(new PlayerConfig()) {
+	_inventory.fill(-1);
 	if (name.length() > 32)
 		_name = name.substr(0, 31);
 	else
@@ -31,6 +35,7 @@ Player& Player::operator=(const Player& src) {
 }
 
 Player::~Player() {
+	_chunkStreamer.reset(); // Releases its chunks while the player is still whole
 	_server.getIdManager().release(_playerId);
 	delete _config;
 }
@@ -43,6 +48,8 @@ void		Player::setSocketFd(int socket) { this->_socketFd = socket; }
 int			Player::getSocketFd() const { return (this->_socketFd); }
 
 void Player::setUUID(UUID uuid) { _uuid = uuid; }
+
+void Player::createChunkStreamer() { _chunkStreamer = std::make_unique<ChunkStreamer>(_server, *this); }
 
 int Player::getPlayerID() const { return (_playerId); }
 

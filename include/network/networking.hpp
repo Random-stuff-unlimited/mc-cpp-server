@@ -15,6 +15,7 @@ class Server;
 #include <mutex>
 #include <queue>
 #include <thread>
+#include <unordered_map>
 #include <unistd.h>
 #include <vector>
 
@@ -67,8 +68,24 @@ template <typename T> class ThreadSafeQueue {
 
 class NetworkManager {
   private:
-	ThreadSafeQueue<Packet*> _incomingPackets;
-	ThreadSafeQueue<Packet*> _outgoingPackets;
+	// One queue per worker: a connection always goes to the same worker, so its packets are handled in order
+	std::vector<std::unique_ptr<ThreadSafeQueue<Packet*>>> _workerQueues;
+	ThreadSafeQueue<Packet*>							   _outgoingPackets;
+
+	// Bytes received but not yet forming a full packet, per socket. Only used by the receiver thread
+	std::unordered_map<int, std::vector<uint8_t>> _recvBuffers;
+
+	// Bytes a client couldn't take yet. Only used by the sender thread
+	struct PendingOutput {
+		std::shared_ptr<Player>				  player;
+		std::vector<uint8_t>				  data;
+		size_t								  offset		   = 0;
+		bool								  closeWhenFlushed = false;
+		std::chrono::steady_clock::time_point lastProgress;
+	};
+	static constexpr size_t					  MAX_PENDING_OUTPUT	 = 16 * 1024 * 1024;
+	static constexpr std::chrono::seconds	  PENDING_OUTPUT_TIMEOUT{10};
+	std::unordered_map<Player*, PendingOutput> _pendingOutput;
 
 	std::vector<std::thread> _workerThreads;
 	std::atomic<bool>		 _shutdownFlag;
@@ -79,6 +96,7 @@ class NetworkManager {
 	Server&					 _server;
 	int						 _epollFd;
 	int						 _serverSocket;
+	size_t					 _workerCount;
 
   public:
 	NetworkManager(size_t  worker_count,
@@ -101,15 +119,23 @@ class NetworkManager {
 	Server& getServer() { return _server; }
 
 	void enqueueOutgoingPacket(Packet* p);
+	// Stops reading from the player and closes its socket once the packets already queued for it are sent. Safe from any thread
+	void requestDisconnect(Player* player);
 
   private:
 	void receiverThreadLoop();
 	void senderThreadLoop();
-	void workerThreadLoop();
+	void workerThreadLoop(size_t index);
 
 	void setupEpoll();
-	void handleIncomingData(Player* connection);
-	void handleIncomingData(int socket);
+	void acceptConnections();
+	bool readFromSocket(const std::shared_ptr<Player>& player);
+	bool extractPackets(const std::shared_ptr<Player>& player);
+	void queueOutput(Packet* p);
+	void flushPendingOutput();
+	bool sendAvailable(int socket, const uint8_t* data, size_t size, size_t& sent);
+	bool detachPlayer(Player* player);
+	void closePlayerSocket(Player* player);
 };
 
 #endif

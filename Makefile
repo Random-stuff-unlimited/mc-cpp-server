@@ -10,6 +10,10 @@ SOURCE_DIR      := src
 INCLUDE_DIR     := include
 DEPS_DIR        := .deps
 
+# Local server started by make run, created from the default files in resources/
+SERVER_DIR      := debug_server
+RESOURCES_DIR   := resources
+
 # Final executable path (easily modifiable)
 TARGET          := $(BUILD_DIR)/$(TARGET_NAME)
 
@@ -82,7 +86,7 @@ else
 endif
 
 # ================================= TARGETS ==================================
-.PHONY: all clean distclean clean-test debug release info help run install uninstall compile_commands
+.PHONY: all clean distclean clean-server debug release info help run install uninstall compile_commands update-gamedata packets
 
 # Default target
 all: info $(TARGET)
@@ -142,32 +146,37 @@ distclean:
 	@rm -rf $(BUILD_DIR) $(DEPS_DIR)
 	@printf "$(BOLD)$(BRIGHT_GREEN)✨ Complete cleanup finished!$(RESET)\n"
 
-# Clean test-server directory
-clean-test:
-	@printf "$(BOLD)$(BRIGHT_RED)🧹 Cleaning test-server directory...$(RESET)\n"
-	@rm -rf test-server
-	@printf "$(BOLD)$(BRIGHT_GREEN)✨ Test-server cleanup finished!$(RESET)\n"
+# Remove the local server (its world and config included)
+clean-server:
+	@printf "$(BOLD)$(BRIGHT_RED)🧹 Removing $(SERVER_DIR)...$(RESET)\n"
+	@rm -rf $(SERVER_DIR)
+	@printf "$(BOLD)$(BRIGHT_GREEN)✨ $(SERVER_DIR) removed$(RESET)\n"
 
-# Run the executable
+# Run the server in $(SERVER_DIR). Created from resources/ the first time; afterwards its config and world are
+# kept, only the executable and the game data are updated
 run: $(TARGET)
-	@printf "$(BOLD)$(BRIGHT_MAGENTA)🚀 Setting up test-server environment...$(RESET)\n"
-	@mkdir -p test-server
-	@printf "$(BOLD)$(BRIGHT_BLUE)📦 Copying executable to test-server...$(RESET)\n"
-	@cp $(TARGET) test-server/$(TARGET_NAME)
-	@printf "$(BOLD)$(BRIGHT_BLUE)📦 Copying config.json to test-server...$(RESET)\n"
-	@cp -f config.json test-server/ 2>/dev/null || printf "$(YELLOW)⚠️  config.json not found, skipping...$(RESET)\n"
-	@printf "$(BOLD)$(BRIGHT_BLUE)📦 Copying world folder to test-server...$(RESET)\n"
-	@if [ -d "world" ]; then \
-		cp -r world test-server/; \
-		printf "$(BOLD)$(BRIGHT_GREEN)✅ World folder copied successfully!$(RESET)\n"; \
-	else \
-		printf "$(YELLOW)⚠️  World folder not found, skipping...$(RESET)\n"; \
+	@if [ ! -d "$(SERVER_DIR)" ]; then \
+		printf "$(BOLD)$(BRIGHT_MAGENTA)🚀 Creating $(SERVER_DIR) from $(RESOURCES_DIR)/...$(RESET)\n"; \
+		mkdir -p $(SERVER_DIR); \
 	fi
-	@printf "$(BOLD)$(BRIGHT_GREEN)✅ Test environment ready!$(RESET)\n"
-	@printf "$(BOLD)$(BRIGHT_MAGENTA)🚀 Running $(TARGET_NAME)...$(RESET)\n"
+	@[ -f "$(SERVER_DIR)/config.json" ] || cp $(RESOURCES_DIR)/config.json $(SERVER_DIR)/
+	@[ -d "$(SERVER_DIR)/world" ] || cp -r $(RESOURCES_DIR)/world $(SERVER_DIR)/
+	@cp $(TARGET) $(SERVER_DIR)/.$(TARGET_NAME).new && mv -f $(SERVER_DIR)/.$(TARGET_NAME).new $(SERVER_DIR)/$(TARGET_NAME)
+	@rm -rf $(SERVER_DIR)/gamedata && cp -r $(RESOURCES_DIR)/gamedata $(SERVER_DIR)/
+	@printf "$(BOLD)$(BRIGHT_MAGENTA)🚀 Running $(TARGET_NAME) in $(SERVER_DIR)/$(RESET)\n"
 	@printf "$(DIM)$(WHITE)" && echo "================================================" && printf "$(RESET)"
-	@cd test-server && ./$(TARGET_NAME)
+	@cd $(SERVER_DIR) && ./$(TARGET_NAME)
 	@printf "$(DIM)$(WHITE)" && echo "================================================" && printf "$(RESET)"
+
+# Regenerate resources/gamedata/ for another Minecraft version: make update-gamedata VERSION=1.21.10
+update-gamedata:
+	@if [ -z "$(VERSION)" ]; then printf "$(BOLD)$(RED)Usage: make update-gamedata VERSION=<minecraft version>$(RESET)\n"; exit 1; fi
+	@python3 tools/update_gamedata.py $(VERSION)
+	@python3 tools/packet_status.py
+
+# Regenerate docs/PACKETS_SUPPORTED.md and docs/PACKETS_MISSING.md from the code
+packets:
+	@python3 tools/packet_status.py
 
 # Display project information
 info:
@@ -222,8 +231,8 @@ help:
 	@printf "$(BOLD)$(BRIGHT_CYAN)║$(RESET) $(BRIGHT_GREEN)%-10s$(RESET) %-39s $(BOLD)$(BRIGHT_CYAN)      ║$(RESET)\n" "release" "Build in release mode"
 	@printf "$(BOLD)$(BRIGHT_CYAN)║$(RESET) $(BRIGHT_GREEN)%-10s$(RESET) %-39s $(BOLD)$(BRIGHT_CYAN)      ║$(RESET)\n" "clean" "Remove build artifacts (preserve dirs)"
 	@printf "$(BOLD)$(BRIGHT_CYAN)║$(RESET) $(BRIGHT_GREEN)%-10s$(RESET) %-39s $(BOLD)$(BRIGHT_CYAN)      ║$(RESET)\n" "distclean" "Remove all build artifacts and dirs"
-	@printf "$(BOLD)$(BRIGHT_CYAN)║$(RESET) $(BRIGHT_GREEN)%-10s$(RESET) %-39s $(BOLD)$(BRIGHT_CYAN)      ║$(RESET)\n" "clean-test" "Remove test-server directory"
-	@printf "$(BOLD)$(BRIGHT_CYAN)║$(RESET) $(BRIGHT_GREEN)%-10s$(RESET) %-39s $(BOLD)$(BRIGHT_CYAN)      ║$(RESET)\n" "run" "Setup test-server and run executable"
+	@printf "$(BOLD)$(BRIGHT_CYAN)║$(RESET) $(BRIGHT_GREEN)%-10s$(RESET) %-39s $(BOLD)$(BRIGHT_CYAN)      ║$(RESET)\n" "clean-server" "Remove debug_server (world included)"
+	@printf "$(BOLD)$(BRIGHT_CYAN)║$(RESET) $(BRIGHT_GREEN)%-10s$(RESET) %-39s $(BOLD)$(BRIGHT_CYAN)      ║$(RESET)\n" "run" "Build and run the server in debug_server/"
 	@printf "$(BOLD)$(BRIGHT_CYAN)║$(RESET) $(BRIGHT_GREEN)%-10s$(RESET) %-39s $(BOLD)$(BRIGHT_CYAN)      ║$(RESET)\n" "compile_commands" "Generate compile_commands.json for LSP"
 	@printf "$(BOLD)$(BRIGHT_CYAN)║$(RESET) $(BRIGHT_GREEN)%-10s$(RESET) %-39s $(BOLD)$(BRIGHT_CYAN)      ║$(RESET)\n" "install" "Install the executable to system"
 	@printf "$(BOLD)$(BRIGHT_CYAN)║$(RESET) $(BRIGHT_GREEN)%-10s$(RESET) %-39s $(BOLD)$(BRIGHT_CYAN)      ║$(RESET)\n" "uninstall" "Remove the executable from system"
