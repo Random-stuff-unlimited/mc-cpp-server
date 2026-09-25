@@ -31,7 +31,7 @@ void Chunk::setBiome(int x, int y, int z, uint32_t biome) {
 void Chunk::markModified() {
 	_dirty.store(true);
 	_version.fetch_add(1);
-	_cachedPacket.reset();
+	invalidatePacket();
 }
 
 size_t Chunk::memoryUsage() const {

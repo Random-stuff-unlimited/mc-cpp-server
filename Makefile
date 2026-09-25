@@ -26,7 +26,7 @@ INCLUDE_FLAGS   := -I$(INCLUDE_DIR) -I$(INCLUDE_DIR)/data -I$(INCLUDE_DIR)/netwo
 
 # Linker flags (add your libraries here)
 LDFLAGS         :=
-LIBS            := -lz
+LIBS            := -lz -ldeflate
 
 # ================================ COLOR SETUP ===============================
 # ANSI color codes for beautiful output
@@ -86,7 +86,7 @@ else
 endif
 
 # ================================= TARGETS ==================================
-.PHONY: all clean distclean clean-server debug release info help run install uninstall compile_commands update-gamedata packets
+.PHONY: test all clean distclean clean-server debug release info help run install uninstall compile_commands update-gamedata packets
 
 # Default target
 all: info $(TARGET)
@@ -130,6 +130,22 @@ $(DEPS_DIR):
 # Include dependency files (only if they exist)
 -include $(DEPS)
 
+# Unit tests (tests/*.cpp), linked with every object of the server but main
+TEST_SOURCES    := $(shell find tests -name "*.cpp" -type f 2>/dev/null)
+TEST_OBJECTS    := $(patsubst tests/%.cpp,$(BUILD_DIR)/tests/%.o,$(TEST_SOURCES))
+TEST_TARGET     := $(BUILD_DIR)/run-tests
+
+test: $(TEST_TARGET)
+	@printf "$(BOLD)$(BRIGHT_CYAN)🧪 Running tests$(RESET)\n"
+	@./$(TEST_TARGET)
+
+$(TEST_TARGET): $(filter-out $(BUILD_DIR)/main.o,$(OBJECTS)) $(TEST_OBJECTS)
+	@$(CXX) $^ -o $@ $(LDFLAGS) $(LIBS)
+
+$(BUILD_DIR)/tests/%.o: tests/%.cpp tests/Test.hpp
+	@mkdir -p $(dir $@)
+	@$(CXX) $(CXXFLAGS) $(INCLUDE_FLAGS) -Itests -c $< -o $@
+
 # Clean build artifacts
 clean:
 	@printf "$(BOLD)$(BRIGHT_RED)🧹 Cleaning build artifacts...$(RESET)\n"
@@ -160,6 +176,7 @@ run: $(TARGET)
 		mkdir -p $(SERVER_DIR); \
 	fi
 	@[ -f "$(SERVER_DIR)/config.json" ] || cp $(RESOURCES_DIR)/config.json $(SERVER_DIR)/
+	@[ -d "$(SERVER_DIR)/death-messages" ] || cp -r $(RESOURCES_DIR)/death-messages $(SERVER_DIR)/
 	@[ -d "$(SERVER_DIR)/world" ] || cp -r $(RESOURCES_DIR)/world $(SERVER_DIR)/
 	@cp $(TARGET) $(SERVER_DIR)/.$(TARGET_NAME).new && mv -f $(SERVER_DIR)/.$(TARGET_NAME).new $(SERVER_DIR)/$(TARGET_NAME)
 	@rm -rf $(SERVER_DIR)/gamedata && cp -r $(RESOURCES_DIR)/gamedata $(SERVER_DIR)/

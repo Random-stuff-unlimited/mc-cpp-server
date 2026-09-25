@@ -1,25 +1,66 @@
 #include "lib/compression.hpp"
 
 #include <algorithm>
+#include <array>
+#include <libdeflate.h>
 #include <stdexcept>
 #include <zlib.h>
 
 namespace compression {
 
+	namespace {
+		// libdeflate objects aren't thread-safe but are costly to create: one per thread, created on first use
+		struct ThreadCompressors {
+			std::array<libdeflate_compressor*, 13> compressors{};
+			libdeflate_decompressor*			   decompressor = nullptr;
+
+			~ThreadCompressors() {
+				for (libdeflate_compressor* compressor : compressors) {
+					if (compressor) libdeflate_free_compressor(compressor);
+				}
+				if (decompressor) libdeflate_free_decompressor(decompressor);
+			}
+
+			libdeflate_compressor* compressor(int level) {
+				level = std::clamp(level, 0, 12);
+				if (!compressors[level]) compressors[level] = libdeflate_alloc_compressor(level);
+				if (!compressors[level]) throw std::runtime_error("libdeflate_alloc_compressor failed");
+				return compressors[level];
+			}
+
+			libdeflate_decompressor* decompressorInstance() {
+				if (!decompressor) decompressor = libdeflate_alloc_decompressor();
+				if (!decompressor) throw std::runtime_error("libdeflate_alloc_decompressor failed");
+				return decompressor;
+			}
+		};
+		thread_local ThreadCompressors t_compressors;
+	} // namespace
+
+	void zlibCompressAppend(const uint8_t* data, size_t size, int level, std::vector<uint8_t>& out) {
+		libdeflate_compressor* compressor = t_compressors.compressor(level);
+		size_t				   start	  = out.size();
+		out.resize(start + libdeflate_zlib_compress_bound(compressor, size));
+		size_t written = libdeflate_zlib_compress(compressor, data, size, out.data() + start, out.size() - start);
+		if (written == 0) throw std::runtime_error("zlib compression failed");
+		out.resize(start + written);
+	}
+
 	std::vector<uint8_t> zlibCompress(const uint8_t* data, size_t size, int level) {
-		uLongf				 outSize = compressBound(size);
-		std::vector<uint8_t> out(outSize);
-		if (compress2(out.data(), &outSize, data, size, level) != Z_OK) throw std::runtime_error("zlib compression failed");
-		out.resize(outSize);
+		std::vector<uint8_t> out;
+		zlibCompressAppend(data, size, level, out);
 		return out;
+	}
+
+	bool zlibDecompressInto(const uint8_t* data, size_t size, uint8_t* out, size_t expectedSize) {
+		size_t actual = 0;
+		return libdeflate_zlib_decompress(t_compressors.decompressorInstance(), data, size, out, expectedSize, &actual) == LIBDEFLATE_SUCCESS &&
+			   actual == expectedSize;
 	}
 
 	std::vector<uint8_t> zlibDecompress(const uint8_t* data, size_t size, size_t expectedSize) {
 		std::vector<uint8_t> out(expectedSize);
-		uLongf				 outSize = expectedSize;
-		if (uncompress(out.data(), &outSize, data, size) != Z_OK || outSize != expectedSize) {
-			throw std::runtime_error("zlib decompression failed");
-		}
+		if (!zlibDecompressInto(data, size, out.data(), expectedSize)) throw std::runtime_error("zlib decompression failed");
 		return out;
 	}
 

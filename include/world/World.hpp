@@ -56,6 +56,7 @@ class World {
 		std::chrono::seconds	  autosaveInterval{300};
 		std::chrono::seconds	  unloadDelay{30};
 		size_t					  ioThreads = 2;
+		int						  compressionThreshold = 256; // Of the network, for the cached Chunk Data packets
 	};
 	struct Spawn {
 		double x, y, z;
@@ -69,7 +70,7 @@ class World {
 	void acquireChunk(int x, int z, ChunkCallback onReady = nullptr);
 	void releaseChunk(int x, int z);
 	// Called once the chunk is lit, which needs its 8 neighbors loaded too: only lit chunks can be sent to players.
-	// The caller must hold a ticket on the chunk
+	// Its Chunk Data packet is encoded by then (on an I/O thread). The caller must hold a ticket on the chunk
 	void whenLit(int x, int z, ChunkCallback onLit);
 
 	// Block state at a world position, -1 if its chunk isn't loaded or y is outside the world
@@ -85,11 +86,16 @@ class World {
 	bool	 isAir(uint32_t state) const;
 	uint32_t airState() const { return _layout.air; }
 
-	// Chunk Data packet ready to send (framed and compressed), encoded once and cached in the chunk
-	std::shared_ptr<const std::vector<uint8_t>> getChunkPacket(const std::shared_ptr<Chunk>& chunk, int compressionThreshold);
+	// Chunk Data packet ready to send (framed and compressed), encoded once and cached in the chunk. Encoding is slow:
+	// done on the I/O threads before whenLit's callback, so the game thread normally only gets the cached one
+	std::shared_ptr<const std::vector<uint8_t>> getChunkPacket(const std::shared_ptr<Chunk>& chunk);
 
 	// Unloads idle chunks and autosaves. Call about once per second
 	void tick();
+	// Game thread, once per tick unless the game is frozen: advances the game time and the time of day
+	void	tickTime();
+	int64_t getGameTime() const { return _gameTime; }
+	int64_t getDayTime() const { return _dayTime; }
 	// Saves every modified chunk. The world can't load chunks anymore afterwards
 	void shutdown();
 
@@ -134,8 +140,12 @@ class World {
 	std::unordered_map<int64_t, Entry>		_chunks;
 	bool									_stopped = false;
 	std::chrono::steady_clock::time_point	_lastAutosave;
+	int64_t									_gameTime = 0; // Ticks since the world was created
+	int64_t									_dayTime  = 0; // Time of day: 0 = sunrise, 24000 ticks a day
 
 	void				   loadLevel();
+	// Writes the game time to level.json
+	void				   saveLevel();
 	std::shared_ptr<Chunk> loadOrGenerate(int x, int z);
 	void				   finishLoad(int x, int z, std::shared_ptr<Chunk> chunk);
 	bool				   readyToLight(int64_t key); // Called with _chunksMutex held

@@ -168,6 +168,9 @@ void World::loadLevel() {
 	_storage	 = std::make_unique<ChunkStorage>(_settings.directory, _layout, *_blockPalette, *_biomePalette);
 	_anvil	 = std::make_unique<AnvilImporter>(_settings.directory, _gameData, _layout);
 
+	_gameTime = level.value("time", int64_t(0));
+	_dayTime  = level.value("day-time", int64_t(0));
+
 	_generatorOptions = level.value("generator", defaultGenerator());
 	GeneratorSettings generatorSettings(_generatorOptions, _gameData, _layout.minY, dimension->height, level.value("seed", int64_t(0)));
 	_generator = createGenerator(generatorSettings);
@@ -194,6 +197,28 @@ void World::loadLevel() {
 						  "World " + _settings.directory.filename().string() + ": " + _dimensionName + ", generator " +
 								  _generatorOptions.value("type", "?") + (_anvil->available() ? ", importing the vanilla world" : ""),
 						  "World");
+}
+
+void World::saveLevel() {
+	std::filesystem::path levelFile = _settings.directory / "level.json";
+	try {
+		nlohmann::json level;
+		{
+			std::ifstream in(levelFile);
+			level = nlohmann::json::parse(in);
+		}
+		level["time"]	  = _gameTime;
+		level["day-time"] = _dayTime;
+		std::ofstream out(levelFile);
+		out << level.dump(2) << "\n";
+	} catch (const std::exception& e) {
+		g_logger->logGameInfo(ERROR, "Cannot save level.json: " + std::string(e.what()), "World");
+	}
+}
+
+void World::tickTime() {
+	_gameTime++;
+	_dayTime++;
 }
 
 bool World::isAir(uint32_t state) const { return std::find(_airStates.begin(), _airStates.end(), state) != _airStates.end(); }
@@ -317,7 +342,7 @@ void World::light(int x, int z) {
 		ChunkLight light  = LightEngine::compute(pointers, *_lightTables);
 		std::lock_guard<std::mutex> lock(area[4]->mutex());
 		area[4]->setLight(std::move(light));
-		area[4]->setCachedPacket(nullptr);
+		area[4]->invalidatePacket();
 		if (versions() == before) break;
 	}
 
@@ -330,6 +355,9 @@ void World::light(int x, int z) {
 		it->second.lighting = false;
 		waiters.swap(it->second.litWaiters);
 	}
+	// Chunks nobody waits for (the outer ring of the players' views) are never sent: not worth encoding
+	if (waiters.empty()) return;
+	getChunkPacket(area[4]);
 	for (ChunkCallback& callback : waiters) callback(area[4]);
 }
 
@@ -345,7 +373,21 @@ void World::whenLit(int x, int z, ChunkCallback onLit) {
 			it->second.litWaiters.push_back(std::move(onLit));
 		}
 	}
-	if (lit) onLit(lit);
+	if (!lit) return;
+	bool encoded;
+	{
+		std::lock_guard<std::mutex> lock(lit->mutex());
+		encoded = lit->cachedPacket() != nullptr;
+	}
+	if (encoded) {
+		onLit(lit);
+	} else {
+		// Changed since it was encoded, or never needed until now
+		_io.submitLoad([this, lit, onLit = std::move(onLit)] {
+			getChunkPacket(lit);
+			onLit(lit);
+		});
+	}
 }
 
 size_t World::getLoadedChunkCount() {
@@ -419,7 +461,7 @@ void World::relight(int x, int y, int z, std::vector<LightUpdate>* lightUpdates)
 			bool changed = std::find(changes.sky[i].begin(), changes.sky[i].end(), true) != changes.sky[i].end() ||
 						   std::find(changes.block[i].begin(), changes.block[i].end(), true) != changes.block[i].end();
 			if (!changed) continue;
-			window[i]->setCachedPacket(nullptr);
+			window[i]->invalidatePacket();
 			if (lightUpdates) {
 				Buffer buf;
 				buf.writeVarInt(window[i]->x());
@@ -509,6 +551,7 @@ void World::tick() {
 
 	for (auto& [key, chunk] : toUnload) _io.submitSave([this, key, chunk] { save(key, chunk, true); });
 	for (auto& [key, chunk] : toAutosave) _io.submitSave([this, key, chunk] { save(key, chunk, false); });
+	if (autosave) saveLevel();
 	if (autosave && !toAutosave.empty()) {
 		g_logger->logGameInfo(INFO, "Autosaving " + std::to_string(toAutosave.size()) + " chunks", "World");
 	}
@@ -534,18 +577,27 @@ void World::shutdown() {
 		if (chunk->isDirty() && writeChunk(chunk)) saved++;
 	}
 	_storage->flush();
+	saveLevel();
 	g_logger->logGameInfo(INFO, "World saved (" + std::to_string(saved) + " chunks written)", "World");
 }
 
 // ----- Network encoding -----
 
-std::shared_ptr<const std::vector<uint8_t>> World::getChunkPacket(const std::shared_ptr<Chunk>& chunk, int compressionThreshold) {
-	std::lock_guard<std::mutex> lock(chunk->mutex());
-	if (auto cached = chunk->cachedPacket()) return cached;
-
+std::shared_ptr<const std::vector<uint8_t>> World::getChunkPacket(const std::shared_ptr<Chunk>& chunk) {
+	std::vector<uint8_t> body;
+	uint64_t			 generation;
+	{
+		std::lock_guard<std::mutex> lock(chunk->mutex());
+		if (auto cached = chunk->cachedPacket()) return cached;
+		generation = chunk->packetGeneration();
+		body	   = encodeChunkData(*chunk);
+	}
+	// Compressed without the lock: the game thread may be changing a block of this chunk meanwhile
 	auto packet = std::make_shared<const std::vector<uint8_t>>(Packet::buildFrame(
-			PacketId::Play::Clientbound::LEVEL_CHUNK_WITH_LIGHT, encodeChunkData(*chunk), compressionThreshold, CHUNK_PACKET_COMPRESSION_LEVEL));
-	chunk->setCachedPacket(packet);
+			PacketId::Play::Clientbound::LEVEL_CHUNK_WITH_LIGHT, body, _settings.compressionThreshold, CHUNK_PACKET_COMPRESSION_LEVEL));
+
+	std::lock_guard<std::mutex> lock(chunk->mutex());
+	if (chunk->packetGeneration() == generation) chunk->setCachedPacket(packet); // Not if it changed meanwhile
 	return packet;
 }
 

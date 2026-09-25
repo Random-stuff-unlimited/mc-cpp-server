@@ -12,7 +12,7 @@ using json = nlohmann::json;
 
 Config::Config()
 	: _execPath(getPath()), _serverMotd("A Minecraft Server"), _serverAddress("127.0.0.1"),
-	  _serverPort(25565), _serverSize(20), _viewDistance(10), _compressionThreshold(256), _worldName("world"), _autosaveInterval(300), _gamemode("survival"), _difficulty("normal") {}
+	  _serverPort(25565), _serverSize(20), _viewDistance(10), _compressionThreshold(256), _tickRate(20), _worldName("world"), _autosaveInterval(300), _gamemode("survival"), _difficulty("normal") {}
 
 bool Config::loadConfig() {
 	std::ifstream inputFile(_execPath.parent_path() / "config.json"); // Should change the config path later if needed
@@ -35,6 +35,7 @@ bool Config::loadConfig() {
 		Config::setDifficulty(config["world"]["difficulty"]);
 		_viewDistance		  = std::clamp(config["server"].value("view-distance", _viewDistance), 2, 32);
 		_compressionThreshold = config["server"].value("compression-threshold", _compressionThreshold);
+		_tickRate			  = config["server"].value("tick-rate", _tickRate);
 		_autosaveInterval	  = std::max(10, config["world"].value("autosave-interval", _autosaveInterval));
 	} catch (json::parse_error& e) {
 		g_logger->logGameInfo(ERROR, "Error parsing config.json: " + std::string(e.what()), "SERVER");

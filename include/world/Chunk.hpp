@@ -53,6 +53,13 @@ class Chunk {
 	// Encoded Chunk Data packet, shared by every player that receives this chunk. Reset on modification
 	std::shared_ptr<const std::vector<uint8_t>> cachedPacket() const { return _cachedPacket; }
 	void setCachedPacket(std::shared_ptr<const std::vector<uint8_t>> packet) { _cachedPacket = std::move(packet); }
+	// Drops the cached packet after a change (blocks or light)
+	void invalidatePacket() {
+		_cachedPacket.reset();
+		_packetGeneration++;
+	}
+	// Incremented by invalidatePacket(): a packet encoded meanwhile is outdated
+	uint64_t packetGeneration() const { return _packetGeneration; }
 	// Called after modifying sections() directly
 	void markModified();
 
@@ -70,6 +77,7 @@ class Chunk {
 	std::atomic<bool>				 _dirty;
 	std::atomic<uint64_t>			 _version{0};
 	std::shared_ptr<const std::vector<uint8_t>> _cachedPacket;
+	uint64_t						 _packetGeneration = 0;
 
 	ChunkSection& sectionAt(int y) { return _sections[(y - _minY) >> 4]; }
 	const ChunkSection& sectionAt(int y) const { return _sections[(y - _minY) >> 4]; }

@@ -7,13 +7,13 @@
 #include <string>
 
 Player::Player(Server& server)
-	: _name("Player_entity"), _state(PlayerState::None), _socketFd(-1), _disconnected(false), _socketClosed(false), x(0), y(0), z(0), health(0), _uuid(),
+	: _name("Player_entity"), _state(PlayerState::None), _socketFd(-1), _disconnected(false), x(0), y(0), z(0), health(0), _uuid(),
 	  _playerId(server.getIdManager().allocate()), _server(server), _config(new PlayerConfig()) {
 	_inventory.fill(-1);
 }
 
 Player::Player(const std::string& name, const PlayerState state, const int socket, Server& server)
-	: _state(state), _socketFd(socket), _disconnected(false), _socketClosed(false), x(0), y(0), z(0), health(20), _uuid(), _playerId(server.getIdManager().allocate()), _server(server),
+	: _state(state), _socketFd(socket), _disconnected(false), x(0), y(0), z(0), health(20), _uuid(), _playerId(server.getIdManager().allocate()), _server(server),
 	  _config(new PlayerConfig()) {
 	_inventory.fill(-1);
 	if (name.length() > 32)

@@ -5,7 +5,8 @@
 		"motd": "§aServeur Minecraft en C!",
 		"max-players": 20,
 		"view-distance": 10,
-		"compression-threshold": 256
+		"compression-threshold": 256,
+		"tick-rate": 20
 	},
 	"world": {
 		"name": "world",

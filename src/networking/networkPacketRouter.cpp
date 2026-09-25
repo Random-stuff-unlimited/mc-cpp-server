@@ -26,32 +26,37 @@ namespace {
 		packet->setReturnPacket(PACKET_DISCONNECT);
 	}
 
-	void enterPlay(Packet* packet, Server& server) {
-		g_logger->logNetwork(INFO, "Transitioning to Play state", "Configuration");
-		handleAcknowledgeFinishConfigurationPacket(*packet, server);
+} // namespace
 
-		Player*				player = packet->getPlayer();
-		const World::Spawn& spawn  = server.getWorld().getSpawn();
-		player->setGameMode(gameModeFromConfig(server.getConfig().getGamemode()));
-		player->setPosition(spawn.x, spawn.y, spawn.z);
+// Game thread
+void enterPlay(Packet* packet, Server& server) {
+	g_logger->logNetwork(INFO, "Transitioning to Play state", "Configuration");
+	handleAcknowledgeFinishConfigurationPacket(*packet, server);
 
-		sendPlayPacket(*packet, server);
-		changeDifficultyPacket(*packet, server);
-		playerAbilitiesPacket(*packet, server);
-		setHeldItemPacket(*packet, server);
-		synchronizePlayerPositionPacket(*packet, server);
+	Player*				player = packet->getPlayer();
+	const World::Spawn& spawn  = server.getWorld().getSpawn();
+	player->setGameMode(gameModeFromConfig(server.getConfig().getGamemode()));
+	player->setPosition(spawn.x, spawn.y, spawn.z);
 
-		// Stream the chunks around the spawn, within the smaller of the server's and the client's view distance
-		int viewDistance = std::min<int>(server.getConfig().getViewDistance(), player->getPlayerConfig()->getViewDistance());
-		viewDistance = std::max(2, viewDistance);
-		player->createChunkStreamer();
-		player->getChunkStreamer()->start(spawn.x, spawn.z, viewDistance);
+	sendPlayPacket(*packet, server);
+	changeDifficultyPacket(*packet, server);
+	playerAbilitiesPacket(*packet, server);
+	setHeldItemPacket(*packet, server);
+	synchronizePlayerPositionPacket(*packet, server);
 
-		// Tab list and player entities, both ways
-		server.getPlayerTracker().join(player->shared_from_this(), viewDistance);
-		Combat::sendHealth(server, *player);
-	}
+	// Stream the chunks around the spawn, within the smaller of the server's and the client's view distance
+	int viewDistance = std::min<int>(server.getConfig().getViewDistance(), player->getPlayerConfig()->getViewDistance());
+	viewDistance = std::max(2, viewDistance);
+	player->createChunkStreamer();
+	player->getChunkStreamer()->start(spawn.x, spawn.z, viewDistance);
 
+	// Tab list and player entities, both ways
+	server.getPlayerTracker().join(player->shared_from_this(), viewDistance);
+	Combat::sendHealth(server, *player);
+	server.addGamePlayer(player->shared_from_this());
+}
+
+namespace {
 	constexpr uint8_t MOVE_FLAG_ON_GROUND = 0x01;
 
 	void handleMove(Packet* packet, Server& server, bool withPosition, bool withRotation) {
@@ -74,7 +79,7 @@ namespace {
 		if (withPosition) {
 			if (ChunkStreamer* streamer = player->getChunkStreamer()) streamer->onPlayerMove(x, z);
 		}
-		server.getPlayerTracker().move(player, withPosition, withRotation);
+		server.getPlayerTracker().move(player);
 		if (withPosition) Combat::onMove(server, *player, previousY);
 	}
 
@@ -88,6 +93,7 @@ namespace {
 // Main Packet Router
 // ========================================
 
+// Network threads: every state but Play
 void packetRouter(Packet* packet, Server& server) {
 	if (packet == nullptr) return;
 
@@ -149,8 +155,6 @@ void packetRouter(Packet* packet, Server& server) {
 			sendRegistryData(*packet, server);
 			sendUpdateTags(*packet, server);
 			handleFinishConfigurationPacket(*packet, server);
-		} else if (id == PacketId::Configuration::Serverbound::FINISH_CONFIGURATION) {
-			enterPlay(packet, server);
 		} else if (id == PacketId::Configuration::Serverbound::COOKIE_RESPONSE || id == PacketId::Configuration::Serverbound::CUSTOM_PAYLOAD ||
 				   id == PacketId::Configuration::Serverbound::KEEP_ALIVE || id == PacketId::Configuration::Serverbound::PONG ||
 				   id == PacketId::Configuration::Serverbound::RESOURCE_PACK ||
@@ -164,78 +168,85 @@ void packetRouter(Packet* packet, Server& server) {
 		}
 		break;
 
-	case PlayerState::Play:
-		switch (id) {
-		case PacketId::Play::Serverbound::ACCEPT_TELEPORTATION:
-			handleConfirmTeleportationPacket(*packet, server);
-			gameEventPacket(*packet, server);
-			break;
-		case PacketId::Play::Serverbound::MOVE_PLAYER_POS:
-			handleMove(packet, server, true, false);
-			break;
-		case PacketId::Play::Serverbound::MOVE_PLAYER_POS_ROT:
-			handleMove(packet, server, true, true);
-			break;
-		case PacketId::Play::Serverbound::MOVE_PLAYER_ROT:
-			handleMove(packet, server, false, true);
-			break;
-		case PacketId::Play::Serverbound::MOVE_PLAYER_STATUS_ONLY:
-			handleMove(packet, server, false, false);
-			break;
-		case PacketId::Play::Serverbound::CHUNK_BATCH_RECEIVED:
-			if (ChunkStreamer* streamer = player->getChunkStreamer()) streamer->onBatchReceived(packet->getData().readFloat());
-			break;
-		case PacketId::Play::Serverbound::KEEP_ALIVE:
-			player->onKeepAliveResponse(packet->getData().readLong());
-			break;
-		case PacketId::Play::Serverbound::PLAYER_ACTION:
-			handlePlayerActionPacket(*packet, server);
-			break;
-		case PacketId::Play::Serverbound::USE_ITEM_ON:
-			handleUseItemOnPacket(*packet, server);
-			break;
-		case PacketId::Play::Serverbound::SET_CARRIED_ITEM:
-			handleSetCarriedItemPacket(*packet, server);
-			break;
-		case PacketId::Play::Serverbound::SET_CREATIVE_MODE_SLOT:
-			handleSetCreativeModeSlotPacket(*packet, server);
-			break;
-		case PacketId::Play::Serverbound::INTERACT: {
-			int entityId = packet->getData().readVarInt();
-			if (packet->getData().readVarInt() == ATTACK) {
-				if (auto target = server.getPlayerTracker().findVisible(player, entityId)) Combat::attack(server, *player, *target);
-			}
-			// Right-clicking entities isn't handled yet
-			break;
-		}
-		case PacketId::Play::Serverbound::SWING: {
-			Buffer animation;
-			animation.writeVarInt(player->getPlayerID());
-			animation.writeUByte(packet->getData().readVarInt() == 0 ? ANIMATE_SWING_MAIN_HAND : ANIMATE_SWING_OFF_HAND);
-			server.getPlayerTracker().broadcast(player, PacketId::Play::Clientbound::ANIMATE, animation, false);
-			break;
-		}
-		case PacketId::Play::Serverbound::PLAYER_COMMAND: {
-			packet->getData().readVarInt(); // Entity id (always the player itself)
-			int action = packet->getData().readVarInt();
-			if (action == START_SPRINTING) player->setSprinting(true);
-			if (action == STOP_SPRINTING) player->setSprinting(false);
-			break;
-		}
-		case PacketId::Play::Serverbound::CLIENT_COMMAND:
-			if (packet->getData().readVarInt() == CLIENT_COMMAND_RESPAWN) Combat::respawn(server, *player);
-			break;
-		case PacketId::Play::Serverbound::PLAYER_LOADED:
-			g_logger->logNetwork(DEBUG, "Player fully loaded in game", "Play");
-			break;
-		default:
-			break; // Not handled yet (see docs/PACKETS_MISSING.md)
-		}
-		break;
-
 	default:
 		g_logger->logNetwork(WARN, "Unknown player state: " + std::to_string(static_cast<int>(player->getPlayerState())), "PacketRouter");
 		packet->setReturnPacket(PACKET_DISCONNECT);
 		break;
+	}
+}
+
+// Game thread: the Play state
+void playPacketRouter(Packet* packet, Server& server) {
+	Player* player = packet->getPlayer();
+	int32_t id	   = static_cast<int32_t>(packet->getId());
+	switch (id) {
+	case PacketId::Play::Serverbound::ACCEPT_TELEPORTATION:
+		handleConfirmTeleportationPacket(*packet, server);
+		gameEventPacket(*packet, server);
+		break;
+	case PacketId::Play::Serverbound::MOVE_PLAYER_POS:
+		handleMove(packet, server, true, false);
+		break;
+	case PacketId::Play::Serverbound::MOVE_PLAYER_POS_ROT:
+		handleMove(packet, server, true, true);
+		break;
+	case PacketId::Play::Serverbound::MOVE_PLAYER_ROT:
+		handleMove(packet, server, false, true);
+		break;
+	case PacketId::Play::Serverbound::MOVE_PLAYER_STATUS_ONLY:
+		handleMove(packet, server, false, false);
+		break;
+	case PacketId::Play::Serverbound::CHUNK_BATCH_RECEIVED:
+		if (ChunkStreamer* streamer = player->getChunkStreamer()) streamer->onBatchReceived(packet->getData().readFloat());
+		break;
+	case PacketId::Play::Serverbound::KEEP_ALIVE:
+		player->onKeepAliveResponse(packet->getData().readLong());
+		break;
+	case PacketId::Play::Serverbound::PLAYER_ACTION:
+		handlePlayerActionPacket(*packet, server);
+		break;
+	case PacketId::Play::Serverbound::USE_ITEM_ON:
+		handleUseItemOnPacket(*packet, server);
+		break;
+	case PacketId::Play::Serverbound::SET_CARRIED_ITEM:
+		handleSetCarriedItemPacket(*packet, server);
+		break;
+	case PacketId::Play::Serverbound::SET_CREATIVE_MODE_SLOT:
+		handleSetCreativeModeSlotPacket(*packet, server);
+		break;
+	case PacketId::Play::Serverbound::INTERACT: {
+		int entityId = packet->getData().readVarInt();
+		if (packet->getData().readVarInt() == ATTACK) {
+			if (auto target = server.getPlayerTracker().findVisible(player, entityId)) Combat::attack(server, *player, *target);
+		}
+		// Right-clicking entities isn't handled yet
+		break;
+	}
+	case PacketId::Play::Serverbound::SWING: {
+		Buffer animation;
+		animation.writeVarInt(player->getPlayerID());
+		animation.writeUByte(packet->getData().readVarInt() == 0 ? ANIMATE_SWING_MAIN_HAND : ANIMATE_SWING_OFF_HAND);
+		server.getPlayerTracker().broadcast(player, PacketId::Play::Clientbound::ANIMATE, animation, false);
+		break;
+	}
+	case PacketId::Play::Serverbound::PLAYER_COMMAND: {
+		packet->getData().readVarInt(); // Entity id (always the player itself)
+		int action = packet->getData().readVarInt();
+		if (action == START_SPRINTING) player->setSprinting(true);
+		if (action == STOP_SPRINTING) player->setSprinting(false);
+		break;
+	}
+	case PacketId::Play::Serverbound::CLIENT_COMMAND:
+		if (packet->getData().readVarInt() == CLIENT_COMMAND_RESPAWN) Combat::respawn(server, *player);
+		break;
+	case PacketId::Play::Serverbound::CLIENT_INFORMATION:
+		// Sent again when the player changes its settings (language...)
+		handleClientInformationPacket(*packet, server);
+		break;
+	case PacketId::Play::Serverbound::PLAYER_LOADED:
+		g_logger->logNetwork(DEBUG, "Player fully loaded in game", "Play");
+		break;
+	default:
+		break; // Not handled yet (see docs/PACKETS_MISSING.md)
 	}
 }

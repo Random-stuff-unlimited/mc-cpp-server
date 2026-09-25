@@ -19,8 +19,7 @@ void writeSpawnInfo(Buffer& buf, Player& player, Server& server) {
 	buf.writeBool(true);												   // Flat world (lower horizon)
 
 	// Death location, used by the recovery compass
-	CombatState&				combat = player.combat();
-	std::lock_guard<std::mutex> lock(combat.mutex);
+	const CombatState& combat = player.combat();
 	buf.writeBool(combat.hasDeathLocation);
 	if (combat.hasDeathLocation) {
 		buf.writeString(world.getDimensionName());

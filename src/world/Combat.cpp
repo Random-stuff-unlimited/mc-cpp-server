@@ -13,14 +13,14 @@
 #include "world/World.hpp"
 
 #include <algorithm>
-#include <chrono>
 #include <cmath>
+#include <unordered_map>
 
 namespace {
 	constexpr float	  MAX_HEALTH			= 20;
-	constexpr int64_t INVULNERABILITY_MS	= 500;	 // 10 ticks
-	constexpr int64_t REGENERATION_MS		= 4000;	 // 80 ticks, when food >= 18
-	constexpr int64_t COMBAT_END_MS			= 15000; // 300 ticks without damage
+	constexpr int64_t INVULNERABILITY_TICKS = 10;
+	constexpr int64_t REGENERATION_TICKS	= 80;  // When food >= 18
+	constexpr int64_t COMBAT_END_TICKS		= 300; // Without damage
 	constexpr double  BASE_KNOCKBACK		= 0.4;
 	constexpr double  SPRINT_KNOCKBACK		= 0.5;
 	constexpr double  EYE_HEIGHT			= 1.62;
@@ -32,15 +32,14 @@ namespace {
 	constexpr int	  GAME_EVENT_WAIT_CHUNKS = 13;
 	constexpr int	  HEALTH_DATA_INDEX		= 9; // LivingEntity.DATA_HEALTH_ID
 	constexpr int	  FLOAT_SERIALIZER		= 3; // EntityDataSerializers.FLOAT
+	constexpr int64_t KILL_CREDIT_TICKS		= 100; // Vanilla lastHurtByPlayer memory
 
 	// Player inventory window slots of the armor
 	constexpr int ARMOR_SLOTS[4] = {5, 6, 7, 8};
 	constexpr GameData::EquipmentSlot ARMOR_SLOT_TYPES[4] = {GameData::EquipmentSlot::Head, GameData::EquipmentSlot::Chest,
 															 GameData::EquipmentSlot::Legs, GameData::EquipmentSlot::Feet};
 
-	int64_t nowMs() {
-		return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
-	}
+	int64_t currentTick(Server& server) { return server.getTickLoop().getTickCount(); }
 
 	struct Armor {
 		float armor = 0, toughness = 0, knockbackResistance = 0;
@@ -100,40 +99,48 @@ namespace {
 		event.writeByte(ENTITY_EVENT_DEATH);
 		tracker.broadcast(&victim, PacketId::Play::Clientbound::ENTITY_EVENT, event, false);
 
-		std::vector<std::string> args = {victim.getPlayerName()};
-		if (source.attacker) args.push_back(source.attacker->getPlayerName());
+		// Message from death-messages/, in each player's language. The killer is the player that hurt the victim
+		// recently, if any
+		const CombatState& state  = victim.combat();
+		bool			   credit = !state.lastAttacker.empty() && currentTick(server) - state.lastAttackedAt <= KILL_CREDIT_TICKS;
+		std::string		   victimName = victim.getPlayerName();
+		std::string		   sourceName = source.attacker ? source.attacker->getPlayerName() : "";
+		std::string		   killerName = credit ? state.lastAttacker : "";
+		auto			   text		  = [&](const Player& reader) {
+			  return server.getDeathMessages().format(reader.getPlayerConfig()->getLocale(), source.type, victimName, sourceName, killerName);
+		};
 
-		// Death screen with the message, then the message in everyone's chat
+		// Death screen with the message
 		Buffer screen;
 		screen.writeVarInt(id);
-		TextComponent::writeTranslatable(screen, source.deathMessage, args);
+		TextComponent::writeText(screen, text(victim));
 		Packet::send(victim.shared_from_this(), PacketId::Play::Clientbound::PLAYER_COMBAT_KILL, screen, server);
-		tracker.broadcastMessage(source.deathMessage, args, "");
+
+		// Then in everyone's chat: encoded once per language
+		std::unordered_map<std::string, std::vector<uint8_t>> frames;
+		for (const auto& player : server.getGamePlayers()) {
+			std::vector<uint8_t>& frame = frames[player->getPlayerConfig()->getLocale()];
+			if (frame.empty()) {
+				Buffer chat;
+				TextComponent::writeText(chat, text(*player));
+				chat.writeBool(false); // In the chat, not above the hotbar
+				frame = Packet::buildFrame(PacketId::Play::Clientbound::SYSTEM_CHAT, chat.getData(), server.getConfig().getCompressionThreshold());
+			}
+			Packet::sendFrame(player, frame, server);
+		}
 	}
 } // namespace
 
 namespace Combat {
 
 	void sendHealth(Server& server, Player& player) {
-		float health, saturation;
-		int	  food;
-		{
-			std::lock_guard<std::mutex> lock(player.combat().mutex);
-			health	   = player.combat().health;
-			food	   = player.combat().food;
-			saturation = player.combat().saturation;
-		}
-		sendHealthValues(server, player, health, food, saturation);
+		sendHealthValues(server, player, player.combat().health, player.combat().food, player.combat().saturation);
 	}
 
 	void attack(Server& server, Player& attacker, Player& target) {
 		if (&attacker == &target || attacker.getGameMode() == GameMode::Spectator) return;
-		double fallDistance;
-		{
-			std::lock_guard<std::mutex> lock(attacker.combat().mutex);
-			if (attacker.combat().dead) return;
-			fallDistance = attacker.combat().fallDistance;
-		}
+		if (attacker.combat().dead) return;
+		double fallDistance = attacker.combat().fallDistance;
 		// Vanilla entity interaction range: 3 blocks, 5 in creative, plus a margin for latency
 		double range = (attacker.getGameMode() == GameMode::Creative ? 5.0 : 3.0) + 1.0;
 		if (reachDistance(attacker, target) > range) return;
@@ -142,8 +149,9 @@ namespace Combat {
 		const GameData::ItemProperties* item		= server.getGameData().getItemProperties(attacker.getItemInHand(0));
 		float							baseDamage	= 1.0f + (item ? item->attackDamage : 0.0f);
 		float							attackSpeed = std::max(0.1f, 4.0f + (item ? item->attackSpeed : 0.0f));
-		int64_t							now			= nowMs();
-		double							strength	= std::clamp((now - attacker.getLastAttack() + 25) / (1000.0 / attackSpeed), 0.0, 1.0);
+		int64_t							now			= currentTick(server);
+		// Vanilla getAttackStrengthScale(0.5): ticks since the last attack against the item's cooldown
+		double strength = std::clamp((now - attacker.getLastAttack() + 0.5) / (20.0 / attackSpeed), 0.0, 1.0);
 		attacker.setLastAttack(now);
 
 		float damage = baseDamage * static_cast<float>(0.2 + strength * strength * 0.8);
@@ -151,7 +159,7 @@ namespace Combat {
 		bool  critical = strong && fallDistance > 0 && !attacker.isOnGround() && !attacker.isSprinting();
 		if (critical) damage *= 1.5f;
 
-		DamageSource source{"minecraft:player_attack", "death.attack.player", &attacker};
+		DamageSource source{"minecraft:player_attack", &attacker};
 		if (!Combat::damage(server, target, damage, source)) return;
 
 		if (strong && attacker.isSprinting()) {
@@ -178,14 +186,13 @@ namespace Combat {
 		bool bypassesInvulnerability = gameData.isInTag("minecraft:damage_type", "minecraft:bypasses_invulnerability", typeId);
 		if ((victim.getGameMode() == GameMode::Creative || victim.getGameMode() == GameMode::Spectator) && !bypassesInvulnerability) return false;
 
-		int64_t now	 = nowMs();
+		int64_t now	 = currentTick(server);
 		Armor	armor = wornArmor(gameData, victim);
 		float	health, saturation;
 		int		food;
 		bool	died = false, enteredCombat = false;
 		{
-			std::lock_guard<std::mutex> lock(victim.combat().mutex);
-			CombatState&				state = victim.combat();
+			CombatState& state = victim.combat();
 			if (state.dead) return false;
 
 			// Just hit: only a stronger hit gets through, for the difference
@@ -194,9 +201,13 @@ namespace Combat {
 				if (amount <= state.lastDamage) return false;
 				applied = amount - state.lastDamage;
 			} else {
-				state.invulnerableUntil = now + INVULNERABILITY_MS;
+				state.invulnerableUntil = now + INVULNERABILITY_TICKS;
 			}
 			state.lastDamage = amount;
+			if (source.attacker) {
+				state.lastAttacker	 = source.attacker->getPlayerName();
+				state.lastAttackedAt = now;
+			}
 			if (state.health >= MAX_HEALTH) state.lastRegeneration = now; // Regeneration starts counting from the first damage
 			if (!gameData.isInTag("minecraft:damage_type", "minecraft:bypasses_armor", typeId)) applied = afterArmor(applied, armor);
 
@@ -270,11 +281,10 @@ namespace Combat {
 
 		// Below the world: 4 damage every half second, even in creative
 		if (y < world.getMinY() - 64) {
-			damage(server, player, 4.0f, {"minecraft:out_of_world", "death.attack.outOfWorld", nullptr});
+			damage(server, player, 4.0f, {"minecraft:out_of_world", nullptr});
 			return;
 		}
 		if (player.getGameMode() == GameMode::Creative || player.getGameMode() == GameMode::Spectator) {
-			std::lock_guard<std::mutex> lock(player.combat().mutex);
 			player.combat().fallDistance = 0;
 			return;
 		}
@@ -293,8 +303,7 @@ namespace Combat {
 
 		double landedFrom = 0;
 		{
-			std::lock_guard<std::mutex> lock(player.combat().mutex);
-			CombatState&				combat = player.combat();
+			CombatState& combat = player.combat();
 			if (combat.dead || cushioned) {
 				combat.fallDistance = 0;
 				return;
@@ -307,14 +316,13 @@ namespace Combat {
 			combat.fallDistance = 0;
 		}
 		if (landedFrom > 3.0) {
-			damage(server, player, static_cast<float>(std::ceil(landedFrom - 3.0)), {"minecraft:fall", "death.fall", nullptr});
+			damage(server, player, static_cast<float>(std::ceil(landedFrom - 3.0)), {"minecraft:fall", nullptr});
 		}
 	}
 
 	void respawn(Server& server, Player& player) {
 		{
-			std::lock_guard<std::mutex> lock(player.combat().mutex);
-			CombatState&				state = player.combat();
+			CombatState& state = player.combat();
 			if (!state.dead) return;
 			state.dead				= false;
 			state.health			= MAX_HEALTH;
@@ -350,27 +358,18 @@ namespace Combat {
 	}
 
 	void tick(Server& server, Player& player) {
-		int64_t now			  = nowMs();
-		bool	healed		  = false;
-		int64_t combatEnded	  = -1;
-		{
-			std::lock_guard<std::mutex> lock(player.combat().mutex);
-			CombatState&				state = player.combat();
-			if (state.dead) return;
-			if (state.health < MAX_HEALTH && state.food >= 18 && now - state.lastRegeneration >= REGENERATION_MS) {
-				state.health		   = std::min(MAX_HEALTH, state.health + 1);
-				state.lastRegeneration = now;
-				healed				   = true;
-			}
-			if (state.inCombat && now - state.lastCombat > COMBAT_END_MS) {
-				state.inCombat = false;
-				combatEnded	   = (now - state.combatStart) / 50; // Duration in ticks
-			}
+		CombatState& state = player.combat();
+		if (state.dead) return;
+		int64_t now = currentTick(server);
+		if (state.health < MAX_HEALTH && state.food >= 18 && now - state.lastRegeneration >= REGENERATION_TICKS) {
+			state.health		   = std::min(MAX_HEALTH, state.health + 1);
+			state.lastRegeneration = now;
+			sendHealth(server, player);
 		}
-		if (healed) sendHealth(server, player);
-		if (combatEnded >= 0) {
+		if (state.inCombat && now - state.lastCombat > COMBAT_END_TICKS) {
+			state.inCombat = false;
 			Buffer end;
-			end.writeVarInt(static_cast<int32_t>(combatEnded));
+			end.writeVarInt(static_cast<int32_t>(now - state.combatStart)); // Duration in ticks
 			Packet::send(player.shared_from_this(), PacketId::Play::Clientbound::PLAYER_COMBAT_END, end, server);
 		}
 	}

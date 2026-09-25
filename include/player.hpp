@@ -9,21 +9,20 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <vector>
 class Server;
 class ChunkStreamer;
 
 enum class PlayerState { None, Configuration, Handshake, Status, Login, Play };
 
-// Health and combat. Changed by other players' attacks (their worker threads) and by the server tick,
-// so always used with `mutex` held
+// Health and combat. Game thread only. Times are in ticks (TickLoop::getTickCount)
 struct CombatState {
-	std::mutex mutex;
-	float	   health	  = 20;
-	int		   food		  = 20;
-	float	   saturation = 5;
-	bool	   dead		  = false;
+	float health	 = 20;
+	int	  food		 = 20;
+	float saturation = 5;
+	bool  dead		 = false;
 
-	int64_t invulnerableUntil = 0; // Milliseconds (steady clock): 0.5 s after a hit, only stronger hits get through
+	int64_t invulnerableUntil = 0; // 10 ticks after a hit, only stronger hits get through
 	float	lastDamage		  = 0;
 	double	fallDistance	  = 0;
 	int64_t lastRegeneration  = 0;
@@ -32,8 +31,21 @@ struct CombatState {
 	int64_t combatStart = 0;
 	int64_t lastCombat	= 0;
 
+	// Kill credit: the last player that hurt this one, for 100 ticks (death messages)
+	std::string lastAttacker;
+	int64_t		lastAttackedAt = 0;
+
 	bool hasDeathLocation = false; // Where the player last died (recovery compass)
 	int	 deathX = 0, deathY = 0, deathZ = 0;
+};
+
+// Encoded packets waiting to be written to the socket. Filled by any thread (Packet::send), emptied by the network
+// thread that owns the connection
+struct PlayerOutput {
+	std::mutex			 mutex;
+	std::vector<uint8_t> data;
+	bool				 closing = false;	   // Disconnect requested: nothing more is queued, the socket closes once data is written
+	std::atomic<bool>	 flushQueued{false}; // Already in its network thread's list of connections to write
 };
 
 // Protocol ids
@@ -82,24 +94,24 @@ class Player : public std::enable_shared_from_this<Player> {
 	std::atomic<PlayerState> _state;
 	int						 _socketFd;
 	std::atomic<bool>		 _disconnected;
-	bool					 _socketClosed; // Only touched by the sender thread
+	int						 _networkThread = 0; // Index of the network thread that owns the socket
+	PlayerOutput			 _output;
 	std::atomic<int>		 _compressionThreshold{-1};
 	std::atomic<int64_t>	 _keepAlivePending{0}; // Id of the unanswered Keep Alive, 0 if none
 	std::atomic<int64_t>	 _keepAliveSentAt{0};  // Milliseconds, steady clock
 	std::unique_ptr<ChunkStreamer> _chunkStreamer;
 
-	// Game state. Only touched by the worker thread handling this player's packets
-	// Written by this player's worker, read by others (attacks, tracking): atomic
-	std::atomic<GameMode>	_gameMode{GameMode::Survival};
-	std::atomic<double>		_posX{0}, _posY{0}, _posZ{0};
-	std::atomic<float>		_yaw{0};   // Degrees, 0 = looking south (+z), 90 = west
-	std::atomic<float>		_pitch{0}; // Degrees, -90 = looking up
-	std::atomic<bool>		_onGround{false};
+	// Game state. Only used on the game thread (see TickLoop)
+	GameMode				_gameMode = GameMode::Survival;
+	double					_posX = 0, _posY = 0, _posZ = 0;
+	float					_yaw	  = 0; // Degrees, 0 = looking south (+z), 90 = west
+	float					_pitch	  = 0; // Degrees, -90 = looking up
+	bool					_onGround = false;
 	std::array<int32_t, 46> _inventory;		  // Item id per inventory slot (window numbering: hotbar is 36-44, offhand 45), -1 = empty
 	int						_selectedSlot = 3; // Hotbar index 0-8
 	bool					_digging	  = false;
-	std::atomic<bool>		_sprinting{false};
-	int64_t					_lastAttack	  = 0; // Milliseconds: the attack strength recharges from there
+	bool					_sprinting	  = false;
+	int64_t					_lastAttack	  = 0; // Tick of the last attack: the attack strength recharges from there
 	CombatState				_combat;
 	int						_digX = 0, _digY = 0, _digZ = 0;
 	int			  x, y, z;
@@ -125,8 +137,10 @@ class Player : public std::enable_shared_from_this<Player> {
 	// Returns true only for the first caller, so teardown runs exactly once
 	bool markDisconnected() { return !_disconnected.exchange(true); }
 	bool isDisconnected() const { return _disconnected.load(); }
-	bool isSocketClosed() const { return _socketClosed; }
-	void setSocketClosed() { _socketClosed = true; }
+
+	int			  getNetworkThread() const { return _networkThread; }
+	void		  setNetworkThread(int index) { _networkThread = index; }
+	PlayerOutput& output() { return _output; }
 
 	// -1 until Set Compression is sent, then packets of at least this size are compressed (both directions)
 	int	 getCompressionThreshold() const { return _compressionThreshold.load(); }
@@ -189,7 +203,8 @@ class Player : public std::enable_shared_from_this<Player> {
 	void onKeepAliveResponse(int64_t id) { _keepAlivePending.compare_exchange_strong(id, 0); }
 
 	// Get PlayerConfig instance
-	PlayerConfig* getPlayerConfig() { return _config; }
+	PlayerConfig*		getPlayerConfig() { return _config; }
+	const PlayerConfig* getPlayerConfig() const { return _config; }
 	int			  getPlayerID() const;
 	void		  setUUID(UUID uuid);
 	const UUID&	  getUUID() const { return _uuid; }

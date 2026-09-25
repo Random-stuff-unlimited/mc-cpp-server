@@ -118,6 +118,10 @@ void GameData::load(const std::filesystem::path& directory) {
 		_stateBlocks[id]		= getStaticId("minecraft:block", name.substr(0, name.find('[')));
 	}
 
+	_blocks.load(
+			blocks, [this](const std::string& name) { return getStaticId("minecraft:block", name); },
+			_staticRegistries.at("minecraft:block").entries.size(), _blockStateNames.size());
+
 	// Properties once every state is known: checking a shape looks at the block's states
 	for (const auto& [block, info] : blocks.items()) {
 		for (const auto& [property, value] : info.at("properties").items()) setBlockProperty(block, property, value);

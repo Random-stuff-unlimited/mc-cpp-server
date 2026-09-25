@@ -8,6 +8,7 @@
 #include "network/server.hpp"
 #include "player.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <limits>
 
@@ -27,145 +28,197 @@ namespace {
 PlayerTracker::PlayerTracker(Server& server) : _server(server) {}
 
 void PlayerTracker::join(const std::shared_ptr<Player>& player, int viewDistance) {
-	std::lock_guard<std::mutex> lock(_mutex);
-
-	Tracked& joined		 = _players[player.get()];
-	joined.player		 = player;
-	joined.viewDistance	 = viewDistance;
-	joined.chunkX		 = toChunk(player->getX());
-	joined.chunkZ		 = toChunk(player->getZ());
-	joined.sentX		 = toFixed(player->getX());
-	joined.sentY		 = toFixed(player->getY());
-	joined.sentZ		 = toFixed(player->getZ());
-	joined.sentYaw		 = toAngle(player->getYaw());
-	joined.sentPitch	 = toAngle(player->getPitch());
+	Tracked& joined		= _players[player.get()];
+	joined.player		= player;
+	joined.viewDistance = viewDistance;
+	joined.chunkX		= toChunk(player->getX());
+	joined.chunkZ		= toChunk(player->getZ());
+	joined.sentX		= toFixed(player->getX());
+	joined.sentY		= toFixed(player->getY());
+	joined.sentZ		= toFixed(player->getZ());
+	joined.sentYaw		= toAngle(player->getYaw());
+	joined.sentPitch	= toAngle(player->getPitch());
+	addToCell(joined);
+	_byEntityId[player->getPlayerID()] = player.get();
+	_maxViewDistance				   = std::max(_maxViewDistance, viewDistance);
 
 	// Tab list: the newcomer gets everyone (itself included), everyone else gets the newcomer
 	std::vector<Player*> everyone;
+	everyone.reserve(_players.size());
 	for (auto& [key, tracked] : _players) everyone.push_back(key);
 	sendPlayerInfo(player, everyone);
+	Buffer newcomer;
+	writePlayerInfo(newcomer, {player.get()});
+	std::vector<uint8_t> frame =
+			Packet::buildFrame(PacketId::Play::Clientbound::PLAYER_INFO_UPDATE, newcomer.getData(), _server.getConfig().getCompressionThreshold());
 	for (auto& [key, tracked] : _players) {
-		if (key != player.get()) sendPlayerInfo(tracked.player, {player.get()});
+		if (key != player.get()) Packet::sendFrame(tracked.player, frame, _server);
 	}
 
-	for (auto& [key, other] : _players) {
-		if (key != player.get()) updateVisibility(joined, other);
-	}
-	sendMessageLocked("multiplayer.player.joined", {player->getPlayerName()}, "yellow");
+	updateVisibilityAround(joined);
+	broadcastMessage("multiplayer.player.joined", {player->getPlayerName()}, "yellow");
 }
 
 void PlayerTracker::leave(Player* player) {
-	std::lock_guard<std::mutex> lock(_mutex);
-	auto						it = _players.find(player);
+	auto it = _players.find(player);
 	if (it == _players.end()) return;
+	Tracked& leaving = it->second;
 
 	Buffer despawn;
 	despawn.writeVarInt(1);
 	despawn.writeVarInt(player->getPlayerID());
-	sendToViewers(it->second, PacketId::Play::Clientbound::REMOVE_ENTITIES, despawn);
+	sendToViewers(leaving, PacketId::Play::Clientbound::REMOVE_ENTITIES, despawn);
+	for (Player* viewer : leaving.viewers) _players[viewer].visible.erase(player);
+	for (Player* target : leaving.visible) _players[target].viewers.erase(player);
 
 	Buffer info;
 	info.writeVarInt(1);
 	info.writeUUID(player->getUUID());
+	std::vector<uint8_t> frame = Packet::buildFrame(PacketId::Play::Clientbound::PLAYER_INFO_REMOVE, info.getData(), _server.getConfig().getCompressionThreshold());
 	for (auto& [key, other] : _players) {
-		other.viewers.erase(player);
-		if (key != player) Packet::send(other.player, PacketId::Play::Clientbound::PLAYER_INFO_REMOVE, info, _server);
+		if (key != player) Packet::sendFrame(other.player, frame, _server);
 	}
+	removeFromCell(leaving);
+	_byEntityId.erase(player->getPlayerID());
 	_players.erase(it);
-	sendMessageLocked("multiplayer.player.left", {player->getPlayerName()}, "yellow");
+	broadcastMessage("multiplayer.player.left", {player->getPlayerName()}, "yellow");
 }
 
-void PlayerTracker::move(Player* player, bool positionChanged, bool rotationChanged) {
-	std::lock_guard<std::mutex> lock(_mutex);
-	auto						it = _players.find(player);
-	if (it == _players.end()) return;
-	Tracked& moved = it->second;
+void PlayerTracker::move(Player* player) {
+	auto it = _players.find(player);
+	if (it == _players.end() || it->second.moved) return;
+	it->second.moved = true;
+	_moved.push_back(player);
+}
 
-	// Players that already see the mover get the movement first; visibility is updated after, so new viewers
-	// spawn it directly at its new position
-	int		entityId = player->getPlayerID();
+void PlayerTracker::tick(int64_t tickCount) {
+	if (_moved.empty()) return;
+
+	// Who sees whom only changes when crossing a chunk border: checked every tick
+	for (Player* player : _moved) {
+		auto it = _players.find(player);
+		if (it == _players.end()) continue; // Left meanwhile
+		Tracked& tracked = it->second;
+		int		 chunkX	 = toChunk(player->getX());
+		int		 chunkZ	 = toChunk(player->getZ());
+		if (chunkX == tracked.chunkX && chunkZ == tracked.chunkZ) continue;
+		bool cellChanged = cellKey(chunkX, chunkZ) != cellKey(tracked.chunkX, tracked.chunkZ);
+		if (cellChanged) removeFromCell(tracked);
+		tracked.chunkX = chunkX;
+		tracked.chunkZ = chunkZ;
+		if (cellChanged) addToCell(tracked);
+		updateVisibilityAround(tracked);
+	}
+	if (tickCount % UPDATE_INTERVAL != 0) return;
+
+	// Movements, encoded once per mover
+	for (Player* player : _moved) {
+		auto it = _players.find(player);
+		if (it == _players.end()) continue;
+		it->second.moved = false;
+		encodeMovement(it->second, tickCount);
+		if (!it->second.update.empty()) _updated.push_back(&it->second);
+	}
+	_moved.clear();
+
+	// Then one append per viewer, with every movement it sees this tick: in a crowd, each player receives the
+	// movements of all the others at once instead of one by one
+	for (Tracked* mover : _updated) {
+		for (Player* viewer : mover->viewers) {
+			Tracked& receiver = _players.at(viewer);
+			if (receiver.pending.empty()) _receivers.push_back(&receiver);
+			receiver.pending.push_back(mover);
+		}
+	}
+	std::vector<uint8_t> batch;
+	for (Tracked* receiver : _receivers) {
+		batch.clear();
+		for (const Tracked* mover : receiver->pending) batch.insert(batch.end(), mover->update.begin(), mover->update.end());
+		receiver->pending.clear();
+		Packet::sendFrame(receiver->player, batch, _server);
+	}
+	for (Tracked* mover : _updated) mover->update.clear();
+	_updated.clear();
+	_receivers.clear();
+}
+
+// Movement since the last update, as vanilla's ServerEntity.sendChanges: relative moves, and the absolute position
+// when the move is too long for them or every FORCE_SYNC_TICKS to correct the rounding drift
+void PlayerTracker::encodeMovement(Tracked& tracked, int64_t tickCount) {
+	Player* player = tracked.player.get();
 	int64_t x = toFixed(player->getX()), y = toFixed(player->getY()), z = toFixed(player->getZ());
-	int64_t dx = x - moved.sentX, dy = y - moved.sentY, dz = z - moved.sentZ;
+	int64_t dx = x - tracked.sentX, dy = y - tracked.sentY, dz = z - tracked.sentZ;
 	uint8_t yaw = toAngle(player->getYaw()), pitch = toAngle(player->getPitch());
-	positionChanged = positionChanged && (dx != 0 || dy != 0 || dz != 0);
-	rotationChanged = rotationChanged && (yaw != moved.sentYaw || pitch != moved.sentPitch);
+	bool	positionChanged = dx != 0 || dy != 0 || dz != 0;
+	bool	rotationChanged = yaw != tracked.sentYaw || pitch != tracked.sentPitch;
+	bool	sync = positionChanged && (!(fitsShort(dx) && fitsShort(dy) && fitsShort(dz)) || tickCount - tracked.lastSync >= FORCE_SYNC_TICKS);
 
-	if (positionChanged && !(fitsShort(dx) && fitsShort(dy) && fitsShort(dz))) {
-		// More than 8 blocks: absolute position
-		Buffer sync;
-		sync.writeVarInt(entityId);
-		sync.writeDouble(player->getX());
-		sync.writeDouble(player->getY());
-		sync.writeDouble(player->getZ());
-		sync.writeDouble(0); // Velocity
-		sync.writeDouble(0);
-		sync.writeDouble(0);
-		sync.writeFloat(player->getYaw());
-		sync.writeFloat(player->getPitch());
-		sync.writeBool(player->isOnGround());
-		sendToViewers(moved, PacketId::Play::Clientbound::ENTITY_POSITION_SYNC, sync);
-	} else if (positionChanged || rotationChanged) {
-		Buffer move;
-		move.writeVarInt(entityId);
+	tracked.sentX	  = x;
+	tracked.sentY	  = y;
+	tracked.sentZ	  = z;
+	tracked.sentYaw	  = yaw;
+	tracked.sentPitch = pitch;
+	if (sync) tracked.lastSync = tickCount;
+	// Nobody sees it: nothing to encode, new viewers spawn it at the position above
+	if (tracked.viewers.empty() || !(positionChanged || rotationChanged)) return;
+
+	int		entityId  = player->getPlayerID();
+	int		threshold = _server.getConfig().getCompressionThreshold();
+	Buffer	data;
+	if (sync) {
+		data.writeVarInt(entityId);
+		data.writeDouble(player->getX());
+		data.writeDouble(player->getY());
+		data.writeDouble(player->getZ());
+		data.writeDouble(0); // Velocity
+		data.writeDouble(0);
+		data.writeDouble(0);
+		data.writeFloat(player->getYaw());
+		data.writeFloat(player->getPitch());
+		data.writeBool(player->isOnGround());
+		Packet::appendFrame(tracked.update, PacketId::Play::Clientbound::ENTITY_POSITION_SYNC, data.getData().data(), data.getData().size(), threshold);
+	} else {
+		data.writeVarInt(entityId);
 		if (positionChanged) {
-			move.writeShort(static_cast<int16_t>(dx));
-			move.writeShort(static_cast<int16_t>(dy));
-			move.writeShort(static_cast<int16_t>(dz));
+			data.writeShort(static_cast<int16_t>(dx));
+			data.writeShort(static_cast<int16_t>(dy));
+			data.writeShort(static_cast<int16_t>(dz));
 		}
 		if (rotationChanged) {
-			move.writeUByte(yaw);
-			move.writeUByte(pitch);
+			data.writeUByte(yaw);
+			data.writeUByte(pitch);
 		}
-		move.writeBool(player->isOnGround());
+		data.writeBool(player->isOnGround());
 		int packetId = positionChanged && rotationChanged ? PacketId::Play::Clientbound::MOVE_ENTITY_POS_ROT
 					 : positionChanged					 ? PacketId::Play::Clientbound::MOVE_ENTITY_POS
 														 : PacketId::Play::Clientbound::MOVE_ENTITY_ROT;
-		sendToViewers(moved, packetId, move);
+		Packet::appendFrame(tracked.update, packetId, data.getData().data(), data.getData().size(), threshold);
 	}
 
 	if (rotationChanged) {
 		Buffer head;
 		head.writeVarInt(entityId);
 		head.writeUByte(yaw);
-		sendToViewers(moved, PacketId::Play::Clientbound::ROTATE_HEAD, head);
-	}
-	if (positionChanged) {
-		moved.sentX = x;
-		moved.sentY = y;
-		moved.sentZ = z;
-	}
-	if (rotationChanged) {
-		moved.sentYaw	= yaw;
-		moved.sentPitch = pitch;
-	}
-
-	// Who sees whom only changes when crossing a chunk border
-	int chunkX = toChunk(player->getX());
-	int chunkZ = toChunk(player->getZ());
-	if (chunkX != moved.chunkX || chunkZ != moved.chunkZ) {
-		moved.chunkX = chunkX;
-		moved.chunkZ = chunkZ;
-		for (auto& [key, other] : _players) {
-			if (key != player) updateVisibility(moved, other);
-		}
+		Packet::appendFrame(tracked.update, PacketId::Play::Clientbound::ROTATE_HEAD, head.getData().data(), head.getData().size(), threshold);
 	}
 }
 
 void PlayerTracker::respawn(Player* player) {
-	std::lock_guard<std::mutex> lock(_mutex);
-	auto						it = _players.find(player);
+	auto it = _players.find(player);
 	if (it == _players.end()) return;
 	Tracked& tracked = it->second;
 
+	// The Respawn packet made its client forget every entity, and the others must see it spawn again
 	Buffer despawn;
 	despawn.writeVarInt(1);
 	despawn.writeVarInt(player->getPlayerID());
 	sendToViewers(tracked, PacketId::Play::Clientbound::REMOVE_ENTITIES, despawn);
-	for (auto& [key, other] : _players) {
-		if (key != player) other.viewers.erase(player);
-	}
+	for (Player* viewer : tracked.viewers) _players[viewer].visible.erase(player);
+	for (Player* target : tracked.visible) _players[target].viewers.erase(player);
 	tracked.viewers.clear();
+	tracked.visible.clear();
 
+	removeFromCell(tracked);
 	tracked.chunkX	  = toChunk(player->getX());
 	tracked.chunkZ	  = toChunk(player->getZ());
 	tracked.sentX	  = toFixed(player->getX());
@@ -173,25 +226,64 @@ void PlayerTracker::respawn(Player* player) {
 	tracked.sentZ	  = toFixed(player->getZ());
 	tracked.sentYaw	  = toAngle(player->getYaw());
 	tracked.sentPitch = toAngle(player->getPitch());
-	for (auto& [key, other] : _players) {
-		if (key != player) updateVisibility(tracked, other);
-	}
+	addToCell(tracked);
+	updateVisibilityAround(tracked);
 }
 
 std::shared_ptr<Player> PlayerTracker::findVisible(Player* viewer, int entityId) {
-	std::lock_guard<std::mutex> lock(_mutex);
-	for (auto& [key, tracked] : _players) {
-		if (key->getPlayerID() == entityId && tracked.viewers.count(viewer)) return tracked.player;
-	}
-	return nullptr;
+	auto id = _byEntityId.find(entityId);
+	if (id == _byEntityId.end()) return nullptr;
+	const Tracked& target = _players.at(id->second);
+	return target.viewers.count(viewer) ? target.player : nullptr;
 }
 
 void PlayerTracker::broadcast(Player* subject, int packetId, Buffer& data, bool includeSubject) {
-	std::lock_guard<std::mutex> lock(_mutex);
-	auto						it = _players.find(subject);
+	auto it = _players.find(subject);
 	if (it == _players.end()) return;
-	sendToViewers(it->second, packetId, data);
-	if (includeSubject) Packet::send(it->second.player, packetId, data, _server);
+	if (!includeSubject) {
+		sendToViewers(it->second, packetId, data);
+		return;
+	}
+	std::vector<uint8_t> frame = Packet::buildFrame(packetId, data.getData(), _server.getConfig().getCompressionThreshold());
+	sendFrameToViewers(it->second, frame);
+	Packet::sendFrame(it->second.player, frame, _server);
+}
+
+int64_t PlayerTracker::cellKey(int chunkX, int chunkZ) {
+	return (static_cast<int64_t>(chunkZ >> CELL_SHIFT) << 32) | static_cast<uint32_t>(chunkX >> CELL_SHIFT);
+}
+
+void PlayerTracker::addToCell(const Tracked& tracked) { _cells[cellKey(tracked.chunkX, tracked.chunkZ)].push_back(tracked.player.get()); }
+
+void PlayerTracker::removeFromCell(const Tracked& tracked) {
+	auto cell = _cells.find(cellKey(tracked.chunkX, tracked.chunkZ));
+	if (cell == _cells.end()) return;
+	std::vector<Player*>& players = cell->second;
+	auto				  it	  = std::find(players.begin(), players.end(), tracked.player.get());
+	if (it != players.end()) {
+		*it = players.back();
+		players.pop_back();
+	}
+	if (players.empty()) _cells.erase(cell);
+}
+
+void PlayerTracker::updateVisibilityAround(Tracked& subject) {
+	Player*				 self = subject.player.get();
+	std::vector<Player*> candidates(subject.viewers.begin(), subject.viewers.end());
+	candidates.insert(candidates.end(), subject.visible.begin(), subject.visible.end());
+	// Nobody sees further than the largest view distance
+	int radius = _maxViewDistance;
+	for (int cellZ = (subject.chunkZ - radius) >> CELL_SHIFT; cellZ <= (subject.chunkZ + radius) >> CELL_SHIFT; cellZ++) {
+		for (int cellX = (subject.chunkX - radius) >> CELL_SHIFT; cellX <= (subject.chunkX + radius) >> CELL_SHIFT; cellX++) {
+			auto cell = _cells.find(cellKey(cellX << CELL_SHIFT, cellZ << CELL_SHIFT));
+			if (cell != _cells.end()) candidates.insert(candidates.end(), cell->second.begin(), cell->second.end());
+		}
+	}
+	std::sort(candidates.begin(), candidates.end());
+	candidates.erase(std::unique(candidates.begin(), candidates.end()), candidates.end());
+	for (Player* other : candidates) {
+		if (other != self) updateVisibility(subject, _players.at(other));
+	}
 }
 
 bool PlayerTracker::canSee(const Tracked& viewer, const Tracked& target) const {
@@ -206,18 +298,24 @@ void PlayerTracker::updateVisibility(Tracked& a, Tracked& b) {
 		if (visible && !shown) {
 			show(*target, *viewer);
 		} else if (!visible && shown) {
-			target->viewers.erase(viewer->player.get());
-			Buffer despawn;
-			despawn.writeVarInt(1);
-			despawn.writeVarInt(target->player->getPlayerID());
-			Packet::send(viewer->player, PacketId::Play::Clientbound::REMOVE_ENTITIES, despawn, _server);
+			hide(*target, *viewer);
 		}
 	}
+}
+
+void PlayerTracker::hide(Tracked& target, Tracked& viewer) {
+	target.viewers.erase(viewer.player.get());
+	viewer.visible.erase(target.player.get());
+	Buffer despawn;
+	despawn.writeVarInt(1);
+	despawn.writeVarInt(target.player->getPlayerID());
+	Packet::send(viewer.player, PacketId::Play::Clientbound::REMOVE_ENTITIES, despawn, _server);
 }
 
 // Spawns target's entity on viewer's client, at the position the other viewers last received
 void PlayerTracker::show(Tracked& target, Tracked& viewer) {
 	target.viewers.insert(viewer.player.get());
+	viewer.visible.insert(target.player.get());
 
 	Buffer spawn;
 	spawn.writeVarInt(target.player->getPlayerID());
@@ -234,9 +332,13 @@ void PlayerTracker::show(Tracked& target, Tracked& viewer) {
 	Packet::send(viewer.player, PacketId::Play::Clientbound::ADD_ENTITY, spawn, _server);
 }
 
+// Encoded once for all the viewers
 void PlayerTracker::sendToViewers(const Tracked& target, int packetId, Buffer& data) {
 	if (target.viewers.empty()) return;
-	std::vector<uint8_t> frame = Packet::buildFrame(packetId, data.getData(), _server.getConfig().getCompressionThreshold());
+	sendFrameToViewers(target, Packet::buildFrame(packetId, data.getData(), _server.getConfig().getCompressionThreshold()));
+}
+
+void PlayerTracker::sendFrameToViewers(const Tracked& target, const std::vector<uint8_t>& frame) {
 	for (Player* viewer : target.viewers) {
 		auto it = _players.find(viewer);
 		if (it != _players.end()) Packet::sendFrame(it->second.player, frame, _server);
@@ -244,11 +346,6 @@ void PlayerTracker::sendToViewers(const Tracked& target, int packetId, Buffer& d
 }
 
 void PlayerTracker::broadcastMessage(const std::string& translationKey, const std::vector<std::string>& args, const std::string& color) {
-	std::lock_guard<std::mutex> lock(_mutex);
-	sendMessageLocked(translationKey, args, color);
-}
-
-void PlayerTracker::sendMessageLocked(const std::string& translationKey, const std::vector<std::string>& args, const std::string& color) {
 	Buffer message;
 	TextComponent::writeTranslatable(message, translationKey, args, color);
 	message.writeBool(false); // In the chat, not above the hotbar
@@ -258,8 +355,7 @@ void PlayerTracker::sendMessageLocked(const std::string& translationKey, const s
 }
 
 // Tab list entries: name, game mode, shown in the list
-void PlayerTracker::sendPlayerInfo(const std::shared_ptr<Player>& to, const std::vector<Player*>& players) {
-	Buffer info;
+void PlayerTracker::writePlayerInfo(Buffer& info, const std::vector<Player*>& players) {
 	info.writeUByte(INFO_ADD_PLAYER | INFO_UPDATE_GAMEMODE | INFO_UPDATE_LISTED | INFO_UPDATE_LATENCY);
 	info.writeVarInt(static_cast<int32_t>(players.size()));
 	for (Player* player : players) {
@@ -270,5 +366,10 @@ void PlayerTracker::sendPlayerInfo(const std::shared_ptr<Player>& to, const std:
 		info.writeBool(true); // Listed
 		info.writeVarInt(0);  // Latency (ms)
 	}
+}
+
+void PlayerTracker::sendPlayerInfo(const std::shared_ptr<Player>& to, const std::vector<Player*>& players) {
+	Buffer info;
+	writePlayerInfo(info, players);
 	Packet::send(to, PacketId::Play::Clientbound::PLAYER_INFO_UPDATE, info, _server);
 }

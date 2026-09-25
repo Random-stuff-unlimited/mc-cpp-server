@@ -16,6 +16,7 @@ class Config {
 
 	int			_viewDistance;
 	int			_compressionThreshold;
+	float		_tickRate; // Ticks per second, 20 in vanilla
 
 	// World Config
 	std::string _worldName;
@@ -38,6 +39,7 @@ class Config {
 	std::string getDifficulty();
 	int			getViewDistance() const { return _viewDistance; }
 	int			getCompressionThreshold() const { return _compressionThreshold; }
+	float		getTickRate() const { return _tickRate; }
 	int			getAutosaveInterval() const { return _autosaveInterval; }
 
 	void setServerSize(int ServerSize);

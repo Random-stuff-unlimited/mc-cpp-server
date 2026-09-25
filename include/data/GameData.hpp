@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <filesystem>
 
+#include "data/BlockRegistry.hpp"
 #include "lib/json.hpp"
 #include <map>
 #include <string>
@@ -104,6 +105,9 @@ class GameData {
 	const std::string& getBlockStateName(int stateId) const { return _blockStateNames.at(stateId); }
 	int				   getBlockStateCount() const { return static_cast<int>(_blockStateNames.size()); }
 
+	// Block states compiled for the game logic (fast property access)
+	const BlockRegistry& getBlocks() const { return _blocks; }
+
 	// Block (minecraft:block registry id) a state belongs to
 	int					   getBlockOfState(int stateId) const { return _stateBlocks.at(stateId); }
 	const BlockProperties& getBlockProperties(int stateId) const { return _blockProperties.at(_stateBlocks.at(stateId)); }
@@ -140,6 +144,7 @@ class GameData {
 	std::vector<std::string>			 _blockStateNames;
 
 	std::vector<int>	_stateBlocks;
+	BlockRegistry		_blocks;
 	std::vector<BlockProperties> _blockProperties;
 	std::vector<StateProperties> _stateProperties;
 	std::vector<int>	_itemPlacedStates;

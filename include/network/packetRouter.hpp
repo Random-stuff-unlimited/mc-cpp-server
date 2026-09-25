@@ -31,7 +31,12 @@ void handleUseItemOnPacket(Packet& packet, Server& server);
 void handleSetCarriedItemPacket(Packet& packet, Server& server);
 void handleSetCreativeModeSlotPacket(Packet& packet, Server& server);
 
+// Network threads: Handshake, Status, Login and Configuration states
 void packetRouter(Packet* packet, Server& server);
+// Game thread: Play state
+void playPacketRouter(Packet* packet, Server& server);
+// Game thread: Finish Configuration acknowledged, the player enters the world
+void enterPlay(Packet* packet, Server& server);
 
 void handleHandshakeState(Packet* packet, Server& server);
 void handleStatusState(Packet* packet, Server& server);

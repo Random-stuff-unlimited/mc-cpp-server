@@ -1,37 +1,39 @@
+#include "PacketIds.hpp"
 #include "logger.hpp"
 #include "network/networking.hpp"
 #include "network/packet.hpp"
-#include "network/server.hpp"
 #include "network/packetRouter.hpp"
+#include "network/server.hpp"
 #include "player.hpp"
 
-#include <chrono>
 #include <exception>
+#include <memory>
 #include <string>
 
-void NetworkManager::workerThreadLoop(size_t index) {
-	ThreadSafeQueue<Packet*>& queue = *_workerQueues[index];
+// Network thread: a packet just decoded. The game state is only touched on the game thread, so Play packets
+// (and entering Play) are handed to it, in order; the other states are handled here
+void NetworkManager::dispatch(Packet* packet) {
+	Player*		player = packet->getPlayer();
+	PlayerState state  = player->getPlayerState();
 
-	while (!_shutdownFlag.load()) {
-		Packet* packet = nullptr;
+	if (state == PlayerState::Play) {
+		getServer().getTickLoop().post(packet);
+		return;
+	}
+	if (state == PlayerState::Configuration && packet->getId() == PacketId::Configuration::Serverbound::FINISH_CONFIGURATION) {
+		// The next packets are Play packets: they must follow this one to the game thread
+		player->setPlayerState(PlayerState::Play);
+		Server& server = getServer();
+		server.getTickLoop().post([&server, packet] { server.enterGame(packet); });
+		return;
+	}
 
-		if (!queue.waitAndPopTimeout(packet, std::chrono::milliseconds(100))) continue;
-		if (packet == nullptr) break;
-
-		Player* player = packet->getPlayer();
-		// Packets still queued for a player that is being disconnected are dropped
-		if (player && !player->isDisconnected()) {
-			try {
-				packetRouter(packet, getServer());
-				if (packet->getReturnPacket() == PACKET_DISCONNECT) {
-					requestDisconnect(player);
-				}
-			} catch (const std::exception& e) {
-				g_logger->logNetwork(ERROR, "Error processing packet: " + std::string(e.what()), "Worker");
-				requestDisconnect(player);
-			}
-		}
-		// Handlers never keep the incoming packet: anything sent was copied by sendPacket
-		delete packet;
+	std::unique_ptr<Packet> owned(packet);
+	try {
+		packetRouter(packet, getServer());
+		if (packet->getReturnPacket() == PACKET_DISCONNECT) requestDisconnect(player);
+	} catch (const std::exception& e) {
+		g_logger->logNetwork(ERROR, "Error processing packet: " + std::string(e.what()), "Network");
+		requestDisconnect(player);
 	}
 }

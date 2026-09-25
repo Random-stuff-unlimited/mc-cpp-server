@@ -1,0 +1,201 @@
+{
+	"about": "Death message of each damage type (minecraft:damage_type): death.attack.<message-id>, + '.player' when a player is credited with the kill but didn't deal the damage. death-message-type: default, fall_variants (death.fell.*) or intentional_game_design.",
+	"damage-types": {
+		"minecraft:arrow": {
+			"message-id": "arrow",
+			"death-message-type": "default"
+		},
+		"minecraft:bad_respawn_point": {
+			"message-id": "badRespawnPoint",
+			"death-message-type": "intentional_game_design"
+		},
+		"minecraft:cactus": {
+			"message-id": "cactus",
+			"death-message-type": "default"
+		},
+		"minecraft:campfire": {
+			"message-id": "inFire",
+			"death-message-type": "default"
+		},
+		"minecraft:cramming": {
+			"message-id": "cramming",
+			"death-message-type": "default"
+		},
+		"minecraft:dragon_breath": {
+			"message-id": "dragonBreath",
+			"death-message-type": "default"
+		},
+		"minecraft:drown": {
+			"message-id": "drown",
+			"death-message-type": "default"
+		},
+		"minecraft:dry_out": {
+			"message-id": "dryout",
+			"death-message-type": "default"
+		},
+		"minecraft:ender_pearl": {
+			"message-id": "fall",
+			"death-message-type": "fall_variants"
+		},
+		"minecraft:explosion": {
+			"message-id": "explosion",
+			"death-message-type": "default"
+		},
+		"minecraft:fall": {
+			"message-id": "fall",
+			"death-message-type": "fall_variants"
+		},
+		"minecraft:falling_anvil": {
+			"message-id": "anvil",
+			"death-message-type": "default"
+		},
+		"minecraft:falling_block": {
+			"message-id": "fallingBlock",
+			"death-message-type": "default"
+		},
+		"minecraft:falling_stalactite": {
+			"message-id": "fallingStalactite",
+			"death-message-type": "default"
+		},
+		"minecraft:fireball": {
+			"message-id": "fireball",
+			"death-message-type": "default"
+		},
+		"minecraft:fireworks": {
+			"message-id": "fireworks",
+			"death-message-type": "default"
+		},
+		"minecraft:fly_into_wall": {
+			"message-id": "flyIntoWall",
+			"death-message-type": "default"
+		},
+		"minecraft:freeze": {
+			"message-id": "freeze",
+			"death-message-type": "default"
+		},
+		"minecraft:generic": {
+			"message-id": "generic",
+			"death-message-type": "default"
+		},
+		"minecraft:generic_kill": {
+			"message-id": "genericKill",
+			"death-message-type": "default"
+		},
+		"minecraft:hot_floor": {
+			"message-id": "hotFloor",
+			"death-message-type": "default"
+		},
+		"minecraft:in_fire": {
+			"message-id": "inFire",
+			"death-message-type": "default"
+		},
+		"minecraft:in_wall": {
+			"message-id": "inWall",
+			"death-message-type": "default"
+		},
+		"minecraft:indirect_magic": {
+			"message-id": "indirectMagic",
+			"death-message-type": "default"
+		},
+		"minecraft:lava": {
+			"message-id": "lava",
+			"death-message-type": "default"
+		},
+		"minecraft:lightning_bolt": {
+			"message-id": "lightningBolt",
+			"death-message-type": "default"
+		},
+		"minecraft:mace_smash": {
+			"message-id": "mace_smash",
+			"death-message-type": "default"
+		},
+		"minecraft:magic": {
+			"message-id": "magic",
+			"death-message-type": "default"
+		},
+		"minecraft:mob_attack": {
+			"message-id": "mob",
+			"death-message-type": "default"
+		},
+		"minecraft:mob_attack_no_aggro": {
+			"message-id": "mob",
+			"death-message-type": "default"
+		},
+		"minecraft:mob_projectile": {
+			"message-id": "mob",
+			"death-message-type": "default"
+		},
+		"minecraft:on_fire": {
+			"message-id": "onFire",
+			"death-message-type": "default"
+		},
+		"minecraft:out_of_world": {
+			"message-id": "outOfWorld",
+			"death-message-type": "default"
+		},
+		"minecraft:outside_border": {
+			"message-id": "outsideBorder",
+			"death-message-type": "default"
+		},
+		"minecraft:player_attack": {
+			"message-id": "player",
+			"death-message-type": "default"
+		},
+		"minecraft:player_explosion": {
+			"message-id": "explosion.player",
+			"death-message-type": "default"
+		},
+		"minecraft:sonic_boom": {
+			"message-id": "sonic_boom",
+			"death-message-type": "default"
+		},
+		"minecraft:spit": {
+			"message-id": "mob",
+			"death-message-type": "default"
+		},
+		"minecraft:stalagmite": {
+			"message-id": "stalagmite",
+			"death-message-type": "default"
+		},
+		"minecraft:starve": {
+			"message-id": "starve",
+			"death-message-type": "default"
+		},
+		"minecraft:sting": {
+			"message-id": "sting",
+			"death-message-type": "default"
+		},
+		"minecraft:sweet_berry_bush": {
+			"message-id": "sweetBerryBush",
+			"death-message-type": "default"
+		},
+		"minecraft:thorns": {
+			"message-id": "thorns",
+			"death-message-type": "default"
+		},
+		"minecraft:thrown": {
+			"message-id": "thrown",
+			"death-message-type": "default"
+		},
+		"minecraft:trident": {
+			"message-id": "trident",
+			"death-message-type": "default"
+		},
+		"minecraft:unattributed_fireball": {
+			"message-id": "onFire",
+			"death-message-type": "default"
+		},
+		"minecraft:wind_charge": {
+			"message-id": "mob",
+			"death-message-type": "default"
+		},
+		"minecraft:wither": {
+			"message-id": "wither",
+			"death-message-type": "default"
+		},
+		"minecraft:wither_skull": {
+			"message-id": "witherSkull",
+			"death-message-type": "default"
+		}
+	}
+}

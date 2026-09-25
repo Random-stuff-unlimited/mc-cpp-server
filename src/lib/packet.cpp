@@ -32,8 +32,8 @@ Packet& Packet::operator=(const Packet& other) {
 	return (*this);
 }
 
-Packet::Packet(std::shared_ptr<Player> player, int32_t id, const std::vector<uint8_t>& payload, int32_t size)
-	: _size(size), _id(id), _data(payload), _player(std::move(player)), _socketFd(-1), _returnPacket(PACKET_OK) {
+Packet::Packet(std::shared_ptr<Player> player, int32_t id, std::vector<uint8_t> payload, int32_t size)
+	: _size(size), _id(id), _data(std::move(payload)), _player(std::move(player)), _socketFd(-1), _returnPacket(PACKET_OK) {
 	if (_player == nullptr) throw std::runtime_error("Packet init with null player");
 	_socketFd = _player->getSocketFd();
 }
@@ -48,14 +48,11 @@ int Packet::getVarintSize(int32_t value) {
 		std::cerr << "[Packet] ERROR: getVarintSize called with negative value: " << value << std::endl;
 		throw std::runtime_error("getVarintSize called with negative value");
 	}
-	int size		   = 0;
-	int original_value = value;
+	int size = 0;
 	do {
 		value >>= 7;
 		size++;
 	} while (value != 0);
-	// g_logger->logNetwork(INFO, "getVarintSize(" + std::to_string(original_value) + ") = " +
-	// std::to_string(size), "Packet");
 	return size;
 }
 
@@ -73,46 +70,81 @@ int Packet::varintLen(int value) {
 
 void Packet::sendPacket(int id, Buffer& data, Server& server) { send(_player, id, data, server); }
 
+namespace {
+	void writeVarInt(std::vector<uint8_t>& out, uint32_t value) {
+		while (value >= 0x80) {
+			out.push_back(static_cast<uint8_t>(value | 0x80));
+			value >>= 7;
+		}
+		out.push_back(static_cast<uint8_t>(value));
+	}
+
+	// Id + payload of the compressed packets, reused by each thread
+	thread_local std::vector<uint8_t> t_body;
+	thread_local std::vector<uint8_t> t_compressed;
+
+	// Appends to the player's output, unless it is disconnecting
+	template <typename Append> void appendToOutput(const std::shared_ptr<Player>& player, Append append) {
+		PlayerOutput& output = player->output();
+		bool		  wasEmpty;
+		{
+			std::lock_guard<std::mutex> lock(output.mutex);
+			if (output.closing) return;
+			wasEmpty = output.data.empty();
+			append(output.data);
+		}
+		// Whoever makes it non-empty gets it written
+		if (wasEmpty) NetworkManager::markForFlush(player);
+	}
+} // namespace
+
 void Packet::send(const std::shared_ptr<Player>& player, int id, Buffer& data, Server& server) {
-	Packet* out = new Packet(player);
-	out->_data	= Buffer(buildFrame(id, data.getData(), player->getCompressionThreshold()));
-	out->_id	= id;
-	out->_size	= out->_data.getData().size();
-	out->_returnPacket = PACKET_SEND;
-	server.getNetworkManager().enqueueOutgoingPacket(out);
+	const std::vector<uint8_t>& payload	  = data.getData();
+	int							threshold = player->getCompressionThreshold();
+	appendToOutput(player, [&](std::vector<uint8_t>& out) { appendFrame(out, id, payload.data(), payload.size(), threshold); });
+	(void)server;
 }
 
-void Packet::sendFrame(const std::shared_ptr<Player>& player, std::vector<uint8_t> frame, Server& server) {
-	Packet* out = new Packet(player);
-	out->_size	= frame.size();
-	out->_data	= Buffer(std::move(frame));
-	out->_returnPacket = PACKET_SEND;
-	server.getNetworkManager().enqueueOutgoingPacket(out);
+void Packet::sendFrame(const std::shared_ptr<Player>& player, const std::vector<uint8_t>& frame, Server& server) {
+	appendToOutput(player, [&](std::vector<uint8_t>& out) { out.insert(out.end(), frame.begin(), frame.end()); });
+	(void)server;
 }
 
 std::vector<uint8_t> Packet::buildFrame(int id, const std::vector<uint8_t>& data, int compressionThreshold, int compressionLevel) {
-	Buffer body;
-	body.writeVarInt(id);
-	body.writeBytes(data);
+	std::vector<uint8_t> frame;
+	appendFrame(frame, id, data.data(), data.size(), compressionThreshold, compressionLevel);
+	return frame;
+}
 
-	Buffer frame;
+// Written straight into out: no intermediate buffer unless the packet is compressed
+void Packet::appendFrame(std::vector<uint8_t>& out, int id, const uint8_t* data, size_t size, int compressionThreshold, int compressionLevel) {
+	size_t bodySize = varintLen(id) + size;
 	if (compressionThreshold < 0) {
-		frame.writeVarInt(static_cast<int32_t>(body.getData().size()));
-		frame.writeBytes(body.getData());
-		return std::move(frame.getData());
+		out.reserve(out.size() + 5 + bodySize);
+		writeVarInt(out, static_cast<uint32_t>(bodySize));
+		writeVarInt(out, static_cast<uint32_t>(id));
+		out.insert(out.end(), data, data + size);
+		return;
+	}
+	if (static_cast<int64_t>(bodySize) < compressionThreshold) {
+		out.reserve(out.size() + 6 + bodySize);
+		writeVarInt(out, static_cast<uint32_t>(bodySize + 1));
+		out.push_back(0); // Not compressed
+		writeVarInt(out, static_cast<uint32_t>(id));
+		out.insert(out.end(), data, data + size);
+		return;
 	}
 
-	Buffer inner;
-	if (static_cast<int>(body.getData().size()) < compressionThreshold) {
-		inner.writeVarInt(0); // Not compressed
-		inner.writeBytes(body.getData());
-	} else {
-		inner.writeVarInt(static_cast<int32_t>(body.getData().size()));
-		inner.writeBytes(compression::zlibCompress(body.getData().data(), body.getData().size(), compressionLevel));
-	}
-	frame.writeVarInt(static_cast<int32_t>(inner.getData().size()));
-	frame.writeBytes(inner.getData());
-	return std::move(frame.getData());
+	t_body.clear();
+	writeVarInt(t_body, static_cast<uint32_t>(id));
+	t_body.insert(t_body.end(), data, data + size);
+	t_compressed.clear();
+	compression::zlibCompressAppend(t_body.data(), t_body.size(), compressionLevel, t_compressed);
+
+	out.reserve(out.size() + 10 + t_compressed.size());
+	writeVarInt(out, static_cast<uint32_t>(varintLen(static_cast<int>(bodySize)) + t_compressed.size()));
+	writeVarInt(out, static_cast<uint32_t>(bodySize));
+	out.insert(out.end(), t_compressed.begin(), t_compressed.end());
 }
 
 Player*	 Packet::getPlayer() const { return (_player.get()); }

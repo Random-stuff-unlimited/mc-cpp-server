@@ -3,7 +3,6 @@
 
 #include <cstdint>
 #include <memory>
-#include <mutex>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -20,6 +19,8 @@ class Server;
 // Chunks are sent nearest first, in batches (Chunk Batch Start / Finished). The client acknowledges each batch with
 // the rate it can handle; at most MAX_BATCHES_IN_FLIGHT unacknowledged batches are outstanding, so a slow client
 // isn't flooded. Chunks leaving the view distance are released and forgotten client-side.
+//
+// Game thread only.
 class ChunkStreamer {
   public:
 	ChunkStreamer(Server& server, Player& player);
@@ -31,7 +32,7 @@ class ChunkStreamer {
 	// Releases every chunk. Called when the player disconnects
 	void stop();
 	// Whether the client has this chunk, so it must be told when it changes
-	bool hasChunk(int chunkX, int chunkZ);
+	bool hasChunk(int chunkX, int chunkZ) const;
 
   private:
 	static constexpr int MAX_BATCHES_IN_FLIGHT = 4;
@@ -41,7 +42,6 @@ class ChunkStreamer {
 	Server& _server;
 	Player& _player;
 
-	std::mutex												 _mutex;
 	bool													 _active		  = false;
 	int														 _centerX		  = 0;
 	int														 _centerZ		  = 0;
@@ -54,7 +54,7 @@ class ChunkStreamer {
 	std::unordered_set<int64_t>								 _sent;
 
 	void onChunkLoaded(const std::shared_ptr<Chunk>& chunk);
-	void sendBatchesLocked();
+	void sendBatches();
 	void acquire(const std::vector<int64_t>& keys);
 	void release(const std::vector<int64_t>& keys);
 	void waitForLight(const std::vector<int64_t>& keys);
