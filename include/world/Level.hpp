@@ -11,7 +11,9 @@
 #include "world/entity/EntityManager.hpp"
 #include "world/entity/Geometry.hpp"
 #include "world/item/LootTables.hpp"
+#include "world/item/Recipes.hpp"
 #include "world/World.hpp"
+#include "world/blockentity/BlockEntity.hpp"
 
 #include <cstdint>
 #include <deque>
@@ -55,6 +57,8 @@ class Level : public NeighborUpdateTarget {
 
 	const BlockRegistry& blocks() const { return _blocks; }
 	BlockBehaviors&		 behaviors() { return _behaviors; }
+	// gamedata/recipes.json, then the recipes/ folder beside gamedata/
+	const RecipeManager& recipes() const { return _recipes; }
 	const BlockBehavior& behavior(int state) const { return _behaviors.get(_blocks.blockOf(state)); }
 	int64_t				 getGameTime() const { return _world.getGameTime(); }
 	Server&				 server() { return _server; }
@@ -116,7 +120,8 @@ class Level : public NeighborUpdateTarget {
 	bool destroyBlock(const BlockPos& pos, bool drop, int limit = UPDATE_LIMIT);
 	// Block that stays when this one is removed: its fluid (vanilla FluidState.createLegacyBlock) or air
 	int fluidLegacyBlock(int state) const { return _fluids->legacyBlock(_fluids->stateOf(state)); }
-	// Block.dropResources: the block's loot as items around pos. breaker/tool: the player breaking it and its tool
+	// Block.dropResources: the block's loot as items around pos. breaker/tool: the player breaking it and its tool. The
+	// block's entity (for its components) is the one still there, or the one just removed from pos this tick
 	void dropResources(int state, const BlockPos& pos, Player* breaker = nullptr, const ItemStack* tool = nullptr);
 	// Block.popResource: an item at a random point of the block
 	void popResource(const BlockPos& pos, ItemStack stack);
@@ -159,44 +164,51 @@ class Level : public NeighborUpdateTarget {
 	// RedstoneTorchBlock.RECENT_TOGGLES of this level: position and game time
 	std::vector<std::pair<BlockPos, int64_t>>& recentTorchToggles() { return _torchToggles; }
 
-	// ----- Block entities (only what redstone needs: comparators and moving pistons) -----
+	// ----- Block entities -----
 
+	// The block entity at pos, nullptr if none (or its chunk isn't loaded)
+	BlockEntity* getBlockEntity(const BlockPos& pos);
+	// The same, shared: kept alive by whoever holds it (an open menu) even after it leaves the level
+	std::shared_ptr<BlockEntity> getSharedBlockEntity(const BlockPos& pos);
+	template <typename T> T* getBlockEntity(const BlockPos& pos) { return dynamic_cast<T*>(getBlockEntity(pos)); }
+	// LevelChunk.setBlockEntity: replaces the one at its position (which keeps its place among the tickers)
+	void		 setBlockEntity(std::unique_ptr<BlockEntity> entity);
+	// Level.removeBlockEntity. The object stays valid until the end of the tick phase
+	void		 removeBlockEntity(const BlockPos& pos);
+	// Level.blockEntityChanged: its chunk must be saved; comparators read it again
+	void		 blockEntityChanged(const BlockPos& pos);
 	// ComparatorBlockEntity.getOutputSignal: 0 without one
-	int	 comparatorOutput(const BlockPos& pos);
-	void setComparatorOutput(const BlockPos& pos, int output);
-	// PistonMovingBlockEntity at pos, nullptr if none
-	struct MovingPiston {
-		int		  movedState;
-		Direction direction;
-		bool	  extending, sourcePiston;
-		float	  progress = 0.0F, progressO = 0.0F;
-		int64_t	  lastTicked = 0;
-	};
-	MovingPiston* movingPiston(const BlockPos& pos);
-	void		  setMovingPiston(const BlockPos& pos, const MovingPiston& piston);
-	// Level.removeBlockEntity
-	void		  removeMovingPiston(const BlockPos& pos);
-	// PistonMovingBlockEntity.finalTick: the move ends now
-	void		  finalTickMovingPiston(const BlockPos& pos, MovingPiston& piston) {
-		 if (_finalTickPiston) _finalTickPiston(pos, piston);
-	}
+	int			 comparatorOutput(const BlockPos& pos);
+	void		 setComparatorOutput(const BlockPos& pos, int output);
 	// Block entity phase of the tick (Level.tickBlockEntities), after the entities
-	void		  tickBlockEntities();
-	// Set by the pistons' behavior: how a moving piston ticks and ends
-	void setMovingPistonTicker(std::function<void(const BlockPos&, MovingPiston&)> tick, std::function<void(const BlockPos&, MovingPiston&)> finalTick) {
-		_tickMovingPiston  = std::move(tick);
-		_finalTickPiston   = std::move(finalTick);
+	void		 tickBlockEntities();
+	// PistonMovingBlockEntity.tick and finalTick, given by the pistons' behavior (they need its block ids)
+	void setMovingPistonTicker(std::function<void(PistonMovingBlockEntity&)> tick, std::function<void(PistonMovingBlockEntity&)> finalTick) {
+		_tickMovingPiston = std::move(tick);
+		_finalTickPiston  = std::move(finalTick);
+	}
+	void tickMovingPiston(PistonMovingBlockEntity& piston) {
+		if (_tickMovingPiston) _tickMovingPiston(piston);
+	}
+	void finalTickMovingPiston(PistonMovingBlockEntity& piston) {
+		if (_finalTickPiston) _finalTickPiston(piston);
 	}
 
 	// ----- Sounds and entities -----
 
 	enum class SoundSource { Master, Music, Records, Weather, Blocks, Hostile, Neutral, Players, Ambient, Voice, Ui };
 	// Level.playSound: a sound at the center of pos for the players in range, except `except` (who played it already)
-	void playSound(Player* except, const BlockPos& pos, const std::string& sound, SoundSource source, float volume = 1.0F, float pitch = 1.0F);
+	void playSound(Player* except, const BlockPos& pos, const std::string& sound, SoundSource source, float volume = 1.0F, float pitch = 1.0F) {
+		playSoundAt(except, pos.x + 0.5, pos.y + 0.5, pos.z + 0.5, sound, source, volume, pitch);
+	}
+	void playSoundAt(Player* except, double x, double y, double z, const std::string& sound, SoundSource source, float volume = 1.0F,
+					 float pitch = 1.0F);
 	// Entities touching the box (EntitySelector.NO_SPECTATORS): players and items, or players only (living)
 	int	 countEntities(const AABB& box, bool livingOnly);
 	// Entity.checkInsideBlocks: the blocks whose cell the box touches learn it (pressure plates)
-	void checkInsideBlocks(const AABB& box);
+	void checkInsideBlocks(const AABB& box, Entity* entity);
+	// Level.noCollision (blocks only): whether a block's collision shape overlaps the box
+	bool hasBlockCollision(const AABB& box);
 
 	// ----- Scheduled ticks and block events -----
 
@@ -251,6 +263,7 @@ class Level : public NeighborUpdateTarget {
 	const GameData&		 _gameData;
 	const BlockRegistry& _blocks;
 	BlockBehaviors		 _behaviors;
+	RecipeManager		 _recipes;
 	NeighborUpdater		 _neighborUpdater;
 	LevelTicks			 _blockTicks;
 	LevelTicks			 _fluidTicks;
@@ -281,7 +294,7 @@ class Level : public NeighborUpdateTarget {
 	std::vector<uint8_t>	_randomTicks;	// Per state: RANDOM_BLOCK and RANDOM_FLUID
 	bool					_handlingTick = false;
 	std::vector<std::pair<BlockPos, int64_t>> _torchToggles;
-	int						_movingPistonBlock, _redstoneBlock, _power;
+	int						_redstoneBlock, _power;
 	JavaRandom				_soundSeeds{0};
 	std::vector<bool>		_hasBlockEntity; // Per block: an EntityBlock
 
@@ -290,11 +303,12 @@ class Level : public NeighborUpdateTarget {
 		BlockPos pos;
 		bool	 alive = true;
 	};
-	std::unordered_map<int64_t, MovingPiston>				  _movingPistons;
 	std::unordered_map<int64_t, std::shared_ptr<TickerSlot>> _tickerSlots;
 	std::vector<std::shared_ptr<TickerSlot>>				  _tickers, _pendingTickers;
 	bool													  _tickingBlockEntities = false;
-	std::function<void(const BlockPos&, MovingPiston&)>		  _tickMovingPiston, _finalTickPiston;
+	// Removed block entities, deleted once nothing can be using them anymore
+	std::vector<std::shared_ptr<BlockEntity>> _removedBlockEntities;
+	std::function<void(PistonMovingBlockEntity&)> _tickMovingPiston, _finalTickPiston;
 	LootTables				_loot;
 	EntityManager			_entities{*this}; // Last: its entities use the rest while being destroyed
 
@@ -317,8 +331,11 @@ class Level : public NeighborUpdateTarget {
 	int	 updateFromNeighbourShapes(int state, const BlockPos& pos);
 
   private:
-	// Block entity side effects of a block change (LevelChunk.setBlockState)
-	void blockEntityChanged(Chunk& chunk, const BlockPos& pos, int oldState, int newState, int flags);
+	// Block entity side effects of a block change (LevelChunk.setBlockState): the old one goes, the new block's comes
+	void removeBlockEntityOnChange(const BlockPos& pos, int oldState, int newState, int flags);
+	void createBlockEntityOnChange(const BlockPos& pos, int state);
+	void addTicker(const BlockPos& pos);
+	void removeTicker(const BlockPos& pos);
 	void markChanged(const BlockPos& pos);
 	void tickBlock(const BlockPos& pos, int block);
 	void tickFluid(const BlockPos& pos, int fluid);

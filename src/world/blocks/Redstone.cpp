@@ -523,6 +523,8 @@ int ComparatorBlock::updateShape(Level& level, const BlockPos&, int state, Direc
 	return direction == Direction::Down && !canSurviveOn(level, neighborState) ? _ids->air : state;
 }
 
+std::unique_ptr<BlockEntity> ComparatorBlock::newBlockEntity(const BlockPos& pos, int) const { return std::make_unique<ComparatorBlockEntity>(pos); }
+
 int ComparatorBlock::getOutputSignal(Level& level, const BlockPos& pos, int) const { return level.comparatorOutput(pos); }
 
 int ComparatorBlock::calculateOutputSignal(Level& level, const BlockPos& pos, int state) const {
@@ -734,7 +736,7 @@ void PressurePlateBlock::tick(Level& level, const BlockPos& pos, int state) cons
 	if (signal > 0) checkPressed(level, pos, state, signal);
 }
 
-void PressurePlateBlock::entityInside(Level& level, const BlockPos& pos, int state) const {
+void PressurePlateBlock::entityInside(Level& level, const BlockPos& pos, int state, Entity*) const {
 	int signal = signalForState(state);
 	if (signal == 0) checkPressed(level, pos, state, signal);
 }
@@ -986,4 +988,32 @@ int AnalogOutputBlock::getAnalogOutputSignal(Level&, const BlockPos&, int state,
 		return static_cast<int>(std::floor(b.getInt(state, _property) / 4.0F * 15));
 	}
 	return 0;
+}
+
+// ===== Facing of directional blocks =====
+
+int FacingPlacement::getStateForPlacement(Level&, const PlaceContext& context) const {
+	Direction facing;
+	switch (_rule) {
+	case Rule::NearestOpposite:
+		facing = Directions::opposite(context.nearestLookingDirection());
+		break;
+	case Rule::HorizontalOpposite:
+		facing = Directions::opposite(context.horizontalDirection());
+		break;
+	case Rule::HorizontalClockwise:
+		facing = clockWise(context.horizontalDirection());
+		break;
+	case Rule::ClickedFace:
+		facing = context.clickedFace;
+		break;
+	case Rule::Hopper: {
+		Direction into = Directions::opposite(context.clickedFace);
+		facing		   = into == Direction::Up || into == Direction::Down ? Direction::Down : into;
+		break;
+	}
+	}
+	const BlockRegistry& blocks = _context->blocks;
+	int					 state	= blocks.with(blocks.defaultState(context.block), _context->facing, _context->directionValue(facing));
+	return state >= 0 ? state : GENERIC_PLACEMENT;
 }

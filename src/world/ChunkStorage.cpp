@@ -1,5 +1,7 @@
 #include "world/ChunkStorage.hpp"
 
+#include "data/GameData.hpp"
+
 #include "lib/compression.hpp"
 #include "logger.hpp"
 
@@ -14,7 +16,7 @@
 #include <unistd.h>
 
 namespace {
-	constexpr uint8_t PAYLOAD_VERSION  = 3; // 1: no scheduled ticks, 2: no comparator outputs
+	constexpr uint8_t PAYLOAD_VERSION  = 4; // 1: no scheduled ticks, 2: no comparator outputs, 3: comparator outputs only
 	constexpr uint8_t COMPRESSION_ZLIB = 1;
 	constexpr int	  ZLIB_LEVEL	   = 4;
 
@@ -326,8 +328,9 @@ void RegionFile::sync() {
 // ===================== ChunkStorage =====================
 
 ChunkStorage::ChunkStorage(const std::filesystem::path& worldDirectory, const Layout& layout, DiskPalette& blocks, DiskPalette& biomes,
-						   TickTypes tickTypes)
-	: _regionDirectory(worldDirectory / "regions"), _layout(layout), _blocks(blocks), _biomes(biomes), _tickTypes(std::move(tickTypes)) {
+						   TickTypes tickTypes, const GameData* gameData)
+	: _regionDirectory(worldDirectory / "regions"), _layout(layout), _blocks(blocks), _biomes(biomes), _tickTypes(std::move(tickTypes)),
+	  _gameData(gameData) {
 	std::filesystem::create_directories(_regionDirectory);
 }
 
@@ -392,12 +395,39 @@ std::unique_ptr<Chunk> ChunkStorage::load(int x, int z) {
 		chunk->blockTicks().setPending(readTicks(r, x, z, _tickTypes.blockId));
 		chunk->fluidTicks().setPending(readTicks(r, x, z, _tickTypes.fluidId));
 	}
-	if (version >= 3) {
-		// Comparator outputs (their block entities): index in the chunk, output
+	// The position of a block entity from its index in the chunk
+	auto positionOf = [&](uint32_t index) {
+		return BlockPos{x * 16 + static_cast<int>(index & 15), _layout.minY + static_cast<int>(index >> 8), z * 16 + static_cast<int>(index >> 4 & 15)};
+	};
+	if (version == 3) {
+		// Comparator outputs alone: index in the chunk, output
 		uint32_t count = r.varint();
 		for (uint32_t i = 0; i < count; i++) {
-			uint32_t index					  = r.varint();
-			chunk->comparatorOutputs()[index] = r.u8();
+			uint32_t index	  = r.varint();
+			auto	 entity	  = std::make_unique<ComparatorBlockEntity>(positionOf(index));
+			entity->output	  = r.u8();
+			chunk->blockEntities()[index] = std::move(entity);
+		}
+	} else if (version >= 4) {
+		// Block entities: index in the chunk, type, their own bytes (unknown types and unreadable data are dropped)
+		uint32_t count = r.varint();
+		for (uint32_t i = 0; i < count; i++) {
+			uint32_t	index = r.varint();
+			uint32_t	nameLength = r.varint();
+			std::string type;
+			for (uint32_t c = 0; c < nameLength; c++) type += static_cast<char>(r.u8());
+			uint32_t			 size = r.varint();
+			std::vector<uint8_t> data;
+			data.reserve(size);
+			for (uint32_t b = 0; b < size; b++) data.push_back(r.u8());
+			std::unique_ptr<BlockEntity> entity = BlockEntity::create(type, positionOf(index));
+			if (!entity || !_gameData) continue;
+			try {
+				BlockEntityReader in(*_gameData, data.data(), data.size());
+				entity->load(in);
+				chunk->blockEntities()[index] = std::move(entity);
+			} catch (const std::exception&) {
+			}
 		}
 	}
 	return chunk;
@@ -413,10 +443,19 @@ std::vector<uint8_t> ChunkStorage::encode(const Chunk& chunk, int64_t gameTime) 
 	}
 	writeTicks(w, chunk.blockTicks().pack(gameTime), _tickTypes.blockName);
 	writeTicks(w, chunk.fluidTicks().pack(gameTime), _tickTypes.fluidName);
-	w.varint(static_cast<uint32_t>(chunk.comparatorOutputs().size()));
-	for (const auto& [index, output] : chunk.comparatorOutputs()) {
+	if (!_gameData) {
+		w.varint(0);
+		return std::move(w.out);
+	}
+	w.varint(static_cast<uint32_t>(chunk.blockEntities().size()));
+	for (const auto& [index, entity] : chunk.blockEntities()) {
+		BlockEntityWriter data(*_gameData);
+		entity->save(data);
 		w.varint(index);
-		w.u8(output);
+		w.varint(static_cast<uint32_t>(entity->type().size()));
+		for (char c : entity->type()) w.u8(static_cast<uint8_t>(c));
+		w.varint(static_cast<uint32_t>(data.out.size()));
+		for (uint8_t b : data.out) w.u8(b);
 	}
 	return std::move(w.out);
 }

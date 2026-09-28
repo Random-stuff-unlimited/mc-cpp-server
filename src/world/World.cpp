@@ -169,7 +169,7 @@ void World::loadLevel() {
 			[&data](int id) { return data.getStaticName("minecraft:block", id); }, [&data](int id) { return data.getStaticName("minecraft:fluid", id); },
 			[&data](const std::string& name) { return data.getStaticId("minecraft:block", name); },
 			[&data](const std::string& name) { return data.getStaticId("minecraft:fluid", name); }};
-	_storage = std::make_unique<ChunkStorage>(_settings.directory, _layout, *_blockPalette, *_biomePalette, std::move(tickTypes));
+	_storage = std::make_unique<ChunkStorage>(_settings.directory, _layout, *_blockPalette, *_biomePalette, std::move(tickTypes), &_gameData);
 	_anvil	 = std::make_unique<AnvilImporter>(_settings.directory, _gameData, _layout);
 
 	_gameTime = level.value("time", int64_t(0));
@@ -272,6 +272,34 @@ void World::updateTicking(Entry& entry) {
 }
 
 std::shared_ptr<Chunk> World::loadOrGenerate(int x, int z) {
+	std::shared_ptr<Chunk> chunk = loadOrGenerateBlocks(x, z);
+	addMissingBlockEntities(*chunk);
+	return chunk;
+}
+
+void World::addMissingBlockEntities(Chunk& chunk) const {
+	auto typeOf = [&](uint32_t state) -> const std::string& {
+		return _gameData.getBlockProperties(static_cast<int>(state)).blockEntity;
+	};
+	for (size_t s = 0; s < chunk.sections().size(); s++) {
+		const PalettedContainer& section = chunk.sections()[s].blocks;
+		if (section.isSingleValue() ? typeOf(section.singleValue()).empty()
+									: std::none_of(section.palette().begin(), section.palette().end(), [&](uint32_t state) { return !typeOf(state).empty(); }) &&
+										  !section.palette().empty()) {
+			continue;
+		}
+		for (uint32_t index = 0; index < 4096; index++) {
+			const std::string& type = typeOf(section.get(index));
+			if (type.empty()) continue;
+			int		 x = static_cast<int>(index & 15), z = static_cast<int>(index >> 4 & 15), y = _layout.minY + static_cast<int>(s) * 16 + static_cast<int>(index >> 8);
+			uint32_t key = chunk.indexOf(x, y, z);
+			if (chunk.blockEntities().count(key)) continue;
+			chunk.blockEntities()[key] = BlockEntity::create(type, {chunk.x() * 16 + x, y, chunk.z() * 16 + z});
+		}
+	}
+}
+
+std::shared_ptr<Chunk> World::loadOrGenerateBlocks(int x, int z) {
 	std::string position = std::to_string(x) + "," + std::to_string(z);
 	try {
 		if (std::unique_ptr<Chunk> chunk = _storage->load(x, z)) return chunk;
@@ -661,7 +689,17 @@ std::vector<uint8_t> World::encodeChunkData(const Chunk& chunk) const {
 	buf.writeVarInt(static_cast<int32_t>(sectionData.getData().size()));
 	buf.writeBytes(sectionData.getData());
 
-	buf.writeVarInt(0); // Block entities
+	// Block entities: position in the chunk, type, and what the client needs to draw them
+	buf.writeVarInt(static_cast<int32_t>(chunk.blockEntities().size()));
+	for (const auto& [index, entity] : chunk.blockEntities()) {
+		const BlockPos& pos = entity->pos();
+		buf.writeUByte(static_cast<uint8_t>((pos.x & 15) << 4 | (pos.z & 15)));
+		buf.writeShort(static_cast<int16_t>(pos.y));
+		buf.writeVarInt(_gameData.getStaticId("minecraft:block_entity_type", entity->type()));
+		std::vector<uint8_t> tag;
+		entity->writeUpdateTag(tag);
+		buf.writeBytes(tag);
+	}
 
 	writeLightData(buf, chunk.light(), sectionCount, nullptr, nullptr);
 

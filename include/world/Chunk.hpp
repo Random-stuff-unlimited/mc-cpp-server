@@ -3,6 +3,7 @@
 
 #include "world/LevelTicks.hpp"
 #include "world/Light.hpp"
+#include "world/blockentity/BlockEntity.hpp"
 #include "world/PalettedContainer.hpp"
 
 #include <atomic>
@@ -80,10 +81,12 @@ class Chunk {
 	bool isUnloaded() const { return _unloaded.load(std::memory_order_relaxed); }
 	void setUnloaded() { _unloaded.store(true, std::memory_order_relaxed); }
 
-	// Output of each comparator (ComparatorBlockEntity), by index ((y - minY) << 8 | z << 4 | x). Saved with the chunk:
-	// hold mutex() to use it
-	std::unordered_map<uint32_t, uint8_t>& comparatorOutputs() { return _comparatorOutputs; }
-	const std::unordered_map<uint32_t, uint8_t>& comparatorOutputs() const { return _comparatorOutputs; }
+	// Block entities (comparators, containers, moving pistons...), by index ((y - minY) << 8 | z << 4 | x). Saved with
+	// the chunk: the game thread holds mutex() while changing the map, the I/O threads while saving it
+	using BlockEntities = std::unordered_map<uint32_t, std::shared_ptr<BlockEntity>>;
+	BlockEntities&		 blockEntities() { return _blockEntities; }
+	const BlockEntities& blockEntities() const { return _blockEntities; }
+	uint32_t			 indexOf(int x, int y, int z) const { return static_cast<uint32_t>(y - _minY) << 8 | (z & 15) << 4 | (x & 15); }
 
 	// Game thread only (see Level): per section, how many of its blocks tick randomly
 	std::vector<uint16_t>& randomTickingCounts() { return _randomTicking; }
@@ -106,7 +109,7 @@ class Chunk {
 	std::atomic<bool>				 _ticking{false};
 	std::atomic<bool>				 _unloaded{false};
 	std::vector<uint16_t>			 _randomTicking;
-	std::unordered_map<uint32_t, uint8_t> _comparatorOutputs;
+	BlockEntities					 _blockEntities;
 
 	ChunkSection& sectionAt(int y) { return _sections[(y - _minY) >> 4]; }
 	const ChunkSection& sectionAt(int y) const { return _sections[(y - _minY) >> 4]; }

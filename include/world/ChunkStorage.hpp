@@ -33,6 +33,8 @@
 #include <vector>
 
 // Maps runtime ids to the ids used on disk, through their names
+class GameData;
+
 class DiskPalette {
   public:
 	using NameOf = std::function<std::string(uint32_t)>;
@@ -99,7 +101,9 @@ class ChunkStorage {
 		std::function<int(const std::string&)> blockId, fluidId; // -1 if unknown (removed in this version)
 	};
 
-	ChunkStorage(const std::filesystem::path& worldDirectory, const Layout& layout, DiskPalette& blocks, DiskPalette& biomes, TickTypes tickTypes);
+	// gameData: to save block entities (their items by name); without it they aren't saved
+	ChunkStorage(const std::filesystem::path& worldDirectory, const Layout& layout, DiskPalette& blocks, DiskPalette& biomes, TickTypes tickTypes,
+				 const GameData* gameData = nullptr);
 
 	// nullptr if the chunk was never saved. Throws on corrupted data
 	std::unique_ptr<Chunk> load(int x, int z);
@@ -118,6 +122,7 @@ class ChunkStorage {
 	DiskPalette&		  _blocks;
 	DiskPalette&		  _biomes;
 	TickTypes			  _tickTypes;
+	const GameData*		  _gameData;
 
 	std::mutex												  _regionsMutex;
 	std::unordered_map<int64_t, std::shared_ptr<RegionFile>> _regions;

@@ -31,6 +31,8 @@ class Entity {
 	bool		onGround() const { return _onGround; }
 	// Entity.move(PISTON): a push by a piston, at most 0.51 per axis per tick (limitPistonMovement)
 	void		moveByPiston(Vec3 movement);
+	// Entity.move(SHULKER_BOX): pushed by a shulker box's lid
+	void		moveByShulker(Vec3 movement) { move(movement); }
 	bool		isRemoved() const { return _removed; }
 	void		discard() { _removed = true; }
 	int			tickCount() const { return _tickCount; }

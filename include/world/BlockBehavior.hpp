@@ -6,6 +6,8 @@
 #include <memory>
 #include <vector>
 
+class BlockEntity;
+class Entity;
 class Level;
 class Player;
 struct PlaceContext;
@@ -64,8 +66,15 @@ class BlockBehavior {
 	virtual void setPlacedBy(Level& level, const BlockPos& pos, int state) const;
 	// Right-clicked with nothing it uses (useWithoutItem): true if it did something
 	virtual bool useWithoutItem(Level& level, const BlockPos& pos, int state, Player& player) const;
-	// An entity is in its cell (pressure plates...)
-	virtual void entityInside(Level& level, const BlockPos& pos, int state) const;
+	// An entity is in its cell (pressure plates, hoppers...); nullptr for a player
+	virtual void entityInside(Level& level, const BlockPos& pos, int state, Entity* entity) const;
+	// A player is about to break it (Block.playerWillDestroy)
+	virtual void playerWillDestroy(Level& level, const BlockPos& pos, int state, Player& player) const;
+	// shouldChangedStateKeepBlockEntity: this block keeps the block entity of the one it replaces (copper chests
+	// oxidizing)
+	virtual bool keepsBlockEntityOf(int oldState) const;
+	// EntityBlock.newBlockEntity: the block entity that comes with the block, nullptr if none
+	virtual std::unique_ptr<BlockEntity> newBlockEntity(const BlockPos& pos, int state) const;
 };
 
 // The behavior of every block, by minecraft:block registry id
@@ -77,6 +86,9 @@ class BlockBehaviors {
 
 	void set(int block, std::unique_ptr<BlockBehavior> behavior);
 	const BlockBehavior& get(int block) const { return *_byBlock[block]; }
+	// A placement rule of its own for a block whose behavior has none (dispensers, furnaces... face the player)
+	void setPlacement(int block, std::unique_ptr<BlockBehavior> behavior);
+	const BlockBehavior& placer(int block) const { return _placers[block] ? *_placers[block] : *_byBlock[block]; }
 	// A random tick of its own for a block (copper that oxidizes, whatever its kind of block)
 	void setRandomTick(int block, std::unique_ptr<BlockBehavior> behavior);
 	const BlockBehavior& randomTicker(int block) const { return _randomTickers[block] ? *_randomTickers[block] : *_byBlock[block]; }
@@ -86,6 +98,7 @@ class BlockBehaviors {
 	std::vector<std::unique_ptr<BlockBehavior>> _owned;
 	std::vector<const BlockBehavior*>			_byBlock;
 	std::vector<const BlockBehavior*>			_randomTickers;
+	std::vector<const BlockBehavior*>			_placers;
 };
 
 #endif

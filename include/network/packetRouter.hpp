@@ -28,8 +28,15 @@ void handleLoginAcknowledgedPacket(Packet& packet, Server& server);
 void serverboundKnownPacksPacket(Packet& packet);
 void handlePlayerActionPacket(Packet& packet, Server& server);
 void handleUseItemOnPacket(Packet& packet, Server& server);
+void handleContainerClickPacket(Packet& packet, Server& server);
+void handleContainerClosePacket(Packet& packet, Server& server);
+// Recipe book (recipeBookPackets.cpp)
+void sendInitialRecipeBook(Packet& packet, Server& server);
+void handlePlaceRecipePacket(Packet& packet, Server& server);
+void handleRecipeBookChangeSettingsPacket(Packet& packet, Server& server);
 void handleSetCarriedItemPacket(Packet& packet, Server& server);
 void handleSetCreativeModeSlotPacket(Packet& packet, Server& server);
+void handlePickItemFromBlock(Packet& packet, Server& server);
 
 // Network threads: Handshake, Status, Login and Configuration states
 void packetRouter(Packet* packet, Server& server);

@@ -155,6 +155,10 @@ class World {
 	// Writes the game time to level.json
 	void				   saveLevel();
 	std::shared_ptr<Chunk> loadOrGenerate(int x, int z);
+	std::shared_ptr<Chunk> loadOrGenerateBlocks(int x, int z);
+	// The block entities its blocks need and don't have yet (generated or imported chunks): created at once, so the
+	// chunk's packet has them
+	void				   addMissingBlockEntities(Chunk& chunk) const;
 	void				   finishLoad(int x, int z, std::shared_ptr<Chunk> chunk);
 	bool				   readyToLight(int64_t key); // Called with _chunksMutex held
 	void				   light(int x, int z);

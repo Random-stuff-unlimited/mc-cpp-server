@@ -44,6 +44,7 @@ void enterPlay(Packet* packet, Server& server) {
 	changeDifficultyPacket(*packet, server);
 	playerAbilitiesPacket(*packet, server);
 	setHeldItemPacket(*packet, server);
+	sendInitialRecipeBook(*packet, server);
 	synchronizePlayerPositionPacket(*packet, server);
 
 	// Stream the chunks around the spawn, within the smaller of the server's and the client's view distance
@@ -86,7 +87,7 @@ namespace {
 		// applyEffectsFromBlocks: pressure plates under the player
 		if (withPosition && player->getGameMode() != GameMode::Spectator && !player->combat().dead) {
 			double half = Player::BB_WIDTH / 2.0;
-			server.getLevel().checkInsideBlocks({x - half, y, z - half, x + half, y + Player::BB_HEIGHT, z + half});
+			server.getLevel().checkInsideBlocks({x - half, y, z - half, x + half, y + Player::BB_HEIGHT, z + half}, nullptr);
 		}
 	}
 
@@ -221,6 +222,9 @@ void playPacketRouter(Packet* packet, Server& server) {
 	case PacketId::Play::Serverbound::SET_CREATIVE_MODE_SLOT:
 		handleSetCreativeModeSlotPacket(*packet, server);
 		break;
+	case PacketId::Play::Serverbound::PICK_ITEM_FROM_BLOCK:
+		handlePickItemFromBlock(*packet, server);
+		break;
 	case PacketId::Play::Serverbound::INTERACT: {
 		int entityId = packet->getData().readVarInt();
 		if (packet->getData().readVarInt() == ATTACK) {
@@ -236,6 +240,20 @@ void playPacketRouter(Packet* packet, Server& server) {
 		server.getPlayerTracker().broadcast(player, PacketId::Play::Clientbound::ANIMATE, animation, false);
 		break;
 	}
+	case PacketId::Play::Serverbound::CONTAINER_CLICK:
+		handleContainerClickPacket(*packet, server);
+		break;
+	case PacketId::Play::Serverbound::CONTAINER_CLOSE:
+		handleContainerClosePacket(*packet, server);
+		break;
+	case PacketId::Play::Serverbound::PLACE_RECIPE:
+		handlePlaceRecipePacket(*packet, server);
+		break;
+	case PacketId::Play::Serverbound::RECIPE_BOOK_CHANGE_SETTINGS:
+		handleRecipeBookChangeSettingsPacket(*packet, server);
+		break;
+	case PacketId::Play::Serverbound::RECIPE_BOOK_SEEN_RECIPE:
+		break; // Highlights aren't kept: every recipe is known from the start
 	case PacketId::Play::Serverbound::PLAYER_INPUT: {
 		// The keys held: forward, backward, left, right, jump, sneak (0x20), sprint
 		uint8_t keys = packet->getData().readUByte();

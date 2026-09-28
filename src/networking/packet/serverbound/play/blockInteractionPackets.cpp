@@ -1,13 +1,22 @@
+#include "BlockPos.hpp"
 #include "PacketIds.hpp"
 #include "data/GameData.hpp"
+#include "item/ItemStack.hpp"
+#include "logger.hpp"
 #include "network/buffer.hpp"
 #include "network/packet.hpp"
+#include "network/packetRouter.hpp"
 #include "network/server.hpp"
 #include "player.hpp"
 #include "world/Level.hpp"
 #include "world/PlaceContext.hpp"
+#include "world/blocks/Containers.hpp"
+#include "world/inventory/Menu.hpp"
+#include "world/item/Components.hpp"
 
+#include <algorithm>
 #include <cmath>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -111,6 +120,9 @@ namespace {
 		int state = level.getBlockState(pos);
 		if (level.blocks().isAir(state)) return false;
 		bool creative = player.getGameMode() == GameMode::Creative;
+		// Item.canDestroyBlock: a tool that can't break blocks in creative (swords, the mace, the trident)
+		const GameData::ItemProperties* held = gameData.getItemProperties(player.getStackInHand(0).item);
+		if (creative && held && !held->canDestroyBlocksInCreative) return false;
 		if (!creative && gameData.getDestroyTime(state) < 0) return false; // Bedrock...
 
 		// Block.playerWillDestroy: particles and sound for the others (the breaker's client played them already)
@@ -154,7 +166,14 @@ void handlePlayerActionPacket(Packet& packet, Server& server) {
 		int		  count = status == DROP_ALL_ITEMS ? held.count : 1;
 		ItemStack thrown = held.copyWithCount(count);
 		held.shrink(count);
-		player.inventory().setFromClient(slot, held.isEmpty() ? ItemStack() : held);
+		player.inventory().set(slot, held.isEmpty() ? ItemStack() : held);
+		// The client knows (setRemoteSlot of the open menu's slot for it)
+		Menu& menu = Menus::current(player, level);
+		for (const Slot& menuSlot : menu.slots()) {
+			if (dynamic_cast<PlayerContainer*>(menuSlot.container) && PlayerInventory::windowSlot(menuSlot.containerSlot) == slot) {
+				menu.setRemoteSlot(menuSlot.index, player.inventory().get(slot));
+			}
+		}
 		level.dropFromPlayer(player, std::move(thrown), true);
 		return;
 	}
@@ -255,7 +274,7 @@ void handleUseItemOnPacket(Packet& packet, Server& server) {
 	std::vector<BlockChange> parts;
 	bool					 fits = context.replaceClicked || replaceable(target);
 	if (fits) {
-		int state = level.behavior(placed).getStateForPlacement(level, context);
+		int state = level.behaviors().placer(placedBlock).getStateForPlacement(level, context);
 		if (state == GENERIC_PLACEMENT) {
 			// No placement rule ported for this block: axis from the face, facing and second half from the player
 			int oriented = gameData.withProperty(placed, "axis", FACE_AXES[face]);
@@ -302,8 +321,102 @@ void handleSetCreativeModeSlotPacket(Packet& packet, Server& server) {
 	const GameData::ItemProperties* item	 = server.getGameData().getItemProperties(stack.item);
 	bool							validSize = stack.isEmpty() || (item && stack.count <= item->maxStackSize);
 	if (slot >= 1 && slot <= 45 && validSize) {
-		player.inventory().setFromClient(slot, std::move(stack)); // The client has it already
+		// The client has it already
+		Menu& menu = Menus::inventory(player, server.getLevel());
+		menu.slots()[slot].set(stack);
+		menu.setRemoteSlot(slot, stack);
+		menu.broadcastChanges();
 	} else if (slot < 0 && validSize && !stack.isEmpty()) {
 		server.getLevel().dropFromPlayer(player, std::move(stack), true);
 	}
+}
+
+namespace {
+	// ItemStack.isEnchanted: a non-empty minecraft:enchantments (its encoding starts with the entry count)
+	bool isEnchanted(const ItemStack& stack, const GameData& gd) {
+		std::optional<std::vector<uint8_t>> enchantments = Components::get(stack, gd, "minecraft:enchantments");
+		return enchantments && !enchantments->empty() && (*enchantments)[0] != 0;
+	}
+
+	// Inventory.getSuitableHotbarSlot: the first empty hotbar slot from the selected one, else the first not enchanted
+	int suitableHotbarSlot(const Player& player, const GameData& gd) {
+		const PlayerInventory& inv		= player.inventory();
+		int					   selected = player.getSelectedSlot();
+		for (int i = 0; i < 9; i++) {
+			int slot = (selected + i) % 9;
+			if (inv.get(PlayerInventory::HOTBAR + slot).isEmpty()) return slot;
+		}
+		for (int i = 0; i < 9; i++) {
+			int slot = (selected + i) % 9;
+			if (!isEnchanted(inv.get(PlayerInventory::HOTBAR + slot), gd)) return slot;
+		}
+		return selected;
+	}
+} // namespace
+
+// ServerGamePacketListenerImpl.handlePickItemFromBlock + tryPickItem
+void handlePickItemFromBlock(Packet& packet, Server& server) {
+	Buffer&	 data = packet.getData();
+	BlockPos pos;
+	data.readPosition(pos.x, pos.y, pos.z);
+	bool includeData = data.readBool();
+
+	Level&			level  = server.getLevel();
+	const GameData& gd	   = level.gameData();
+	Player&			player = *packet.getPlayer();
+	bool			infinite = player.getGameMode() == GameMode::Creative; // hasInfiniteMaterials
+
+	// Player.canInteractWithBlock(pos, 1.0): the block's box within the interaction range + 1
+	double range = (infinite ? 5.0 : 4.5) + 1.0;
+	double eyeY	 = player.getY() + 1.62;
+	double dx	 = std::max({pos.x - player.getX(), 0.0, player.getX() - (pos.x + 1.0)});
+	double dy	 = std::max({pos.y - eyeY, 0.0, eyeY - (pos.y + 1.0)});
+	double dz	 = std::max({pos.z - player.getZ(), 0.0, player.getZ() - (pos.z + 1.0)});
+	if (dx * dx + dy * dy + dz * dz >= range * range) return;
+
+	// Block.getCloneItemStack: the block's item (same name), empty if it has none
+	int				   state = level.getBlockState(pos);
+	const std::string& name	 = gd.getStaticName("minecraft:block", gd.getBlockOfState(state));
+	int				   item	 = gd.getStaticId("minecraft:item", name);
+	if (item <= 0) return;
+	ItemStack picked(item, 1);
+	if (infinite && includeData) {
+		// addBlockDataToItem: the components its block entity gives (contents, name)
+		if (BlockEntity* entity = level.getBlockEntity(pos)) ContainerItems::collect(*entity, picked, gd);
+	}
+
+	PlayerInventory& inv = player.inventory();
+	// Inventory.findSlotMatchingItem: hotbar first, then the main inventory (vanilla indices 0-35)
+	int found = -1;
+	for (int i = 0; i < 36 && found < 0; i++) {
+		const ItemStack& stack = inv.get(PlayerInventory::windowSlot(i));
+		if (!stack.isEmpty() && stack.sameItemSameComponents(picked)) found = i;
+	}
+	if (found >= 0 && found < 9) {
+		player.setSelectedSlot(found);
+	} else if (found >= 0) {
+		// Inventory.pickSlot: swapped with a suitable hotbar slot, which becomes the selected one
+		player.setSelectedSlot(suitableHotbarSlot(player, gd));
+		int		  hand	 = player.handSlot(0);
+		int		  other	 = PlayerInventory::windowSlot(found);
+		ItemStack inHand = inv.get(hand);
+		inv.set(hand, inv.get(other));
+		inv.set(other, std::move(inHand));
+	} else if (infinite) {
+		// Inventory.addAndPickItem: into a suitable hotbar slot, what was there moves to the first empty slot
+		player.setSelectedSlot(suitableHotbarSlot(player, gd));
+		int hand = player.handSlot(0);
+		if (!inv.get(hand).isEmpty()) {
+			for (int i = 0; i < 36; i++) {
+				int slot = PlayerInventory::windowSlot(i);
+				if (inv.get(slot).isEmpty()) {
+					inv.set(slot, inv.get(hand));
+					break;
+				}
+			}
+		}
+		inv.set(hand, std::move(picked));
+	}
+	setHeldItemPacket(packet, server);
+	Menus::inventory(player, level).broadcastChanges();
 }

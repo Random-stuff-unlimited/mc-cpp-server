@@ -1,4 +1,5 @@
 #include "player.hpp"
+#include "world/inventory/Menu.hpp"
 
 #include "lib/UUID.hpp"
 #include "network/server.hpp"

@@ -6,6 +6,7 @@
 #include "network/server.hpp"
 #include "player.hpp"
 #include "world/Level.hpp"
+#include "world/inventory/Menu.hpp"
 #include "world/World.hpp"
 #include "world/ChunkStreamer.hpp"
 #include "world/Combat.hpp"
@@ -177,16 +178,9 @@ void Server::tick(bool worldRuns) {
 	// The block changes, then the actions they answer (Block Changed Ack), the entities and the inventories
 	_level->sendChanges();
 	_level->sendEntityChanges();
+	// ServerPlayer.tick: the open menu's changes (the inventory's by default)
 	for (const auto& player : _gamePlayers) {
-		PlayerInventory& inventory = player->inventory();
-		for (int slot : inventory.takeChanged()) {
-			Buffer update;
-			update.writeVarInt(0); // Inventory window
-			update.writeVarInt(inventory.nextStateId());
-			update.writeShort(static_cast<int16_t>(slot));
-			inventory.get(slot).write(update);
-			Packet::send(player, PacketId::Play::Clientbound::CONTAINER_SET_SLOT, update, *this);
-		}
+		if (!player->isDisconnected()) Menus::tick(*player, *_level);
 	}
 	for (const auto& player : _gamePlayers) {
 		int sequence = player->takeBlockChangesAck();
@@ -234,6 +228,12 @@ void Server::addGamePlayer(const std::shared_ptr<Player>& player) {
 void Server::leaveGame(Player* player) {
 	if (ChunkStreamer* streamer = player->getChunkStreamer()) streamer->stop();
 	_playerTracker.leave(player);
+	// Player.remove: the menus close, what the cursor and the crafting grid held falls on the ground
+	if (player->openMenuSlot()) {
+		player->openMenuSlot()->removed();
+		player->openMenuSlot().reset();
+	}
+	if (player->inventoryMenuSlot()) player->inventoryMenuSlot()->removed();
 	_level->entities().forgetPlayer(player);
 	auto it = std::find_if(_gamePlayers.begin(), _gamePlayers.end(), [player](const auto& p) { return p.get() == player; });
 	if (it == _gamePlayers.end()) return;

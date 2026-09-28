@@ -48,6 +48,7 @@ Level::Level(Server& server, World& world, const GameData& gameData)
 	  }),
 	  _minY(world.getMinY()), _maxY(world.getMinY() + world.getSectionCount() * 16),
 	  _random(std::chrono::steady_clock::now().time_since_epoch().count()) {
+	_recipes.load(gameData.getDirectory() / "recipes.json", gameData.getDirectory().parent_path() / "recipes", gameData);
 	auto block		= [&](const char* name) { return gameData.getStaticId("minecraft:block", name); };
 	_voidAir		= gameData.getDefaultBlockState("minecraft:void_air");
 	_air			= gameData.getDefaultBlockState("minecraft:air");
@@ -62,6 +63,7 @@ Level::Level(Server& server, World& world, const GameData& gameData)
 	_slimeBlock		   = block("minecraft:slime_block");
 	_waterBlockId	   = block("minecraft:water");
 	_bubbleColumnBlock = block("minecraft:bubble_column");
+	_recipes.load(gameData.getDirectory() / "recipes.json", gameData.getDirectory().parent_path() / "recipes", gameData);
 	_cactusBlock	   = block("minecraft:cactus");
 	_loot.load(gameData.getDirectory() / "block_loot_tables.json", gameData);
 	_fluids = std::make_unique<Fluids>(*this, gameData, _ultraWarm);
@@ -69,7 +71,6 @@ Level::Level(Server& server, World& world, const GameData& gameData)
 	_randValue = _random.nextInt();
 	_redstoneBlock	   = block("minecraft:redstone_block");
 	_power			   = _blocks.property("power");
-	_movingPistonBlock = block("minecraft:moving_piston");
 	_hasBlockEntity.assign(gameData.getBlockCount(), false);
 	for (int b = 0; b < static_cast<int>(gameData.getBlockCount()); b++) _hasBlockEntity[b] = gameData.isInstanceOf(b, "EntityBlock");
 
@@ -118,6 +119,11 @@ void Level::attach(const std::shared_ptr<Chunk>& chunk) {
 	_fluidTicks.addContainer(key, &chunk->fluidTicks());
 	countRandomTicking(*chunk);
 	_chunks[key] = chunk;
+	// Its block entities (saved moving pistons tick again)
+	for (auto& [index, entity] : chunk->blockEntities()) {
+		entity->setLevel(this);
+		if (entity->ticks()) addTicker(entity->pos());
+	}
 }
 
 // LevelChunkSection.recalcBlockCounts, for the randomly ticking blocks and fluids only
@@ -143,6 +149,10 @@ void Level::countRandomTicking(Chunk& chunk) {
 }
 
 void Level::detach(int64_t key) {
+	auto found = _chunks.find(key);
+	if (found != _chunks.end()) {
+		for (auto& [index, entity] : found->second->blockEntities()) removeTicker(entity->pos());
+	}
 	_blockTicks.removeContainer(key);
 	_fluidTicks.removeContainer(key);
 	_chunks.erase(key);
@@ -231,7 +241,7 @@ int Level::setBlockInChunk(Chunk& chunk, const BlockPos& pos, int state, int fla
 	}
 	if (lightPropertiesDiffer(old, state)) _lightChecks.insert(pos.asLong());
 
-	blockEntityChanged(chunk, pos, old, state, flags);
+	removeBlockEntityOnChange(pos, old, state, flags);
 	int	 oldBlock	   = _blocks.blockOf(old);
 	int	 newBlock	   = _blocks.blockOf(state);
 	bool movedByPiston = flags & UPDATE_MOVE_BY_PISTON;
@@ -242,6 +252,7 @@ int Level::setBlockInChunk(Chunk& chunk, const BlockPos& pos, int state, int fla
 	// Replaced meanwhile by the removal's side effects
 	if (_blocks.blockOf(static_cast<int>(chunk.getBlock(pos.x & 15, pos.y, pos.z & 15))) != newBlock) return -1;
 	if (!(flags & UPDATE_SKIP_ON_PLACE)) _behaviors.get(newBlock).onPlace(*this, pos, state, old, movedByPiston);
+	createBlockEntityOnChange(pos, state);
 	return old;
 }
 
@@ -276,6 +287,10 @@ bool Level::destroyBlock(const BlockPos& pos, bool drop, int limit) {
 
 void Level::dropResources(int state, const BlockPos& pos, Player* breaker, const ItemStack* tool) {
 	LootTables::Context context{*this, pos, state, tool, breaker != nullptr, 0.0f};
+	context.blockEntity = getBlockEntity(pos);
+	for (auto it = _removedBlockEntities.rbegin(); !context.blockEntity && it != _removedBlockEntities.rend(); ++it) {
+		if ((*it)->pos() == pos) context.blockEntity = it->get();
+	}
 	for (ItemStack& stack : _loot.blockDrops(context)) popResource(pos, std::move(stack));
 }
 
@@ -405,47 +420,86 @@ int Level::getBestNeighborSignal(const BlockPos& pos) {
 
 // ----- Block entities -----
 
-namespace {
-	uint32_t indexInChunk(const BlockPos& pos, int minY) { return static_cast<uint32_t>(pos.y - minY) << 8 | (pos.z & 15) << 4 | (pos.x & 15); }
-} // namespace
+BlockEntity* Level::getBlockEntity(const BlockPos& pos) { return getSharedBlockEntity(pos).get(); }
+
+std::shared_ptr<BlockEntity> Level::getSharedBlockEntity(const BlockPos& pos) {
+	if (isOutsideBuildHeight(pos.y)) return nullptr;
+	Chunk* chunk = chunkAt(pos.chunkX(), pos.chunkZ());
+	if (!chunk) return nullptr;
+	auto it = chunk->blockEntities().find(chunk->indexOf(pos.x, pos.y, pos.z));
+	return it == chunk->blockEntities().end() || it->second->isRemoved() ? nullptr : it->second;
+}
+
+void Level::setBlockEntity(std::unique_ptr<BlockEntity> entity) {
+	BlockPos pos   = entity->pos();
+	Chunk*	 chunk = chunkAt(pos.chunkX(), pos.chunkZ());
+	if (!chunk) return;
+	entity->setLevel(this);
+	bool ticks = entity->ticks();
+	{
+		std::lock_guard<std::mutex> lock(chunk->mutex());
+		std::shared_ptr<BlockEntity>& slot = chunk->blockEntities()[chunk->indexOf(pos.x, pos.y, pos.z)];
+		if (slot) {
+			slot->setRemoved();
+			_removedBlockEntities.push_back(std::move(slot));
+		}
+		slot = std::move(entity);
+		chunk->setDirty(true);
+	}
+	if (ticks) {
+		addTicker(pos);
+	} else {
+		removeTicker(pos);
+	}
+}
+
+void Level::removeBlockEntity(const BlockPos& pos) {
+	Chunk* chunk = chunkAt(pos.chunkX(), pos.chunkZ());
+	if (!chunk) return;
+	{
+		std::lock_guard<std::mutex> lock(chunk->mutex());
+		auto						it = chunk->blockEntities().find(chunk->indexOf(pos.x, pos.y, pos.z));
+		if (it == chunk->blockEntities().end()) return;
+		it->second->setRemoved();
+		_removedBlockEntities.push_back(std::move(it->second));
+		chunk->blockEntities().erase(it);
+		chunk->setDirty(true);
+	}
+	removeTicker(pos);
+}
+
+void Level::blockEntityChanged(const BlockPos& pos) {
+	Chunk* chunk = chunkAt(pos.chunkX(), pos.chunkZ());
+	if (!chunk) return;
+	chunk->setDirty(true);
+	int state = getBlockState(pos);
+	if (!_blocks.isAir(state)) updateNeighbourForOutputSignal(pos, _blocks.blockOf(state));
+}
 
 int Level::comparatorOutput(const BlockPos& pos) {
-	Chunk* chunk = chunkAt(pos.chunkX(), pos.chunkZ());
-	if (!chunk) return 0;
-	std::lock_guard<std::mutex> lock(chunk->mutex());
-	auto						it = chunk->comparatorOutputs().find(indexInChunk(pos, _minY));
-	return it == chunk->comparatorOutputs().end() ? 0 : it->second;
+	auto* comparator = getBlockEntity<ComparatorBlockEntity>(pos);
+	return comparator ? comparator->output : 0;
 }
 
 void Level::setComparatorOutput(const BlockPos& pos, int output) {
-	Chunk* chunk = chunkAt(pos.chunkX(), pos.chunkZ());
-	if (!chunk) return;
-	std::lock_guard<std::mutex> lock(chunk->mutex());
-	chunk->comparatorOutputs()[indexInChunk(pos, _minY)] = static_cast<uint8_t>(output);
-	chunk->setDirty(true);
+	auto* comparator = getBlockEntity<ComparatorBlockEntity>(pos);
+	if (!comparator) return;
+	comparator->output = output;
+	if (Chunk* chunk = chunkAt(pos.chunkX(), pos.chunkZ())) chunk->setDirty(true);
 }
 
-Level::MovingPiston* Level::movingPiston(const BlockPos& pos) {
-	auto it = _movingPistons.find(pos.asLong());
-	return it == _movingPistons.end() ? nullptr : &it->second;
-}
-
-// LevelChunk.setBlockEntity and updateBlockEntityTicker: a new block entity keeps the ticker slot of the one it replaces
-void Level::setMovingPiston(const BlockPos& pos, const MovingPiston& piston) {
-	int64_t key		   = pos.asLong();
-	_movingPistons[key] = piston;
-	auto slot		   = _tickerSlots.find(key);
-	if (slot != _tickerSlots.end()) return;
-	auto created	  = std::make_shared<TickerSlot>();
-	created->pos	  = pos;
-	_tickerSlots[key] = created;
-	(_tickingBlockEntities ? _pendingTickers : _tickers).push_back(created);
-}
-
-void Level::removeMovingPiston(const BlockPos& pos) {
+// LevelChunk.updateBlockEntityTicker: a new ticking block entity keeps the slot of the one it replaces
+void Level::addTicker(const BlockPos& pos) {
 	int64_t key = pos.asLong();
-	_movingPistons.erase(key);
-	auto slot = _tickerSlots.find(key);
+	if (_tickerSlots.count(key)) return;
+	auto slot		  = std::make_shared<TickerSlot>();
+	slot->pos		  = pos;
+	_tickerSlots[key] = slot;
+	(_tickingBlockEntities ? _pendingTickers : _tickers).push_back(slot);
+}
+
+void Level::removeTicker(const BlockPos& pos) {
+	auto slot = _tickerSlots.find(pos.asLong());
 	if (slot == _tickerSlots.end()) return;
 	slot->second->alive = false;
 	_tickerSlots.erase(slot);
@@ -462,32 +516,39 @@ void Level::tickBlockEntities() {
 			continue;
 		}
 		i++;
-		// BoundTickingBlockEntity: only in a ticking chunk, and while the block is still a moving piston
-		if (!shouldTickBlocksAt(slot->pos) || _blocks.blockOf(getBlockState(slot->pos)) != _movingPistonBlock) continue;
-		MovingPiston* piston = movingPiston(slot->pos);
-		if (piston && _tickMovingPiston) _tickMovingPiston(slot->pos, *piston);
+		// BoundTickingBlockEntity: only in a ticking chunk
+		if (!shouldTickBlocksAt(slot->pos)) continue;
+		BlockEntity* entity = getBlockEntity(slot->pos);
+		if (entity && entity->ticks()) entity->tick(*this);
 	}
 	_tickingBlockEntities = false;
+	_removedBlockEntities.clear();
 }
 
-void Level::blockEntityChanged(Chunk& chunk, const BlockPos& pos, int oldState, int newState, int flags) {
+// LevelChunk.setBlockState: another block, the block entity goes (with its side effects, like a moving piston ending
+// or a container dropping its items)
+void Level::removeBlockEntityOnChange(const BlockPos& pos, int oldState, int newState, int flags) {
 	int oldBlock = _blocks.blockOf(oldState), newBlock = _blocks.blockOf(newState);
-	if (oldBlock == newBlock || !_hasBlockEntity[oldBlock]) return;
-	// BlockEntity.preRemoveSideEffects: a moving piston ends (its block isn't there anymore, so nothing is placed)
+	if (oldBlock == newBlock || !_hasBlockEntity[oldBlock] || behavior(newState).keepsBlockEntityOf(oldState)) return;
 	if (!(flags & UPDATE_SKIP_BLOCK_ENTITY_SIDEEFFECTS)) {
-		if (MovingPiston* piston = movingPiston(pos); piston && _finalTickPiston) _finalTickPiston(pos, *piston);
+		if (BlockEntity* entity = getBlockEntity(pos)) entity->preRemoveSideEffects(*this);
 	}
-	removeMovingPiston(pos);
-	std::lock_guard<std::mutex> lock(chunk.mutex());
-	if (chunk.comparatorOutputs().erase(indexInChunk(pos, _minY))) chunk.setDirty(true);
+	removeBlockEntity(pos);
+}
+
+// And the new block's own, if it has one and there is none yet
+void Level::createBlockEntityOnChange(const BlockPos& pos, int state) {
+	if (!_hasBlockEntity[_blocks.blockOf(state)] || getBlockEntity(pos)) return;
+	std::unique_ptr<BlockEntity> entity = behavior(state).newBlockEntity(pos, state);
+	if (!entity) entity = BlockEntity::create(_gameData.getBlockProperties(state).blockEntity, pos);
+	if (entity) setBlockEntity(std::move(entity));
 }
 
 // ----- Sounds and entities -----
 
-void Level::playSound(Player* except, const BlockPos& pos, const std::string& sound, SoundSource source, float volume, float pitch) {
+void Level::playSoundAt(Player* except, double x, double y, double z, const std::string& sound, SoundSource source, float volume, float pitch) {
 	int id = _gameData.getStaticId("minecraft:sound_event", sound);
 	if (id < 0) return;
-	double x = pos.x + 0.5, y = pos.y + 0.5, z = pos.z + 0.5;
 	Buffer data;
 	data.writeVarInt(id + 1); // A registry id (0: sound given inline)
 	data.writeVarInt(static_cast<int>(source));
@@ -522,14 +583,27 @@ int Level::countEntities(const AABB& box, bool livingOnly) {
 	return count + static_cast<int>(_entities.entitiesIn(box).size());
 }
 
-void Level::checkInsideBlocks(const AABB& box) {
+bool Level::hasBlockCollision(const AABB& box) {
+	for (int x = Mth::floor(box.minX) - 1; x <= Mth::floor(box.maxX) + 1; x++) {
+		for (int y = Mth::floor(box.minY) - 1; y <= Mth::floor(box.maxY) + 1; y++) {
+			for (int z = Mth::floor(box.minZ) - 1; z <= Mth::floor(box.maxZ) + 1; z++) {
+				for (const GameData::Box& b : _gameData.getCollisionShape(getBlockState({x, y, z}))) {
+					if (AABB{x + b.minX, y + b.minY, z + b.minZ, x + b.maxX, y + b.maxY, z + b.maxZ}.intersects(box)) return true;
+				}
+			}
+		}
+	}
+	return false;
+}
+
+void Level::checkInsideBlocks(const AABB& box, Entity* entity) {
 	AABB inside = box.deflate(1.0E-5);
 	for (int x = Mth::floor(inside.minX); x <= Mth::floor(inside.maxX); x++) {
 		for (int y = Mth::floor(inside.minY); y <= Mth::floor(inside.maxY); y++) {
 			for (int z = Mth::floor(inside.minZ); z <= Mth::floor(inside.maxZ); z++) {
 				BlockPos pos{x, y, z};
 				int		 state = getBlockState(pos);
-				if (!_blocks.isAir(state)) behavior(state).entityInside(*this, pos, state);
+				if (!_blocks.isAir(state)) behavior(state).entityInside(*this, pos, state, entity);
 			}
 		}
 	}

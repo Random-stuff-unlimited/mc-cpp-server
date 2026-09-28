@@ -152,6 +152,7 @@ class ComparatorBlock : public DiodeBlock {
 	int	 updateShape(Level& level, const BlockPos& pos, int state, Direction direction, const BlockPos& neighborPos, int neighborState) const override;
 	bool useWithoutItem(Level& level, const BlockPos& pos, int state, Player& player) const override;
 	void tick(Level& level, const BlockPos& pos, int state) const override;
+	std::unique_ptr<BlockEntity> newBlockEntity(const BlockPos& pos, int state) const override;
 
   protected:
 	bool shouldTurnOn(Level& level, const BlockPos& pos, int state) const override;
@@ -212,7 +213,7 @@ class PressurePlateBlock : public RedstoneBehavior {
 	bool canSurvive(Level& level, const BlockPos& pos, int state) const override;
 	int	 updateShape(Level& level, const BlockPos& pos, int state, Direction direction, const BlockPos& neighborPos, int neighborState) const override;
 	void tick(Level& level, const BlockPos& pos, int state) const override;
-	void entityInside(Level& level, const BlockPos& pos, int state) const override;
+	void entityInside(Level& level, const BlockPos& pos, int state, Entity* entity) const override;
 	void affectNeighborsAfterRemoval(Level& level, const BlockPos& pos, int state, bool movedByPiston) const override;
 	bool isSignalSource(int) const override { return true; }
 	int	 getSignal(Level& level, const BlockPos& pos, int state, Direction direction) const override;
@@ -311,6 +312,25 @@ class FenceGateBlock : public RedstoneBehavior {
 	std::string		  _sound;
 	std::vector<bool> _walls;
 	bool			  isWall(int state) const { return _context->inTag(_walls, state); }
+};
+
+// The facing rules of the simple directional blocks (getStateForPlacement of DispenserBlock, BarrelBlock,
+// AbstractFurnaceBlock, AnvilBlock, HopperBlock, ShulkerBoxBlock...)
+class FacingPlacement : public BlockBehavior {
+  public:
+	enum class Rule {
+		NearestOpposite,	 // Dispensers, droppers, barrels, command blocks: toward the player, up and down too
+		HorizontalOpposite,	 // Furnaces, pumpkins, looms...: toward the player, horizontally
+		HorizontalClockwise, // Anvils: sideways
+		ClickedFace,		 // Shulker boxes: away from the face clicked
+		Hopper,				 // Into the block clicked, down when clicking a top or bottom
+	};
+	FacingPlacement(std::shared_ptr<const BlockContext> context, Rule rule) : _context(std::move(context)), _rule(rule) {}
+	int getStateForPlacement(Level& level, const PlaceContext& context) const override;
+
+  private:
+	std::shared_ptr<const BlockContext> _context;
+	Rule								_rule;
 };
 
 // Blocks comparators read from their state alone (cake, composter, cauldrons, end portal frame, respawn anchor, beehive)

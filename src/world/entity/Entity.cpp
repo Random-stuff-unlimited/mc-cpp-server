@@ -128,7 +128,7 @@ void Entity::move(Vec3 movement) {
 	float speed = blockSpeedFactor();
 	_delta		= _delta.multiply(speed, 1.0, speed);
 	// Entity.applyEffectsFromBlocks: pressure plates... learn it is there
-	_level.checkInsideBlocks(boundingBox());
+	_level.checkInsideBlocks(boundingBox(), this);
 }
 
 void Entity::moveByPiston(Vec3 movement) {

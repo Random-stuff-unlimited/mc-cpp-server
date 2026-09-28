@@ -23,12 +23,13 @@ and writes compact JSON files the server loads at startup:
     resources/gamedata/collision_shapes.json   collision shapes: lists of boxes [minX, minY, minZ, maxX, maxY, maxZ]
     resources/gamedata/block_loot_tables.json  loot table of each block (what it drops), as in the game's data
     resources/gamedata/tree_features.json      trees (configured features of type minecraft:tree), as in the game's data
-    resources/gamedata/items.json              per item: max_stack_size, equipment_slot, tool_rules, fire_resistant and combat stats (attack_damage,
+    resources/gamedata/recipes.json            recipes, as in the game's data
+    resources/gamedata/items.json              per item: max_stack_size, equipment_slot, tool_rules, can_destroy_blocks_in_creative, fire_resistant, crafting_remainder and combat stats (attack_damage,
                                                attack_speed, armor, armor_toughness, knockback_resistance: bonuses
                                                given while the item is in its slot, from the reports)
 
 blocks.json also holds each block's properties (destroy_time, explosion_resistance, friction, speed_factor,
-jump_factor, dynamic_shape, classes: the block's Java class, superclasses and interfaces, and shape: single, double_height
+jump_factor, dynamic_shape, block_entity (its block entity type, if any), classes: the block's Java class, superclasses and interfaces, and shape: single, double_height
 for doors/tall plants, double_length for beds). These and block_states.json come from the game's code, not from the reports:
 tools/GameDataExtractor.java reads them from the server jar (translated with Mojang's official mappings).
 
@@ -184,6 +185,9 @@ def item_properties(components):
     tool = components.get("minecraft:tool")
     if tool:
         props["tool_rules"] = [{k: v for k, v in rule.items() if k in ("blocks", "correct_for_drops")} for rule in tool["rules"]]
+        # Swords, the mace, the trident: they don't break blocks in creative
+        if tool.get("can_destroy_blocks_in_creative") is False:
+            props["can_destroy_blocks_in_creative"] = False
     # Survives fire and lava as an item entity (netherite...)
     if "minecraft:damage_resistant" in components:
         props["fire_resistant"] = True
@@ -292,6 +296,8 @@ def main():
     write("dimensions.json", dimensions)
     write("block_items.json", extracted["block_items"])
     items = {name: item_properties(content["components"]) for name, content in json.load(open(reports / "items.json")).items()}
+    for name, remainder in extracted.get("crafting_remainders", {}).items():
+        items[name]["crafting_remainder"] = remainder
     write("items.json", items)
     state_count = 1 + max(max(s[0] for s in b.get("states", [[b["default"]]])) for b in blocks.values())
     for name, values in extracted["states"].items():
@@ -309,6 +315,9 @@ def main():
         if feature.get("type") == "minecraft:tree":
             trees["minecraft:" + f.stem] = feature["config"]
     write("tree_features.json", trees)
+    # Recipes (crafting, cooking, stonecutting, smithing...), by name
+    recipes = {"minecraft:" + f.stem: json.load(open(f)) for f in sorted((data / "recipe").glob("*.json"))}
+    write("recipes.json", recipes)
     overrides = OUT_DIR / "overrides.json"
     if not overrides.exists():
         overrides.write_text(json.dumps({"blocks": {}, "items": {}, "block_items": {}}, indent=2) + "\n")

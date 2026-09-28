@@ -35,6 +35,7 @@ class Fluids {
 	// FluidState.randomTick: lava sets fire to what burns around it. Fire isn't ported yet: nothing happens
 	void	   randomTick(const BlockPos&, int) {}
 	int		   water() const { return _water; }
+	int		   lava() const { return _lava; }
 	// The block the fluid forms on its own (createLegacyBlock): water/lava with the matching level, or air
 	int legacyBlock(const FluidState& fluid) const;
 	int tickDelay(int type) const;

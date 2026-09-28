@@ -50,6 +50,7 @@ class GameData {
 		float jumpFactor		  = 1; // "jump_factor"
 		Shape shape				  = Shape::Single; // "shape": "single", "double_height" or "double_length"
 		bool  dynamicShape		  = false;		   // Shape depends on the position (random offset: bamboo...) ("dynamic_shape")
+		std::string blockEntity;				   // Its block entity type ("block_entity": "minecraft:chest"...), empty if none
 		// The block's Java class, superclasses and interfaces ("classes"): which vanilla behavior it has
 		std::vector<std::string> classes;
 	};
@@ -100,6 +101,8 @@ class GameData {
 		float		  armorToughness	  = 0; // "armor_toughness"
 		float		  knockbackResistance = 0; // "knockback_resistance", 0-1
 		bool		  fireResistant		  = false; // "fire_resistant": its item entity survives fire and lava (netherite...)
+		bool		  canDestroyBlocksInCreative = true; // "can_destroy_blocks_in_creative": false for swords, the mace, the trident
+		std::string	  craftingRemainder;		   // "crafting_remainder": what stays after crafting with it (buckets...)
 		// "tool_rules": the first rule matching a block with correct_for_drops set decides whether it drops
 		struct ToolRule {
 			std::vector<bool> blocks; // By block id

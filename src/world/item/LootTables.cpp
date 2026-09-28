@@ -2,6 +2,8 @@
 
 #include "data/GameData.hpp"
 #include "world/Level.hpp"
+#include "world/blocks/Containers.hpp"
+#include "world/item/Components.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -139,7 +141,19 @@ void LootTables::applyFunction(const json& function, ItemStack& stack, Context& 
 		if (limit.contains("min")) stack.count = std::max(stack.count, numberInt(limit["min"], context));
 		if (limit.contains("max")) stack.count = std::min(stack.count, numberInt(limit["max"], context));
 	}
-	// copy_components and copy_state set item components, not supported yet
+	else if (name == "minecraft:copy_components" && context.blockEntity && function.value("source", "") == "block_entity") {
+		// The block entity's components that are listed: a container's name and items
+		ItemStack collected = stack.copyWithCount(stack.count);
+		collected.components.clear();
+		ContainerItems::collect(*context.blockEntity, collected, *_gameData);
+		std::optional<ComponentPatch> from = ComponentPatch::parse(collected.components, *_gameData);
+		if (!from) return;
+		for (const json& include : function.value("include", json::array())) {
+			int								   type	 = Components::typeId(*_gameData, include.get<std::string>());
+			if (const std::vector<uint8_t>* value = from->get(type)) Components::set(stack, *_gameData, include.get<std::string>(), *value);
+		}
+	}
+	// copy_state sets item components, not supported yet
 }
 
 bool LootTables::conditionsPass(const json& holder, Context& context) const {

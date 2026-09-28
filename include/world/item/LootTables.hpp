@@ -25,6 +25,7 @@ class LootTables {
 		const ItemStack* tool			= nullptr; // Tool used, if any
 		bool			 hasEntity		= false;   // "this" entity (the player breaking it)
 		float			 explosionRadius = 0.0f;   // 0: not an explosion
+		const class BlockEntity* blockEntity = nullptr; // The block's, for copy_components
 	};
 
 	void load(const std::filesystem::path& file, const GameData& gameData);

@@ -5,6 +5,8 @@
 #include "world/blocks/Attached.hpp"
 #include "world/blocks/BlockContext.hpp"
 #include "world/blocks/Growth.hpp"
+#include "world/blocks/Containers.hpp"
+#include "world/blocks/Dispensers.hpp"
 #include "world/blocks/LiquidBlock.hpp"
 #include "world/blocks/Pistons.hpp"
 #include "world/blocks/Redstone.hpp"
@@ -162,6 +164,18 @@ void registerVanillaBlocks(Level& level, const GameData& gameData) {
 			 }},
 			{"PistonHeadBlock", [context, ids, pistons](int) { return std::make_unique<PistonHeadBlock>(context, ids, pistons); }},
 			{"MovingPistonBlock", [context, ids](int) { return std::make_unique<MovingPistonBlock>(context, ids); }},
+			{"DropperBlock", [context, ids](int) { return std::make_unique<DispenserBlock>(context, ids, true); }},
+			// Containers
+			{"TrappedChestBlock", [context, ids](int) { return std::make_unique<ChestBlock>(context, ids, ChestBlock::Kind::Trapped); }},
+			{"CopperChestBlock", [context, ids](int) { return std::make_unique<ChestBlock>(context, ids, ChestBlock::Kind::Copper); }},
+			{"ChestBlock", [context, ids](int) { return std::make_unique<ChestBlock>(context, ids, ChestBlock::Kind::Chest); }},
+			{"BarrelBlock", [context, ids](int) { return std::make_unique<BarrelBlock>(context, ids); }},
+			{"FletchingTableBlock", nullptr}, // A CraftingTableBlock that opens nothing
+			{"CraftingTableBlock", [context, ids](int) { return std::make_unique<CraftingTableBlock>(context, ids); }},
+			{"ShulkerBoxBlock", [context, ids](int) { return std::make_unique<ShulkerBoxBlock>(context, ids); }},
+			{"EnderChestBlock", [context, ids](int) { return std::make_unique<EnderChestBlock>(context, ids); }},
+			{"HopperBlock", [context, ids](int) { return std::make_unique<HopperBlock>(context, ids); }},
+			{"DispenserBlock", [context, ids](int) { return std::make_unique<DispenserBlock>(context, ids, false); }},
 			{"ObserverBlock", [context, ids](int) { return std::make_unique<ObserverBlock>(context, ids); }},
 			{"RedstoneLampBlock", [context, ids](int) { return std::make_unique<RedstoneLampBlock>(context, ids); }},
 			{"PoweredBlock", [](int) { return std::make_unique<PoweredBlock>(); }},
@@ -203,6 +217,26 @@ void registerVanillaBlocks(Level& level, const GameData& gameData) {
 		for (const auto& [javaClass, create] : classes) {
 			if (!gameData.isInstanceOf(block, javaClass)) continue;
 			if (create) level.behaviors().set(block, create(block));
+			break;
+		}
+	}
+
+	// Directional blocks without a behavior of their own still face the right way when placed
+	using Rule = FacingPlacement::Rule;
+	const std::vector<std::pair<const char*, Rule>> facings = {
+
+			{"CommandBlock", Rule::NearestOpposite},	   {"AbstractFurnaceBlock", Rule::HorizontalOpposite},
+			{"CarvedPumpkinBlock", Rule::HorizontalOpposite}, {"GlazedTerracottaBlock", Rule::HorizontalOpposite},
+			{"LoomBlock", Rule::HorizontalOpposite},	   {"StonecutterBlock", Rule::HorizontalOpposite},
+			{"ChiseledBookShelfBlock", Rule::HorizontalOpposite}, {"BeehiveBlock", Rule::HorizontalOpposite},
+			{"EndPortalFrameBlock", Rule::HorizontalOpposite}, {"VaultBlock", Rule::HorizontalOpposite},
+			{"AnvilBlock", Rule::HorizontalClockwise},	   
+
+	};
+	for (int block = 0; block < static_cast<int>(gameData.getBlockCount()); block++) {
+		for (const auto& [javaClass, rule] : facings) {
+			if (!gameData.isInstanceOf(block, javaClass)) continue;
+			level.behaviors().setPlacement(block, std::make_unique<FacingPlacement>(context, rule));
 			break;
 		}
 	}

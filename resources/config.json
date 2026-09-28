@@ -10,7 +10,7 @@
 	},
 	"world": {
 		"name": "world",
-		"gamemode": "survival",
+		"gamemode": "creative",
 		"difficulty": "normal",
 		"autosave-interval": 300
 	}

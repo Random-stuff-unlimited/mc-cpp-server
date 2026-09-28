@@ -231,6 +231,10 @@ void GameData::setBlockProperty(const std::string& block, const std::string& pro
 		_blockProperties[blockId].classes = value.get<std::vector<std::string>>();
 		return;
 	}
+	if (property == "block_entity") {
+		_blockProperties[blockId].blockEntity = value.get<std::string>();
+		return;
+	}
 	if (property == "dynamic_shape") {
 		_blockProperties[blockId].dynamicShape = toNumber(value) != 0;
 		return;
@@ -305,8 +309,12 @@ void GameData::setItemProperty(const std::string& item, const std::string& prope
 		props.maxStackSize = size;
 	} else if (auto stat = STATS.find(property); stat != STATS.end()) {
 		props.*(stat->second) = static_cast<float>(toNumber(value));
+	} else if (property == "crafting_remainder") {
+		props.craftingRemainder = value.get<std::string>();
 	} else if (property == "fire_resistant") {
 		props.fireResistant = toNumber(value) != 0;
+	} else if (property == "can_destroy_blocks_in_creative") {
+		props.canDestroyBlocksInCreative = value.get<bool>();
 	} else if (property == "tool_rules") {
 		props.toolRules.clear();
 		for (const auto& rule : value) {

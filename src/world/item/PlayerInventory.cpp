@@ -18,25 +18,9 @@ int PlayerInventory::windowSlot(int inventoryIndex) {
 	return OFFHAND;
 }
 
-ItemStack& PlayerInventory::getMutable(int slot) {
-	_changed.push_back(slot);
-	return _slots.at(slot);
-}
+ItemStack& PlayerInventory::getMutable(int slot) { return _slots.at(slot); }
 
-void PlayerInventory::set(int slot, ItemStack stack) {
-	_slots.at(slot) = std::move(stack);
-	_changed.push_back(slot);
-}
-
-void PlayerInventory::setFromClient(int slot, ItemStack stack) { _slots.at(slot) = std::move(stack); }
-
-std::vector<int> PlayerInventory::takeChanged() {
-	std::vector<int> changed;
-	changed.swap(_changed);
-	std::sort(changed.begin(), changed.end());
-	changed.erase(std::unique(changed.begin(), changed.end()), changed.end());
-	return changed;
-}
+void PlayerInventory::set(int slot, ItemStack stack) { _slots.at(slot) = std::move(stack); }
 
 bool PlayerInventory::hasRemainingSpace(const ItemStack& slot, const ItemStack& stack, const GameData& gameData) const {
 	return !slot.isEmpty() && slot.sameItemSameComponents(stack) && maxStackSize(slot, gameData) > 1 && slot.count < maxStackSize(slot, gameData);
@@ -49,7 +33,6 @@ int PlayerInventory::addResource(int window, const ItemStack& stack, const GameD
 	int moved = std::min(left, maxStackSize(target, gameData) - target.count);
 	if (moved == 0) return left;
 	target.grow(moved);
-	_changed.push_back(window);
 	return left - moved;
 }
 

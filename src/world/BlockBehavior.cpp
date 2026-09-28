@@ -1,6 +1,7 @@
 #include "world/BlockBehavior.hpp"
 
 #include "world/Level.hpp"
+#include "world/blockentity/BlockEntity.hpp"
 
 void BlockBehavior::tick(Level&, const BlockPos&, int) const {}
 bool BlockBehavior::isRandomlyTicking(int) const { return false; }
@@ -25,9 +26,17 @@ int	 BlockBehavior::getStateForPlacement(Level&, const PlaceContext&) const { re
 bool BlockBehavior::canSurvive(Level&, const BlockPos&, int) const { return true; }
 void BlockBehavior::setPlacedBy(Level&, const BlockPos&, int) const {}
 bool BlockBehavior::useWithoutItem(Level&, const BlockPos&, int, Player&) const { return false; }
-void BlockBehavior::entityInside(Level&, const BlockPos&, int) const {}
+void BlockBehavior::entityInside(Level&, const BlockPos&, int, Entity*) const {}
+void BlockBehavior::playerWillDestroy(Level&, const BlockPos&, int, Player&) const {}
+bool BlockBehavior::keepsBlockEntityOf(int) const { return false; }
+std::unique_ptr<BlockEntity> BlockBehavior::newBlockEntity(const BlockPos&, int) const { return nullptr; }
 
-BlockBehaviors::BlockBehaviors(size_t blockCount) : _byBlock(blockCount, &_default), _randomTickers(blockCount, nullptr) {}
+BlockBehaviors::BlockBehaviors(size_t blockCount) : _byBlock(blockCount, &_default), _randomTickers(blockCount, nullptr), _placers(blockCount, nullptr) {}
+
+void BlockBehaviors::setPlacement(int block, std::unique_ptr<BlockBehavior> behavior) {
+	_placers.at(block) = behavior.get();
+	_owned.push_back(std::move(behavior));
+}
 
 void BlockBehaviors::setRandomTick(int block, std::unique_ptr<BlockBehavior> behavior) {
 	_randomTickers.at(block) = behavior.get();

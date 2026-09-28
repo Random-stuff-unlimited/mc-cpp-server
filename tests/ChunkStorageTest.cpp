@@ -1,10 +1,11 @@
 #include "Test.hpp"
 #include "data/GameData.hpp"
 #include "world/ChunkStorage.hpp"
+#include "world/blockentity/ContainerEntities.hpp"
 
 #include <filesystem>
 
-// Blocks, scheduled ticks and comparator outputs survive a save and a load
+// Blocks, scheduled ticks and block entities survive a save and a load
 TEST(chunk_storage_keeps_blocks_and_ticks) {
 	GameData data;
 	data.load("resources/gamedata");
@@ -25,7 +26,7 @@ TEST(chunk_storage_keeps_blocks_and_ticks) {
 								  [&](int id) { return data.getStaticName("minecraft:fluid", id); },
 								  [&](const std::string& name) { return data.getStaticId("minecraft:block", name); },
 								  [&](const std::string& name) { return data.getStaticId("minecraft:fluid", name); }};
-	ChunkStorage storage(directory, layout, blocks, biomes, types);
+	ChunkStorage storage(directory, layout, blocks, biomes, types, &data);
 
 	int	  repeater = data.getStaticId("minecraft:block", "minecraft:repeater");
 	int	  water	   = data.getStaticId("minecraft:fluid", "minecraft:water");
@@ -34,14 +35,22 @@ TEST(chunk_storage_keeps_blocks_and_ticks) {
 	chunk.setBlock(5, 70, 9, static_cast<uint32_t>(stone));
 	chunk.blockTicks().schedule({repeater, {3 * 16 + 5, 71, -2 * 16 + 9}, 104, HIGH, 0});
 	chunk.fluidTicks().schedule({water, {3 * 16 + 1, -60, -2 * 16 + 15}, 99, NORMAL, 1});
-	chunk.comparatorOutputs()[(70 + 64) << 8 | 9 << 4 | 5] = 13;
+	auto comparator	   = std::make_shared<ComparatorBlockEntity>(BlockPos{3 * 16 + 5, 70, -2 * 16 + 9});
+	comparator->output = 13;
+	chunk.blockEntities()[chunk.indexOf(5, 70, 9)] = comparator;
+	auto dispenser = std::make_shared<DispenserBlockEntity>(BlockPos{3 * 16 + 5, 71, -2 * 16 + 9}, true);
+	dispenser->item(4) = ItemStack(data.getStaticId("minecraft:item", "minecraft:redstone"), 12);
+	chunk.blockEntities()[chunk.indexOf(5, 71, 9)] = dispenser;
 	storage.write(3, -2, storage.encode(chunk, 100));
 
 	std::unique_ptr<Chunk> loaded = storage.load(3, -2);
 	CHECK(loaded != nullptr);
 	if (!loaded) return;
 	CHECK_EQ(static_cast<int>(loaded->getBlock(5, 70, 9)), stone);
-	CHECK_EQ(int(loaded->comparatorOutputs()[(70 + 64) << 8 | 9 << 4 | 5]), 13);
+	auto* loadedComparator = dynamic_cast<ComparatorBlockEntity*>(loaded->blockEntities()[loaded->indexOf(5, 70, 9)].get());
+	auto* loadedDropper	   = dynamic_cast<DispenserBlockEntity*>(loaded->blockEntities()[loaded->indexOf(5, 71, 9)].get());
+	CHECK(loadedComparator && loadedComparator->output == 13);
+	CHECK(loadedDropper && loadedDropper->isDropper() && loadedDropper->item(4).count == 12 && loadedDropper->item(4).item == data.getStaticId("minecraft:item", "minecraft:redstone"));
 	loaded->blockTicks().unpack(500);
 	loaded->fluidTicks().unpack(500);
 	const ScheduledTick* block = loaded->blockTicks().peek();

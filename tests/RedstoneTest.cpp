@@ -191,3 +191,26 @@ TEST(redstone_placement) {
 	int lever			= f.level->behavior(f.data.getDefaultBlockState("minecraft:lever")).getStateForPlacement(*f.level, context);
 	CHECK(f.data.getBlockStateName(lever) == "minecraft:lever[face=wall,facing=west,powered=false]");
 }
+
+// Directional blocks face the player: droppers and dispensers in 3D, furnaces horizontally, hoppers into the block
+TEST(redstone_facing_placement) {
+	LevelFixture f;
+	auto place = [&](const char* block, float yaw, float pitch, Direction face) {
+		PlaceContext context{};
+		context.clickedPos	   = {0, Y, 0};
+		context.clickedFace	   = face;
+		context.replaceClicked = false;
+		context.yaw			   = yaw;
+		context.pitch		   = pitch;
+		context.block		   = f.block(block);
+		int state			   = f.level->behaviors().placer(context.block).getStateForPlacement(*f.level, context);
+		return state >= 0 ? f.data.getBlockStateName(state) : std::string("none");
+	};
+	CHECK(place("minecraft:dropper", 0.0F, 80.0F, Direction::Up) == "minecraft:dropper[facing=up,triggered=false]");
+	CHECK(place("minecraft:dropper", 0.0F, 0.0F, Direction::North) == "minecraft:dropper[facing=north,triggered=false]");
+	CHECK(place("minecraft:dropper", 90.0F, 0.0F, Direction::East) == "minecraft:dropper[facing=east,triggered=false]");
+	CHECK(place("minecraft:dispenser", 0.0F, -80.0F, Direction::Down) == "minecraft:dispenser[facing=down,triggered=false]");
+	CHECK(place("minecraft:furnace", 90.0F, 70.0F, Direction::Up) == "minecraft:furnace[facing=east,lit=false]");
+	CHECK(place("minecraft:hopper", 0.0F, 0.0F, Direction::West) == "minecraft:hopper[enabled=true,facing=east]");
+	CHECK(place("minecraft:hopper", 0.0F, 0.0F, Direction::Up) == "minecraft:hopper[enabled=true,facing=down]");
+}

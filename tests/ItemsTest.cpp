@@ -140,3 +140,14 @@ TEST(items_pickup) {
 	CHECK(item->isRemoved());
 	CHECK_EQ(player->inventory().get(PlayerInventory::HOTBAR).count, 3);
 }
+
+// Swords, the mace and the trident don't break blocks in creative (Tool.canDestroyBlocksInCreative)
+TEST(items_creative_tools_that_dont_break) {
+	LevelFixture f;
+	for (const char* name : {"minecraft:diamond_sword", "minecraft:mace", "minecraft:trident"}) {
+		CHECK(!f.data.getItemProperties(f.item(name))->canDestroyBlocksInCreative);
+	}
+	for (const char* name : {"minecraft:diamond_pickaxe", "minecraft:stick", "minecraft:stone"}) {
+		CHECK(f.data.getItemProperties(f.item(name))->canDestroyBlocksInCreative);
+	}
+}

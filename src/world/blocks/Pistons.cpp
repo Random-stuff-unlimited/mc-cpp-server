@@ -212,7 +212,7 @@ void PistonBaseBlock::setPlacedBy(Level& level, const BlockPos& pos, int state) 
 void PistonBaseBlock::neighborChanged(Level& level, const BlockPos& pos, int state, int, bool) const { checkIfExtend(level, pos, state); }
 
 void PistonBaseBlock::onPlace(Level& level, const BlockPos& pos, int state, int oldState, bool) const {
-	if (blockOf(oldState) != blockOf(state) && !level.movingPiston(pos)) checkIfExtend(level, pos, state);
+	if (blockOf(oldState) != blockOf(state) && !level.getBlockEntity(pos)) checkIfExtend(level, pos, state);
 }
 
 // Powered from any side but the front, or quasi-connected: from the block above's neighbors
@@ -239,7 +239,7 @@ void PistonBaseBlock::checkIfExtend(Level& level, const BlockPos& pos, int state
 		BlockPos				   front	  = pos.relative(facing, 2);
 		int						   frontState = level.getBlockState(front);
 		int						   type		  = TRIGGER_CONTRACT;
-		const Level::MovingPiston* moving	  = level.movingPiston(front);
+		const auto*				   moving	  = level.getBlockEntity<PistonMovingBlockEntity>(front);
 		if (blockOf(frontState) == _pistons->movingPiston && _context->direction(frontState, _context->facing) == facing && moving && moving->extending &&
 			(moving->progressO < 0.5F || level.getGameTime() == moving->lastTicked || level.isHandlingTick())) {
 			type = TRIGGER_DROP;
@@ -268,15 +268,12 @@ bool PistonBaseBlock::triggerEvent(Level& level, const BlockPos& pos, int state,
 
 	// Retracting: the head's moving block entity ends first
 	BlockPos front = pos.relative(facing);
-	if (Level::MovingPiston* moving = level.movingPiston(front)) {
-		Level::MovingPiston copy = *moving;
-		level.finalTickMovingPiston(front, copy);
-	}
+	if (auto* moving = level.getBlockEntity<PistonMovingBlockEntity>(front)) moving->finalTick(level);
 	int movingState = blocks().with(blocks().defaultState(_pistons->movingPiston), _context->facing, _context->directionValue(facing));
 	movingState		= blocks().with(movingState, _pistons->type, pistonType);
 	level.setBlock(pos, movingState, Level::UPDATE_INVISIBLE | Level::UPDATE_KNOWN_SHAPE | Level::UPDATE_SKIP_BLOCK_ENTITY_SIDEEFFECTS);
 	int base = blocks().with(blocks().defaultState(blockOf(state)), _context->facing, _context->directionValue(static_cast<Direction>(data & 7)));
-	level.setMovingPiston(pos, {base, facing, false, true});
+	level.setBlockEntity(std::make_unique<PistonMovingBlockEntity>(pos, base, facing, false, true));
 	level.updateNeighborsAt(pos, _pistons->movingPiston);
 	level.updateNeighbourShapes(pos, movingState, Level::UPDATE_CLIENTS);
 	if (_sticky) {
@@ -284,9 +281,8 @@ bool PistonBaseBlock::triggerEvent(Level& level, const BlockPos& pos, int state,
 		int		 pulledState = level.getBlockState(pulled);
 		bool	 dropped	 = false;
 		if (blockOf(pulledState) == _pistons->movingPiston) {
-			if (Level::MovingPiston* moving = level.movingPiston(pulled); moving && moving->direction == facing && moving->extending) {
-				Level::MovingPiston copy = *moving;
-				level.finalTickMovingPiston(pulled, copy);
+			if (auto* moving = level.getBlockEntity<PistonMovingBlockEntity>(pulled); moving && moving->direction == facing && moving->extending) {
+				moving->finalTick(level);
 				dropped = true;
 			}
 		}
@@ -344,7 +340,7 @@ bool PistonBaseBlock::moveBlocks(Level& level, const BlockPos& pos, Direction fa
 		if (left.remove(to)) leftStates.erase(to);
 		int moving = blocks().with(blocks().defaultState(_pistons->movingPiston), _context->facing, _context->directionValue(facing));
 		level.setBlock(to, moving, Level::UPDATE_INVISIBLE | Level::UPDATE_MOVE_BY_PISTON | Level::UPDATE_SKIP_BLOCK_ENTITY_SIDEEFFECTS);
-		level.setMovingPiston(to, {pushedStates[i], facing, extending, false});
+		level.setBlockEntity(std::make_unique<PistonMovingBlockEntity>(to, pushedStates[i], facing, extending, false));
 		removed.push_back(state);
 	}
 	if (extending) {
@@ -353,7 +349,7 @@ bool PistonBaseBlock::moveBlocks(Level& level, const BlockPos& pos, Direction fa
 		int moving = blocks().with(blocks().with(blocks().defaultState(_pistons->movingPiston), _context->facing, _context->directionValue(facing)), _pistons->type, type);
 		if (left.remove(headPos)) leftStates.erase(headPos);
 		level.setBlock(headPos, moving, Level::UPDATE_INVISIBLE | Level::UPDATE_MOVE_BY_PISTON | Level::UPDATE_SKIP_BLOCK_ENTITY_SIDEEFFECTS);
-		level.setMovingPiston(headPos, {head, facing, true, true});
+		level.setBlockEntity(std::make_unique<PistonMovingBlockEntity>(headPos, head, facing, true, true));
 	}
 	std::vector<BlockPos> leftOrder = left.values();
 	constexpr int		  leaveFlags = Level::UPDATE_CLIENTS | Level::UPDATE_KNOWN_SHAPE | Level::UPDATE_MOVE_BY_PISTON; // 82
@@ -409,7 +405,7 @@ void PistonHeadBlock::neighborChanged(Level& level, const BlockPos& pos, int sta
 }
 
 bool MovingPistonBlock::useWithoutItem(Level& level, const BlockPos& pos, int, Player&) const {
-	if (level.movingPiston(pos)) return false;
+	if (level.getBlockEntity(pos)) return false;
 	level.removeBlock(pos, false);
 	return true;
 }
@@ -422,13 +418,11 @@ namespace {
 		std::shared_ptr<const BlockContext> context;
 		std::shared_ptr<const PistonIds>	pistons;
 
-		float extendedProgress(const Level::MovingPiston& piston, float progress) const { return piston.extending ? progress - 1.0F : 1.0F - progress; }
-		Direction movementDirection(const Level::MovingPiston& piston) const {
-			return piston.extending ? piston.direction : Directions::opposite(piston.direction);
-		}
+		float	  extendedProgress(const PistonMovingBlockEntity& piston, float progress) const { return piston.extendedProgress(progress); }
+		Direction movementDirection(const PistonMovingBlockEntity& piston) const { return piston.movementDirection(); }
 
 		// getCollisionRelatedBlockState: a retracting piston's head for its own base
-		int collisionState(const Level::MovingPiston& piston) const {
+		int collisionState(const PistonMovingBlockEntity& piston) const {
 			const BlockRegistry& b = context->blocks;
 			int					 moved = b.blockOf(piston.movedState);
 			if (piston.extending || !piston.sourcePiston || (moved != pistons->piston && moved != pistons->stickyPiston)) return piston.movedState;
@@ -438,7 +432,7 @@ namespace {
 		}
 
 		// moveByPositionAndProgress
-		AABB placed(const BlockPos& pos, const AABB& box, const Level::MovingPiston& piston) const {
+		AABB placed(const BlockPos& pos, const AABB& box, const PistonMovingBlockEntity& piston) const {
 			double offset = extendedProgress(piston, piston.progress);
 			return box.move(pos.x + offset * step(piston.direction, 0), pos.y + offset * step(piston.direction, 1), pos.z + offset * step(piston.direction, 2));
 		}
@@ -481,7 +475,7 @@ namespace {
 		}
 
 		// moveCollidedEntities: the entities in the way are pushed (players move by themselves on their side)
-		void moveCollidedEntities(const BlockPos& pos, float progress, const Level::MovingPiston& piston) const {
+		void moveCollidedEntities(const BlockPos& pos, float progress, const PistonMovingBlockEntity& piston) const {
 			Direction						  direction = movementDirection(piston);
 			double							  amount	= progress - piston.progress;
 			const std::vector<GameData::Box>& shape		= level.gameData().getCollisionShape(collisionState(piston));
@@ -519,7 +513,7 @@ namespace {
 		}
 
 		// moveStuckEntities: honey carries what stands on it sideways
-		void moveStuckEntities(const BlockPos& pos, float progress, const Level::MovingPiston& piston) const {
+		void moveStuckEntities(const BlockPos& pos, float progress, const PistonMovingBlockEntity& piston) const {
 			if (context->blocks.blockOf(piston.movedState) != pistons->honey) return;
 			Direction direction = movementDirection(piston);
 			if (direction == Direction::Up || direction == Direction::Down) return;
@@ -533,12 +527,13 @@ namespace {
 			}
 		}
 
-		void tick(const BlockPos& pos, Level::MovingPiston& piston) const {
+		void tick(PistonMovingBlockEntity& piston) const {
+			BlockPos pos	  = piston.pos();
 			piston.lastTicked = level.getGameTime();
 			piston.progressO  = piston.progress;
 			if (piston.progressO >= 1.0F) {
 				int moved = piston.movedState;
-				level.removeMovingPiston(pos);
+				level.removeBlockEntity(pos);
 				if (context->blocks.blockOf(level.getBlockState(pos)) != pistons->movingPiston) return;
 				int state = level.updateFromNeighbourShapes(moved, pos);
 				if (context->blocks.isAir(state)) {
@@ -560,11 +555,13 @@ namespace {
 			piston.progress = std::min(progress, 1.0F);
 		}
 
-		void finalTick(const BlockPos& pos, Level::MovingPiston& piston) const {
+		void finalTick(PistonMovingBlockEntity& piston) const {
 			if (piston.progressO >= 1.0F) return;
-			bool source = piston.sourcePiston;
-			int	 moved	= piston.movedState;
-			level.removeMovingPiston(pos);
+			BlockPos pos	= piston.pos();
+			bool	 source = piston.sourcePiston;
+			int		 moved	= piston.movedState;
+			piston.progress = piston.progressO = 1.0F;
+			level.removeBlockEntity(pos);
 			if (context->blocks.blockOf(level.getBlockState(pos)) != pistons->movingPiston) return;
 			int state = source ? context->defaultState("minecraft:air") : level.updateFromNeighbourShapes(moved, pos);
 			level.setBlock(pos, state, Level::UPDATE_ALL);
@@ -575,6 +572,6 @@ namespace {
 
 void registerMovingPistons(Level& level, std::shared_ptr<const BlockContext> context, std::shared_ptr<const PistonIds> pistons) {
 	auto moving = std::make_shared<MovingPistons>(MovingPistons{level, std::move(context), std::move(pistons)});
-	level.setMovingPistonTicker([moving](const BlockPos& pos, Level::MovingPiston& piston) { moving->tick(pos, piston); },
-								[moving](const BlockPos& pos, Level::MovingPiston& piston) { moving->finalTick(pos, piston); });
+	level.setMovingPistonTicker([moving](PistonMovingBlockEntity& piston) { moving->tick(piston); },
+								[moving](PistonMovingBlockEntity& piston) { moving->finalTick(piston); });
 }

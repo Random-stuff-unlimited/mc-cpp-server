@@ -93,6 +93,13 @@ public class GameDataExtractor {
 		Object	 fluids			   = staticField("net.minecraft.core.registries.BuiltInRegistries", "FLUID");
 		Method	 registryId		   = method("net.minecraft.core.IdMap", "getId", "java.lang.Object");
 		Method	 dynamicShape	   = method(block, "hasDynamicShape", "");
+		// The block entity type of the blocks that have one (EntityBlock.newBlockEntity at 0, 0, 0)
+		Class<?> entityBlock	   = find("net.minecraft.world.level.block.EntityBlock");
+		Method	 newBlockEntity	   = method("net.minecraft.world.level.block.EntityBlock", "newBlockEntity",
+											"net.minecraft.core.BlockPos,net.minecraft.world.level.block.state.BlockState");
+		Method	 blockEntityType   = method("net.minecraft.world.level.block.entity.BlockEntity", "getType", "");
+		Object	 blockEntityTypes  = staticField("net.minecraft.core.registries.BuiltInRegistries", "BLOCK_ENTITY_TYPE");
+		Method	 defaultState	   = method(block, "defaultBlockState", "");
 		Map<String, Integer> shapeIds = new LinkedHashMap<>();
 		Method	 stateDefinition  = method(block, "getStateDefinition", "");
 		Method	 possibleStates	  = method("net.minecraft.world.level.block.state.StateDefinition", "getPossibleStates", "");
@@ -107,6 +114,10 @@ public class GameDataExtractor {
 				blocksJson.append(i > 0 ? "," : "").append("\"").append(blockProperties[i]).append("\":").append(blockGetters[i].invoke(b));
 			}
 			blocksJson.append(",\"dynamic_shape\":").append(dynamicShape.invoke(b));
+			if (entityBlock.isInstance(b)) {
+				Object entity = newBlockEntity.invoke(b, zero, defaultState.invoke(b));
+				if (entity != null) blocksJson.append(",\"block_entity\":\"").append(getKey.invoke(blockEntityTypes, blockEntityType.invoke(entity))).append("\"");
+			}
 			blocksJson.append(",\"classes\":[");
 			int c = 0;
 			for (String name : classNames(b.getClass())) blocksJson.append(c++ > 0 ? "," : "").append("\"").append(name).append("\"");
@@ -144,6 +155,18 @@ public class GameDataExtractor {
 			statesJson.append("]");
 		}
 
+		// What stays after crafting with an item (Item.getCraftingRemainder: buckets, bottles...)
+		Method				remainder		  = method("net.minecraft.world.item.Item", "getCraftingRemainder", "");
+		Method				stackItem		  = method("net.minecraft.world.item.ItemStack", "getItem", "");
+		Method				stackEmpty		  = method("net.minecraft.world.item.ItemStack", "isEmpty", "");
+		Map<String, String> craftingRemainders = new TreeMap<>();
+		for (Object item : (Iterable<?>) items) {
+			Object stack = remainder.invoke(item);
+			if (stack != null && !(Boolean) stackEmpty.invoke(stack)) {
+				craftingRemainders.put(getKey.invoke(items, item).toString(), getKey.invoke(items, stackItem.invoke(stack)).toString());
+			}
+		}
+
 		Map<String, String> blockItems = new TreeMap<>();
 		for (Object item : (Iterable<?>) items) {
 			if (!blockItem.isInstance(item)) continue;
@@ -153,6 +176,8 @@ public class GameDataExtractor {
 		try (FileWriter out = new FileWriter(args[1])) {
 			out.write("{\"blocks\":{" + blocksJson + "},\"states\":{" + statesJson + "},\"block_items\":{");
 			writeEntries(out, blockItems);
+			out.write("},\"crafting_remainders\":{");
+			writeEntries(out, craftingRemainders);
 			out.write("},\"collision_shapes\":[" + String.join(",", shapeIds.keySet()) + "]}\n");
 		}
 		System.out.println("Extracted " + states.size() + " block states and " + blockItems.size() + " block items");

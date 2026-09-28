@@ -12,6 +12,7 @@
 #include <memory>
 #include <string>
 #include <vector>
+class Menu;
 class Server;
 class ChunkStreamer;
 
@@ -124,6 +125,10 @@ class Player : public std::enable_shared_from_this<Player> {
 	Server&		  _server;
 	PlayerConfig* _config;
 	bool		  _shiftKeyDown = false;
+	std::array<ItemStack, 27> _enderChest;
+	std::unique_ptr<Menu> _inventoryMenu, _openMenu;
+	int					  _containerCounter = 0;
+	std::array<bool, 8>	  _recipeBookSettings{}; // RecipeBookSettings: open and filtering, for crafting, furnace, blast furnace, smoker
 
   public:
 	// The standing player's box (EntityDimensions 0.6 x 1.8, floats)
@@ -177,6 +182,14 @@ class Player : public std::enable_shared_from_this<Player> {
 	void   setOnGround(bool onGround) { _onGround = onGround; }
 
 	PlayerInventory&		inventory() { return _inventory; }
+	// The ender chest's 27 slots (PlayerEnderChestContainer)
+	std::array<ItemStack, 27>& enderChest() { return _enderChest; }
+	// Menus (game thread): the inventory's own, always there once made, and the one open over it (see Menus)
+	std::unique_ptr<Menu>&	inventoryMenuSlot() { return _inventoryMenu; }
+	std::unique_ptr<Menu>&	openMenuSlot() { return _openMenu; }
+	// ServerPlayer.nextContainerCounter: 1 to 100
+	int						nextContainerCounter() { return _containerCounter = _containerCounter % 100 + 1; }
+	std::array<bool, 8>&	recipeBookSettings() { return _recipeBookSettings; }
 	const PlayerInventory&	inventory() const { return _inventory; }
 	int						getSelectedSlot() const { return _selectedSlot; }
 	void					setSelectedSlot(int slot) { _selectedSlot = slot; }
