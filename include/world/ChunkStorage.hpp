@@ -16,6 +16,9 @@
 // Chunk blob: u8 compression (1 = zlib), u32 uncompressed size, compressed payload.
 // Payload: u8 format version, u8 section count, then per section the block and biome containers:
 //   u8 bits (0 = single value), VarInt palette size, VarInt disk ids, then the packed longs (none if bits == 0).
+// Version 2 adds the scheduled ticks, blocks then fluids: VarInt name count, the names (VarInt length + bytes),
+// VarInt tick count, then per tick: VarInt name index, u8 x | z << 4 (in the chunk), u32 y, u32 delay (both
+// signed), u8 priority (signed).
 // All integers are little-endian.
 
 #include "world/Chunk.hpp"
@@ -90,13 +93,19 @@ class ChunkStorage {
 		uint32_t						defaultBiome;
 	};
 
-	ChunkStorage(const std::filesystem::path& worldDirectory, const Layout& layout, DiskPalette& blocks, DiskPalette& biomes);
+	// Names of the scheduled tick types (blocks and fluids), stored by name like the block states
+	struct TickTypes {
+		std::function<std::string(int)>				   blockName, fluidName;
+		std::function<int(const std::string&)> blockId, fluidId; // -1 if unknown (removed in this version)
+	};
+
+	ChunkStorage(const std::filesystem::path& worldDirectory, const Layout& layout, DiskPalette& blocks, DiskPalette& biomes, TickTypes tickTypes);
 
 	// nullptr if the chunk was never saved. Throws on corrupted data
 	std::unique_ptr<Chunk> load(int x, int z);
 
 	// Two steps so the chunk is only locked while encoding: encode() under the chunk's mutex, then write()
-	std::vector<uint8_t> encode(const Chunk& chunk);
+	std::vector<uint8_t> encode(const Chunk& chunk, int64_t gameTime);
 	void				 write(int x, int z, const std::vector<uint8_t>& payload);
 
 	void flush();
@@ -108,6 +117,7 @@ class ChunkStorage {
 	Layout				  _layout;
 	DiskPalette&		  _blocks;
 	DiskPalette&		  _biomes;
+	TickTypes			  _tickTypes;
 
 	std::mutex												  _regionsMutex;
 	std::unordered_map<int64_t, std::shared_ptr<RegionFile>> _regions;

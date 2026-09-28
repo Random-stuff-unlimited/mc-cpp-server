@@ -5,6 +5,7 @@
 #include "network/networking.hpp"
 #include "network/server.hpp"
 #include "player.hpp"
+#include "world/Level.hpp"
 #include "world/World.hpp"
 #include "world/ChunkStreamer.hpp"
 #include "world/Combat.hpp"
@@ -38,6 +39,7 @@ Server::~Server() {
 	if (_networkManager) _networkManager->stopThreads();
 	if (_world) _world->shutdown();
 	_gamePlayers.clear();
+	_level.reset();
 	// Player destructors use _idManager, which is destroyed before the player maps
 	clearPlayers();
 	delete _networkManager;
@@ -148,23 +150,59 @@ void Server::tickKeepAlive() {
 	}
 }
 
+// The phases of vanilla's ServerLevel.tick, in its order: this order is what redstone timings rely on
 void Server::tick(bool worldRuns) {
-	if (worldRuns) _world->tickTime();
+	_level->setHandlingTick(true);
+	if (worldRuns) {
+		_level->updateSkyBrightness();
+		_world->tickTime();
+		_level->tickScheduled(); // Block ticks, then fluid ticks
+		_level->tickChunks();	 // Random ticks
+	}
 	// The clients advance the time themselves: resynchronized every second, like vanilla
 	if (_tickLoop.getTickCount() % 20 == 0) sendTime(nullptr);
+	if (worldRuns) _level->runBlockEvents();
+	_level->setHandlingTick(false);
 
+	// Entities: players, then the others (items...), which stop while the game is frozen
 	for (const auto& player : _gamePlayers) {
 		if (!player->isDisconnected()) Combat::tick(*this, *player);
 	}
-	tickKeepAlive();
-	// Last, like vanilla: the movements of this tick to the players that see them
+	if (worldRuns) {
+		_level->tickEntities();
+		_level->tickBlockEntities(); // Moving pistons
+	}
+	// The movements of this tick to the players that see them
 	_playerTracker.tick(_tickLoop.getTickCount());
+	// The block changes, then the actions they answer (Block Changed Ack), the entities and the inventories
+	_level->sendChanges();
+	_level->sendEntityChanges();
+	for (const auto& player : _gamePlayers) {
+		PlayerInventory& inventory = player->inventory();
+		for (int slot : inventory.takeChanged()) {
+			Buffer update;
+			update.writeVarInt(0); // Inventory window
+			update.writeVarInt(inventory.nextStateId());
+			update.writeShort(static_cast<int16_t>(slot));
+			inventory.get(slot).write(update);
+			Packet::send(player, PacketId::Play::Clientbound::CONTAINER_SET_SLOT, update, *this);
+		}
+	}
+	for (const auto& player : _gamePlayers) {
+		int sequence = player->takeBlockChangesAck();
+		if (sequence < 0) continue;
+		Buffer ack;
+		ack.writeVarInt(sequence);
+		Packet::send(player, PacketId::Play::Clientbound::BLOCK_CHANGED_ACK, ack, *this);
+	}
+	tickKeepAlive();
 
 	// Chunk unloading and autosave count in real time
 	auto now = std::chrono::steady_clock::now();
 	if (now - _lastWorldMaintenance >= std::chrono::seconds(1)) {
 		_lastWorldMaintenance = now;
 		_world->tick();
+		_level->dropUnloadedChunks();
 	}
 }
 
@@ -196,6 +234,7 @@ void Server::addGamePlayer(const std::shared_ptr<Player>& player) {
 void Server::leaveGame(Player* player) {
 	if (ChunkStreamer* streamer = player->getChunkStreamer()) streamer->stop();
 	_playerTracker.leave(player);
+	_level->entities().forgetPlayer(player);
 	auto it = std::find_if(_gamePlayers.begin(), _gamePlayers.end(), [player](const auto& p) { return p.get() == player; });
 	if (it == _gamePlayers.end()) return;
 	*it = std::move(_gamePlayers.back());
@@ -238,6 +277,10 @@ int Server::start_server() {
 			g_logger->logGameInfo(ERROR, "Failed to load world: " + std::string(e.what()), "SERVER");
 			return 1;
 		}
+
+		_level = std::make_unique<Level>(*this, *_world, _gameData);
+		// Chunks finish loading on I/O threads: their scheduled ticks start counting on the game thread
+		_world->setChunkLoadListener([this](const std::shared_ptr<Chunk>& chunk) { _tickLoop.post([this, chunk] { _level->onChunkLoaded(chunk); }); });
 
 		_tickLoop.setTickRate(_config.getTickRate());
 

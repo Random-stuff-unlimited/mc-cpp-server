@@ -10,6 +10,7 @@
 #include "player.hpp"
 #include "world/ChunkStreamer.hpp"
 #include "world/PlayerTracker.hpp"
+#include "world/Level.hpp"
 #include "world/World.hpp"
 
 #include <algorithm>
@@ -290,16 +291,15 @@ namespace Combat {
 		}
 
 		// Water, lava, ladders and vines stop a fall
-		const GameData& gameData = server.getGameData();
-		int				state	 = world.getBlock(static_cast<int>(std::floor(player.getX())), static_cast<int>(std::floor(y)),
-												  static_cast<int>(std::floor(player.getZ())));
-		bool			cushioned = false;
-		if (state >= 0) {
-			int block = gameData.getBlockOfState(state);
-			cushioned = block == gameData.getStaticId("minecraft:block", "minecraft:water") ||
-						block == gameData.getStaticId("minecraft:block", "minecraft:lava") ||
-						gameData.isInTag("minecraft:block", "minecraft:climbable", block) || gameData.getProperty(state, "waterlogged") == "true";
-		}
+		const GameData&		 gameData = server.getGameData();
+		Level&				 level	  = server.getLevel();
+		const BlockRegistry& blocks	  = level.blocks();
+		int					 state	  = level.getBlockState({static_cast<int>(std::floor(player.getX())), static_cast<int>(std::floor(y)),
+															 static_cast<int>(std::floor(player.getZ()))});
+		int					 block	  = blocks.blockOf(state);
+		bool				 cushioned = block == gameData.getStaticId("minecraft:block", "minecraft:water") ||
+							 block == gameData.getStaticId("minecraft:block", "minecraft:lava") ||
+							 gameData.isInTag("minecraft:block", "minecraft:climbable", block) || blocks.getBool(state, blocks.property("waterlogged"));
 
 		double landedFrom = 0;
 		{

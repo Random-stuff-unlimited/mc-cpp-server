@@ -1,6 +1,7 @@
 #ifndef SERVER_HPP
 #define SERVER_HPP
 
+class Level;
 class NetworkManager;
 class Packet;
 class World;
@@ -38,6 +39,7 @@ class Server {
 	NetworkManager*					 _networkManager;
 	IdManager						 _idManager;
 	std::unique_ptr<World>			 _world;
+	std::unique_ptr<Level>			 _level;
 	PlayerTracker					 _playerTracker;
 	TickLoop						 _tickLoop;
 
@@ -79,6 +81,8 @@ class Server {
 
 	NetworkManager& getNetworkManager() { return *_networkManager; }
 	World&			getWorld() { return *_world; }
+	// The world for the game logic (game thread)
+	Level&			getLevel() { return *_level; }
 	PlayerTracker&	getPlayerTracker() { return _playerTracker; }
 	TickLoop&		getTickLoop() { return _tickLoop; }
 

@@ -4,8 +4,13 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
 
 /**
@@ -15,11 +20,15 @@ import java.util.TreeMap;
  *   java -cp <server jar + libraries> tools/GameDataExtractor.java <server_mappings.txt | -> <output.json>
  *
  * The jar is obfuscated: names are translated with Mojang's official mappings ("-" when the jar isn't obfuscated).
- * Output: {"blocks": {block: {property: value}}, "states": {property: [value per state id]}, "block_items": {item: block}}
+ * Output: {"blocks": {block: {property: value}}, "states": {property: [value per state id]}, "block_items": {item: block},
+ *          "collision_shapes": [[[minX, minY, minZ, maxX, maxY, maxZ], ...], ...]}
+ * The "collision_shape" state property is an index into collision_shapes. "classes" (per block) lists the block's class,
+ * its superclasses and interfaces (simple names), so the server knows which vanilla behavior it has.
  */
 public class GameDataExtractor {
-	// Deobfuscated class -> obfuscated class
+	// Deobfuscated class -> obfuscated class, and back
 	private static final Map<String, String> classes = new HashMap<>();
+	private static final Map<String, String> named	 = new HashMap<>();
 	// "class#name(params)" or "class#field" -> obfuscated member name
 	private static final Map<String, String> members = new HashMap<>();
 	private static boolean obfuscated;
@@ -45,10 +54,46 @@ public class GameDataExtractor {
 									 method(block, "getSpeedFactor", ""), method(block, "getJumpFactor", "")};
 		// Per block state, indexed by state id
 		String	 stateBase		  = "net.minecraft.world.level.block.state.BlockBehaviour$BlockStateBase";
-		String[] stateProperties  = {"light_emission", "requires_correct_tool", "occludes", "light_block", "propagates_skylight_down"};
+		String[] stateProperties  = {"light_emission", "requires_correct_tool", "occludes", "light_block", "propagates_skylight_down",
+									 "blocks_motion", "solid", "replaceable", "random_ticking", "liquid", "solid_render",
+									 "use_shape_for_light_occlusion", "ignited_by_lava", "analog_output"};
 		Method[] stateGetters	  = {method(stateBase, "getLightEmission", ""), method(stateBase, "requiresCorrectToolForDrops", ""),
 									 method(stateBase, "canOcclude", ""), method(stateBase, "getLightBlock", ""),
-									 method(stateBase, "propagatesSkylightDown", "")};
+									 method(stateBase, "propagatesSkylightDown", ""), method(stateBase, "blocksMotion", ""),
+									 method(stateBase, "isSolid", ""), method(stateBase, "canBeReplaced", ""),
+									 method(stateBase, "isRandomlyTicking", ""), method(stateBase, "liquid", ""),
+									 method(stateBase, "isSolidRender", ""), method(stateBase, "useShapeForLightOcclusion", ""),
+									 method(stateBase, "ignitedByLava", ""), method(stateBase, "hasAnalogOutputSignal", "")};
+		// Per block state, computed from the state in an empty world at 0, 0, 0 (the state alone decides, except for the
+		// few blocks with a random offset: bamboo, dripstone...)
+		String[] contextProperties = {"redstone_conductor", "face_sturdy", "collision_shape", "fluid", "fluid_amount", "fluid_falling", "occlusion_shape",
+									  "push_reaction"};
+		Method	 pushReaction	   = method(stateBase, "getPistonPushReaction", "");
+		Method	 occlusionShape	   = method(stateBase, "getOcclusionShape", "");
+		String	 getter			   = "net.minecraft.world.level.BlockGetter";
+		String	 pos			   = "net.minecraft.core.BlockPos";
+		Object	 emptyGetter	   = staticField("net.minecraft.world.level.EmptyBlockGetter", "INSTANCE");
+		Object	 zero			   = staticField(pos, "ZERO");
+		Method	 conductor		   = method(stateBase, "isRedstoneConductor", getter + "," + pos);
+		Method	 sturdy			   = method(stateBase, "isFaceSturdy", getter + "," + pos + ",net.minecraft.core.Direction,net.minecraft.world.level.block.SupportType");
+		Object[] directions		   = find("net.minecraft.core.Direction").getEnumConstants();
+		Object[] supportTypes	   = find("net.minecraft.world.level.block.SupportType").getEnumConstants(); // FULL, CENTER, RIGID
+		Method	 collisionShape	   = method(stateBase, "getCollisionShape", getter + "," + pos);
+		Method	 toAabbs		   = method("net.minecraft.world.phys.shapes.VoxelShape", "toAabbs", "");
+		String	 aabb			   = "net.minecraft.world.phys.AABB";
+		Field[]	 aabbFields		   = {field(aabb, "minX"), field(aabb, "minY"), field(aabb, "minZ"), field(aabb, "maxX"), field(aabb, "maxY"), field(aabb, "maxZ")};
+		Method	 fluidState		   = method(stateBase, "getFluidState", "");
+		String	 fluidStateClass   = "net.minecraft.world.level.material.FluidState";
+		Method	 fluidType		   = method(fluidStateClass, "getType", "");
+		Method	 fluidAmount	   = method(fluidStateClass, "getAmount", "");
+		String	 stateHolder	   = "net.minecraft.world.level.block.state.StateHolder";
+		Method	 hasProperty	   = method(stateHolder, "hasProperty", "net.minecraft.world.level.block.state.properties.Property");
+		Method	 getValue		   = method(stateHolder, "getValue", "net.minecraft.world.level.block.state.properties.Property");
+		Object	 falling		   = staticField("net.minecraft.world.level.material.FlowingFluid", "FALLING");
+		Object	 fluids			   = staticField("net.minecraft.core.registries.BuiltInRegistries", "FLUID");
+		Method	 registryId		   = method("net.minecraft.core.IdMap", "getId", "java.lang.Object");
+		Method	 dynamicShape	   = method(block, "hasDynamicShape", "");
+		Map<String, Integer> shapeIds = new LinkedHashMap<>();
 		Method	 stateDefinition  = method(block, "getStateDefinition", "");
 		Method	 possibleStates	  = method("net.minecraft.world.level.block.state.StateDefinition", "getPossibleStates", "");
 		Method	 stateId		  = method(block, "getId", "net.minecraft.world.level.block.state.BlockState");
@@ -61,17 +106,39 @@ public class GameDataExtractor {
 			for (int i = 0; i < blockProperties.length; i++) {
 				blocksJson.append(i > 0 ? "," : "").append("\"").append(blockProperties[i]).append("\":").append(blockGetters[i].invoke(b));
 			}
-			blocksJson.append("}");
+			blocksJson.append(",\"dynamic_shape\":").append(dynamicShape.invoke(b));
+			blocksJson.append(",\"classes\":[");
+			int c = 0;
+			for (String name : classNames(b.getClass())) blocksJson.append(c++ > 0 ? "," : "").append("\"").append(name).append("\"");
+			blocksJson.append("]}");
 			for (Object state : (Iterable<?>) possibleStates.invoke(stateDefinition.invoke(b))) {
-				Object[] values = new Object[stateGetters.length];
+				Object[] values = new Object[stateGetters.length + contextProperties.length];
 				for (int i = 0; i < stateGetters.length; i++) values[i] = stateGetters[i].invoke(state);
+				int n = stateGetters.length;
+				values[n++] = conductor.invoke(state, emptyGetter, zero);
+				int faces	= 0; // Bit direction * 3 + support type
+				for (int d = 0; d < directions.length; d++) {
+					for (int t = 0; t < supportTypes.length; t++) {
+						if ((Boolean) sturdy.invoke(state, emptyGetter, zero, directions[d], supportTypes[t])) faces |= 1 << (d * 3 + t);
+					}
+				}
+				values[n++] = faces;
+				values[n++] = shapeIds.computeIfAbsent(boxesOf(toAabbs, aabbFields, collisionShape.invoke(state, emptyGetter, zero)), k -> shapeIds.size());
+				Object fluid = fluidState.invoke(state);
+				values[n++]	 = registryId.invoke(fluids, fluidType.invoke(fluid));
+				values[n++]	 = fluidAmount.invoke(fluid);
+				values[n++]	 = (Boolean) hasProperty.invoke(fluid, falling) && (Boolean) getValue.invoke(fluid, falling);
+				values[n++]	 = shapeIds.computeIfAbsent(boxesOf(toAabbs, aabbFields, occlusionShape.invoke(state)), k -> shapeIds.size());
+				values[n++]	 = ((Enum<?>) pushReaction.invoke(state)).ordinal(); // NORMAL, DESTROY, BLOCK, IGNORE, PUSH_ONLY
 				states.put((Integer) stateId.invoke(null, state), values);
 			}
 		}
 
 		StringBuilder statesJson = new StringBuilder();
-		for (int i = 0; i < stateProperties.length; i++) {
-			statesJson.append(i > 0 ? "," : "").append("\"").append(stateProperties[i]).append("\":[");
+		List<String>  allProperties = new ArrayList<>(List.of(stateProperties));
+		allProperties.addAll(List.of(contextProperties));
+		for (int i = 0; i < allProperties.size(); i++) {
+			statesJson.append(i > 0 ? "," : "").append("\"").append(allProperties.get(i)).append("\":[");
 			int n = 0;
 			for (Object[] values : states.values()) statesJson.append(n++ > 0 ? "," : "").append(values[i]);
 			statesJson.append("]");
@@ -86,7 +153,7 @@ public class GameDataExtractor {
 		try (FileWriter out = new FileWriter(args[1])) {
 			out.write("{\"blocks\":{" + blocksJson + "},\"states\":{" + statesJson + "},\"block_items\":{");
 			writeEntries(out, blockItems);
-			out.write("}}\n");
+			out.write("},\"collision_shapes\":[" + String.join(",", shapeIds.keySet()) + "]}\n");
 		}
 		System.out.println("Extracted " + states.size() + " block states and " + blockItems.size() + " block items");
 		System.exit(0); // The game leaves non-daemon threads running
@@ -115,6 +182,7 @@ public class GameDataExtractor {
 					String[] parts = line.split(" -> ");
 					current		   = parts[0];
 					classes.put(current, parts[1].substring(0, parts[1].length() - 1));
+					named.put(parts[1].substring(0, parts[1].length() - 1), current);
 					continue;
 				}
 				// "    12:34:void name(int,java.lang.String) -> a" or "    int field -> b"
@@ -163,6 +231,39 @@ public class GameDataExtractor {
 	}
 
 	private static void invokeStatic(String owner, String name) throws Exception { method(owner, name, "").invoke(null); }
+
+	// A VoxelShape as JSON boxes: [[minX, minY, minZ, maxX, maxY, maxZ], ...]
+	private static String boxesOf(Method toAabbs, Field[] aabbFields, Object shape) throws Exception {
+		StringBuilder boxes = new StringBuilder("[");
+		for (Object box : (List<?>) toAabbs.invoke(shape)) {
+			boxes.append(boxes.length() > 1 ? "," : "").append("[");
+			for (int i = 0; i < 6; i++) boxes.append(i > 0 ? "," : "").append(aabbFields[i].getDouble(box));
+			boxes.append("]");
+		}
+		return boxes.append("]").toString();
+	}
+
+	private static Field field(String owner, String name) throws Exception {
+		Field field = find(owner).getDeclaredField(member(owner, name, name));
+		field.setAccessible(true);
+		return field;
+	}
+
+	// The class, its superclasses up to Block, and every interface along the way, as simple deobfuscated names
+	private static Set<String> classNames(Class<?> type) {
+		Set<String> names = new LinkedHashSet<>();
+		for (Class<?> c = type; c != null && !c.getName().equals("java.lang.Object"); c = c.getSuperclass()) {
+			names.add(simpleName(c));
+			for (Class<?> i : c.getInterfaces()) names.add(simpleName(i));
+			if (simpleName(c).equals("Block")) break;
+		}
+		return names;
+	}
+
+	private static String simpleName(Class<?> c) {
+		String name = obfuscated ? named.getOrDefault(c.getName(), c.getName()) : c.getName();
+		return name.substring(Math.max(name.lastIndexOf('.'), name.lastIndexOf('$')) + 1);
+	}
 
 	private static Object staticField(String owner, String name) throws Exception {
 		Field field = find(owner).getDeclaredField(member(owner, name, name));

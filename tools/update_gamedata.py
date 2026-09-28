@@ -14,13 +14,22 @@ and writes compact JSON files the server loads at startup:
     resources/gamedata/dimensions.json         min_y and height of every dimension type
     resources/gamedata/block_items.json        item -> block it places ("minecraft:redstone" -> "minecraft:redstone_wire")
     resources/gamedata/block_states.json       per block state (index = state id): light_emission, requires_correct_tool, occludes,
-                                               light_block (light absorbed, 0-15), propagates_skylight_down
-    resources/gamedata/items.json              per item: max_stack_size, equipment_slot and combat stats (attack_damage,
+                                               light_block (light absorbed, 0-15), propagates_skylight_down, blocks_motion,
+                                               solid, replaceable, random_ticking, liquid, solid_render, use_shape_for_light_occlusion,
+                                               ignited_by_lava, analog_output (comparators read it), occlusion_shape (index in collision_shapes.json), redstone_conductor, face_sturdy (bit
+                                               direction * 3 + support type FULL/CENTER/RIGID), collision_shape (index in
+                                               collision_shapes.json), fluid (minecraft:fluid id), fluid_amount, fluid_falling, push_reaction
+                                               (piston: 0 normal, 1 destroy, 2 block, 3 ignore, 4 push only)
+    resources/gamedata/collision_shapes.json   collision shapes: lists of boxes [minX, minY, minZ, maxX, maxY, maxZ]
+    resources/gamedata/block_loot_tables.json  loot table of each block (what it drops), as in the game's data
+    resources/gamedata/tree_features.json      trees (configured features of type minecraft:tree), as in the game's data
+    resources/gamedata/items.json              per item: max_stack_size, equipment_slot, tool_rules, fire_resistant and combat stats (attack_damage,
                                                attack_speed, armor, armor_toughness, knockback_resistance: bonuses
                                                given while the item is in its slot, from the reports)
 
 blocks.json also holds each block's properties (destroy_time, explosion_resistance, friction, speed_factor,
-jump_factor, and shape: single, double_height for doors/tall plants, double_length for beds). These and block_states.json come from the game's code, not from the reports:
+jump_factor, dynamic_shape, classes: the block's Java class, superclasses and interfaces, and shape: single, double_height
+for doors/tall plants, double_length for beds). These and block_states.json come from the game's code, not from the reports:
 tools/GameDataExtractor.java reads them from the server jar (translated with Mojang's official mappings).
 
 resources/gamedata/overrides.json is written by hand and never overwritten: the server applies it on top of the
@@ -171,6 +180,13 @@ def item_properties(components):
     """Stats of an item from its default components: attribute bonuses apply while it is held or worn"""
     slot = components.get("minecraft:equippable", {}).get("slot", "mainhand")
     props = {"max_stack_size": components.get("minecraft:max_stack_size", 64), "equipment_slot": slot}
+    # Which blocks it mines and drops (tool rules: blocks as a block, a list or a #tag, correct_for_drops optional)
+    tool = components.get("minecraft:tool")
+    if tool:
+        props["tool_rules"] = [{k: v for k, v in rule.items() if k in ("blocks", "correct_for_drops")} for rule in tool["rules"]]
+    # Survives fire and lava as an item entity (netherite...)
+    if "minecraft:damage_resistant" in components:
+        props["fire_resistant"] = True
     for modifier in components.get("minecraft:attribute_modifiers", []):
         name = ITEM_ATTRIBUTES.get(modifier["type"])
         if name and modifier["operation"] == "add_value" and modifier.get("slot") in (slot, "any", "hand", "armor"):
@@ -282,6 +298,17 @@ def main():
         if len(values) != state_count:
             sys.exit(f"block_states.json: {name} has {len(values)} values for {state_count} states")
     write("block_states.json", extracted["states"])
+    write("collision_shapes.json", extracted["collision_shapes"])
+    # What each block drops: its loot table (data/minecraft/loot_table/blocks/<block>.json), by block
+    loot = {"minecraft:" + f.stem: json.load(open(f)) for f in sorted((data / "loot_table" / "blocks").glob("*.json"))}
+    write("block_loot_tables.json", loot)
+    # Trees (configured features of type minecraft:tree), for saplings
+    trees = {}
+    for f in sorted((data / "worldgen" / "configured_feature").glob("*.json")):
+        feature = json.load(open(f))
+        if feature.get("type") == "minecraft:tree":
+            trees["minecraft:" + f.stem] = feature["config"]
+    write("tree_features.json", trees)
     overrides = OUT_DIR / "overrides.json"
     if not overrides.exists():
         overrides.write_text(json.dumps({"blocks": {}, "items": {}, "block_items": {}}, indent=2) + "\n")

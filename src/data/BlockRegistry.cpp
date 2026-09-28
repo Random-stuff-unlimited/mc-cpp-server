@@ -144,3 +144,22 @@ int BlockRegistry::cycle(int state, int property) const {
 	int newIndex = (oldIndex + 1) % count;
 	return state + (newIndex - oldIndex) * static_cast<int>(layout->stride);
 }
+
+int BlockRegistry::withPropertiesOf(int block, int source) const {
+	int state = _blocks[block].defaultState;
+	for (const PropertyLayout& layout : _blocks[block].properties) {
+		int value = get(source, layout.property);
+		if (value < 0) continue;
+		int changed = with(state, layout.property, value);
+		if (changed >= 0) state = changed;
+	}
+	return state;
+}
+
+int BlockRegistry::maxInt(int block, int property) const {
+	const PropertyLayout* layout = findLayout(_blocks[block], property);
+	if (!layout) return -1;
+	int max = -1;
+	for (uint16_t value : layout->values) max = std::max(max, _valueInts[value]);
+	return max;
+}

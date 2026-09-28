@@ -165,7 +165,11 @@ void World::loadLevel() {
 	}
 
 	_lightTables = std::make_unique<LightTables>(_gameData);
-	_storage	 = std::make_unique<ChunkStorage>(_settings.directory, _layout, *_blockPalette, *_biomePalette);
+	ChunkStorage::TickTypes tickTypes{
+			[&data](int id) { return data.getStaticName("minecraft:block", id); }, [&data](int id) { return data.getStaticName("minecraft:fluid", id); },
+			[&data](const std::string& name) { return data.getStaticId("minecraft:block", name); },
+			[&data](const std::string& name) { return data.getStaticId("minecraft:fluid", name); }};
+	_storage = std::make_unique<ChunkStorage>(_settings.directory, _layout, *_blockPalette, *_biomePalette, std::move(tickTypes));
 	_anvil	 = std::make_unique<AnvilImporter>(_settings.directory, _gameData, _layout);
 
 	_gameTime = level.value("time", int64_t(0));
@@ -207,7 +211,7 @@ void World::saveLevel() {
 			std::ifstream in(levelFile);
 			level = nlohmann::json::parse(in);
 		}
-		level["time"]	  = _gameTime;
+		level["time"]	  = getGameTime();
 		level["day-time"] = _dayTime;
 		std::ofstream out(levelFile);
 		out << level.dump(2) << "\n";
@@ -217,7 +221,7 @@ void World::saveLevel() {
 }
 
 void World::tickTime() {
-	_gameTime++;
+	_gameTime.fetch_add(1, std::memory_order_relaxed);
 	_dayTime++;
 }
 
@@ -234,6 +238,7 @@ void World::acquireChunk(int x, int z, ChunkCallback onReady) {
 		if (_stopped) return;
 		Entry& entry = _chunks[key];
 		entry.tickets++;
+		updateTicking(entry);
 		if (entry.chunk) {
 			ready = entry.chunk;
 		} else {
@@ -259,6 +264,11 @@ void World::releaseChunk(int x, int z) {
 	auto						it = _chunks.find(Chunk::key(x, z));
 	if (it == _chunks.end() || it->second.tickets == 0) return;
 	if (--it->second.tickets == 0) it->second.releasedAt = std::chrono::steady_clock::now();
+	updateTicking(it->second);
+}
+
+void World::updateTicking(Entry& entry) {
+	if (entry.chunk) entry.chunk->setTicking(entry.lit && entry.tickets > 0);
 }
 
 std::shared_ptr<Chunk> World::loadOrGenerate(int x, int z) {
@@ -290,6 +300,7 @@ void World::finishLoad(int x, int z, std::shared_ptr<Chunk> chunk) {
 		Entry&						entry = _chunks[Chunk::key(x, z)];
 		entry.chunk						  = chunk;
 		entry.loading					  = false;
+		updateTicking(entry);
 		waiters.swap(entry.waiters);
 		if (entry.tickets == 0) entry.releasedAt = std::chrono::steady_clock::now();
 
@@ -300,6 +311,7 @@ void World::finishLoad(int x, int z, std::shared_ptr<Chunk> chunk) {
 			}
 		}
 	}
+	if (_loadListener) _loadListener(chunk);
 	for (ChunkCallback& callback : waiters) callback(chunk);
 	for (auto [lx, lz] : toLight) _io.submitLoad([this, lx, lz] { light(lx, lz); });
 }
@@ -353,6 +365,7 @@ void World::light(int x, int z) {
 		if (it == _chunks.end() || it->second.chunk != area[4]) return; // Unloaded meanwhile
 		it->second.lit		= true;
 		it->second.lighting = false;
+		updateTicking(it->second);
 		waiters.swap(it->second.litWaiters);
 	}
 	// Chunks nobody waits for (the outer ring of the players' views) are never sent: not worth encoding
@@ -405,32 +418,9 @@ std::shared_ptr<Chunk> World::loadedChunk(int chunkX, int chunkZ) {
 	return it == _chunks.end() ? nullptr : it->second.chunk;
 }
 
-int World::getBlock(int x, int y, int z) {
-	if (y < _layout.minY || y >= _layout.minY + _layout.sectionCount * 16) return -1;
-	std::shared_ptr<Chunk> chunk = loadedChunk(x >> 4, z >> 4);
-	if (!chunk) return -1;
-	std::lock_guard<std::mutex> lock(chunk->mutex());
-	return static_cast<int>(chunk->getBlock(x & 15, y, z & 15));
-}
-
-int World::setBlock(int x, int y, int z, uint32_t state, std::vector<LightUpdate>* lightUpdates) {
-	if (y < _layout.minY || y >= _layout.minY + _layout.sectionCount * 16) return -1;
-	std::shared_ptr<Chunk> chunk = loadedChunk(x >> 4, z >> 4);
-	if (!chunk) return -1;
-	int previous;
-	{
-		std::lock_guard<std::mutex> lock(chunk->mutex());
-		previous = static_cast<int>(chunk->getBlock(x & 15, y, z & 15));
-		if (previous == static_cast<int>(state)) return previous;
-		chunk->setBlock(x & 15, y, z & 15, state); // Marks it for saving
-	}
-	relight(x, y, z, lightUpdates);
-	return previous;
-}
-
 // Light around a changed block. Incremental when the 3x3 chunks around are lit (the usual case: a player only
 // changes chunks it has, and those are lit); otherwise the lit ones are recomputed from scratch
-void World::relight(int x, int y, int z, std::vector<LightUpdate>* lightUpdates) {
+void World::relight(int x, int y, int z, LightChanges& lightChanges) {
 	int					   chunkX = x >> 4, chunkZ = z >> 4;
 	std::shared_ptr<Chunk> window[9];
 	bool				   lit[9] = {};
@@ -448,26 +438,33 @@ void World::relight(int x, int y, int z, std::vector<LightUpdate>* lightUpdates)
 	}
 
 	if (allLit) {
-		// Lock the 9 chunks in a fixed order, so two updates side by side can't deadlock
-		int order[9] = {0, 1, 2, 3, 4, 5, 6, 7, 8};
-		std::sort(order, order + 9, [&](int a, int b) { return window[a].get() < window[b].get(); });
-		std::unique_lock<std::mutex> locks[9];
-		for (int i = 0; i < 9; i++) locks[i] = std::unique_lock<std::mutex>(window[order[i]]->mutex());
+		LightEngine::Changes changes;
+		{
+			// Lock the 9 chunks in a fixed order, so two updates side by side can't deadlock
+			int order[9] = {0, 1, 2, 3, 4, 5, 6, 7, 8};
+			std::sort(order, order + 9, [&](int a, int b) { return window[a].get() < window[b].get(); });
+			std::unique_lock<std::mutex> locks[9];
+			for (int i = 0; i < 9; i++) locks[i] = std::unique_lock<std::mutex>(window[order[i]]->mutex());
 
-		Chunk* raw[9];
-		for (int i = 0; i < 9; i++) raw[i] = window[i].get();
-		LightEngine::Changes changes = LightEngine::update(raw, x & 15, y - _layout.minY, z & 15, *_lightTables);
+			Chunk* raw[9];
+			for (int i = 0; i < 9; i++) raw[i] = window[i].get();
+			changes = LightEngine::update(raw, x & 15, y - _layout.minY, z & 15, *_lightTables);
+			for (int i = 0; i < 9; i++) {
+				bool changed = std::find(changes.sky[i].begin(), changes.sky[i].end(), true) != changes.sky[i].end() ||
+							   std::find(changes.block[i].begin(), changes.block[i].end(), true) != changes.block[i].end();
+				if (changed) window[i]->invalidatePacket();
+			}
+		}
 		for (int i = 0; i < 9; i++) {
 			bool changed = std::find(changes.sky[i].begin(), changes.sky[i].end(), true) != changes.sky[i].end() ||
 						   std::find(changes.block[i].begin(), changes.block[i].end(), true) != changes.block[i].end();
 			if (!changed) continue;
-			window[i]->invalidatePacket();
-			if (lightUpdates) {
-				Buffer buf;
-				buf.writeVarInt(window[i]->x());
-				buf.writeVarInt(window[i]->z());
-				writeLightData(buf, window[i]->light(), _layout.sectionCount, &changes.sky[i], &changes.block[i]);
-				lightUpdates->push_back({window[i]->x(), window[i]->z(), std::move(buf.getData())});
+			LightChange& change = lightChanges[Chunk::key(window[i]->x(), window[i]->z())];
+			change.sky.resize(_layout.sectionCount, false);
+			change.block.resize(_layout.sectionCount, false);
+			for (int s = 0; s < _layout.sectionCount; s++) {
+				if (changes.sky[i][s]) change.sky[s] = true;
+				if (changes.block[i][s]) change.block[s] = true;
 			}
 		}
 		return;
@@ -477,15 +474,21 @@ void World::relight(int x, int y, int z, std::vector<LightUpdate>* lightUpdates)
 	for (int i = 0; i < 9; i++) {
 		if (!lit[i]) continue;
 		light(window[i]->x(), window[i]->z());
-		if (lightUpdates) {
-			std::lock_guard<std::mutex> lock(window[i]->mutex());
-			Buffer						buf;
-			buf.writeVarInt(window[i]->x());
-			buf.writeVarInt(window[i]->z());
-			writeLightData(buf, window[i]->light(), _layout.sectionCount, nullptr, nullptr);
-			lightUpdates->push_back({window[i]->x(), window[i]->z(), std::move(buf.getData())});
-		}
+		lightChanges[Chunk::key(window[i]->x(), window[i]->z())].full = true;
 	}
+}
+
+std::vector<uint8_t> World::lightUpdatePacket(const Chunk& chunk, const LightChange& change) const {
+	Buffer buf;
+	buf.writeVarInt(chunk.x());
+	buf.writeVarInt(chunk.z());
+	std::lock_guard<std::mutex> lock(chunk.mutex());
+	if (change.full) {
+		writeLightData(buf, chunk.light(), _layout.sectionCount, nullptr, nullptr);
+	} else {
+		writeLightData(buf, chunk.light(), _layout.sectionCount, &change.sky, &change.block);
+	}
+	return std::move(buf.getData());
 }
 
 // ----- Saving and unloading -----
@@ -497,7 +500,7 @@ bool World::writeChunk(const std::shared_ptr<Chunk>& chunk) {
 			std::lock_guard<std::mutex> lock(chunk->mutex());
 			if (!chunk->isDirty()) return true;
 			chunk->setDirty(false);
-			payload = _storage->encode(*chunk);
+			payload = _storage->encode(*chunk, getGameTime());
 		}
 		_storage->write(chunk->x(), chunk->z(), payload);
 		return true;
@@ -515,7 +518,10 @@ void World::save(int64_t key, const std::shared_ptr<Chunk>& chunk, bool unloadAf
 	auto						it = _chunks.find(key);
 	if (it == _chunks.end() || it->second.chunk != chunk) return;
 	it->second.saving = false;
-	if (unloadAfter && it->second.tickets == 0 && !chunk->isDirty()) _chunks.erase(it);
+	if (unloadAfter && it->second.tickets == 0 && !chunk->isDirty()) {
+		chunk->setUnloaded();
+		_chunks.erase(it);
+	}
 }
 
 void World::tick() {
@@ -536,6 +542,7 @@ void World::tick() {
 			}
 			if (entry.tickets == 0 && now - entry.releasedAt >= _settings.unloadDelay) {
 				if (!entry.chunk->isDirty()) {
+					entry.chunk->setUnloaded();
 					it = _chunks.erase(it);
 					continue;
 				}

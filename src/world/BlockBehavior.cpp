@@ -1,0 +1,40 @@
+#include "world/BlockBehavior.hpp"
+
+#include "world/Level.hpp"
+
+void BlockBehavior::tick(Level&, const BlockPos&, int) const {}
+bool BlockBehavior::isRandomlyTicking(int) const { return false; }
+void BlockBehavior::randomTick(Level&, const BlockPos&, int) const {}
+void BlockBehavior::neighborChanged(Level&, const BlockPos&, int, int, bool) const {}
+// What most blocks without a ported behavior do: stairs, slabs, fences... only let their water flow (their shape
+// connections aren't ported yet)
+int BlockBehavior::updateShape(Level& level, const BlockPos& pos, int state, Direction, const BlockPos&, int) const {
+	level.scheduleWaterlogged(pos, state);
+	return state;
+}
+void BlockBehavior::updateIndirectNeighbourShapes(Level&, const BlockPos&, int, int, int) const {}
+void BlockBehavior::onPlace(Level&, const BlockPos&, int, int, bool) const {}
+void BlockBehavior::affectNeighborsAfterRemoval(Level&, const BlockPos&, int, bool) const {}
+bool BlockBehavior::triggerEvent(Level&, const BlockPos&, int, int, int) const { return false; }
+bool BlockBehavior::isSignalSource(int) const { return false; }
+int	 BlockBehavior::getSignal(Level&, const BlockPos&, int, Direction) const { return 0; }
+int	 BlockBehavior::getDirectSignal(Level&, const BlockPos&, int, Direction) const { return 0; }
+bool BlockBehavior::hasAnalogOutputSignal(int) const { return false; }
+int	 BlockBehavior::getAnalogOutputSignal(Level&, const BlockPos&, int, Direction) const { return 0; }
+int	 BlockBehavior::getStateForPlacement(Level&, const PlaceContext&) const { return GENERIC_PLACEMENT; }
+bool BlockBehavior::canSurvive(Level&, const BlockPos&, int) const { return true; }
+void BlockBehavior::setPlacedBy(Level&, const BlockPos&, int) const {}
+bool BlockBehavior::useWithoutItem(Level&, const BlockPos&, int, Player&) const { return false; }
+void BlockBehavior::entityInside(Level&, const BlockPos&, int) const {}
+
+BlockBehaviors::BlockBehaviors(size_t blockCount) : _byBlock(blockCount, &_default), _randomTickers(blockCount, nullptr) {}
+
+void BlockBehaviors::setRandomTick(int block, std::unique_ptr<BlockBehavior> behavior) {
+	_randomTickers.at(block) = behavior.get();
+	_owned.push_back(std::move(behavior));
+}
+
+void BlockBehaviors::set(int block, std::unique_ptr<BlockBehavior> behavior) {
+	_byBlock.at(block) = behavior.get();
+	_owned.push_back(std::move(behavior));
+}

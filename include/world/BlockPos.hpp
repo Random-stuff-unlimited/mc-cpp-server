@@ -14,6 +14,9 @@ namespace Directions {
 	// BlockBehaviour.UPDATE_SHAPE_ORDER: order of the shape updates (updateShape)
 	constexpr Direction SHAPE_UPDATE_ORDER[6] = {Direction::West, Direction::East, Direction::North, Direction::South, Direction::Down, Direction::Up};
 
+	// Direction.Plane.HORIZONTAL
+	constexpr Direction HORIZONTAL[4] = {Direction::North, Direction::East, Direction::South, Direction::West};
+
 	constexpr int OFFSETS[6][3] = {{0, -1, 0}, {0, 1, 0}, {0, 0, -1}, {0, 0, 1}, {-1, 0, 0}, {1, 0, 0}};
 
 	constexpr Direction opposite(Direction direction) { return static_cast<Direction>(static_cast<uint8_t>(direction) ^ 1); }
@@ -28,6 +31,11 @@ struct BlockPos {
 	}
 	constexpr BlockPos above() const { return {x, y + 1, z}; }
 	constexpr BlockPos below() const { return {x, y - 1, z}; }
+	constexpr BlockPos north() const { return {x, y, z - 1}; }
+	constexpr BlockPos south() const { return {x, y, z + 1}; }
+	constexpr BlockPos west() const { return {x - 1, y, z}; }
+	constexpr BlockPos east() const { return {x + 1, y, z}; }
+	constexpr BlockPos offset(int dx, int dy, int dz) const { return {x + dx, y + dy, z + dz}; }
 
 	int chunkX() const { return x >> 4; }
 	int chunkZ() const { return z >> 4; }
@@ -36,6 +44,9 @@ struct BlockPos {
 	constexpr int64_t asLong() const {
 		return static_cast<int64_t>((static_cast<uint64_t>(x) & 0x3FFFFFF) << 38 | (static_cast<uint64_t>(z) & 0x3FFFFFF) << 12 |
 									(static_cast<uint64_t>(y) & 0xFFF));
+	}
+	static constexpr BlockPos fromLong(int64_t packed) {
+		return {static_cast<int>(packed >> 38), static_cast<int>((packed << 52) >> 52), static_cast<int>((packed << 26) >> 38)};
 	}
 	// Vec3i.hashCode, for the few places where vanilla iterates a hash set of positions
 	constexpr int32_t javaHashCode() const {

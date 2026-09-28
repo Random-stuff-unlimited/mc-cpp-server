@@ -8,6 +8,7 @@
 
 class Buffer;
 
+#include <atomic>
 #include <chrono>
 #include <condition_variable>
 #include <deque>
@@ -73,17 +74,22 @@ class World {
 	// Its Chunk Data packet is encoded by then (on an I/O thread). The caller must hold a ticket on the chunk
 	void whenLit(int x, int z, ChunkCallback onLit);
 
-	// Block state at a world position, -1 if its chunk isn't loaded or y is outside the world
-	int getBlock(int x, int y, int z);
-	// Light Update packet body for a chunk whose light changed
-	struct LightUpdate {
-		int					 chunkX, chunkZ;
-		std::vector<uint8_t> packet;
+	// The chunk if it is loaded, null otherwise (still loading or unloaded). Blocks are changed through Level
+	std::shared_ptr<Chunk> loadedChunk(int chunkX, int chunkZ);
+	// Called on an I/O thread each time a chunk finishes loading
+	void setChunkLoadListener(ChunkCallback listener) { _loadListener = std::move(listener); }
+
+	// Light sections changed in each chunk, accumulated over several relights (sent once per tick)
+	struct LightChange {
+		std::vector<bool> sky, block;	 // Per section of the world
+		bool			  full = false; // Recomputed entirely: every section
 	};
-	// Returns the previous state, -1 (and changes nothing) if the chunk isn't loaded or y is outside the world.
-	// The light around is updated; the chunks whose light changed are added to lightUpdates, to send to their viewers
-	int setBlock(int x, int y, int z, uint32_t state, std::vector<LightUpdate>* lightUpdates = nullptr);
-	bool	 isAir(uint32_t state) const;
+	using LightChanges = std::unordered_map<int64_t, LightChange>; // By Chunk::key
+	// Updates the light around a block that changed (its chunk must be loaded), adding the changed sections to changes
+	void relight(int x, int y, int z, LightChanges& changes);
+	// Light Update packet body for these sections of the chunk
+	std::vector<uint8_t> lightUpdatePacket(const Chunk& chunk, const LightChange& change) const;
+	bool				 isAir(uint32_t state) const;
 	uint32_t airState() const { return _layout.air; }
 
 	// Chunk Data packet ready to send (framed and compressed), encoded once and cached in the chunk. Encoding is slow:
@@ -94,8 +100,9 @@ class World {
 	void tick();
 	// Game thread, once per tick unless the game is frozen: advances the game time and the time of day
 	void	tickTime();
-	int64_t getGameTime() const { return _gameTime; }
+	int64_t getGameTime() const { return _gameTime.load(std::memory_order_relaxed); }
 	int64_t getDayTime() const { return _dayTime; }
+	void	setDayTime(int64_t time) { _dayTime = time; }
 	// Saves every modified chunk. The world can't load chunks anymore afterwards
 	void shutdown();
 
@@ -139,8 +146,9 @@ class World {
 	std::mutex								_chunksMutex;
 	std::unordered_map<int64_t, Entry>		_chunks;
 	bool									_stopped = false;
+	ChunkCallback							_loadListener;
 	std::chrono::steady_clock::time_point	_lastAutosave;
-	int64_t									_gameTime = 0; // Ticks since the world was created
+	std::atomic<int64_t>					_gameTime{0}; // Ticks since the world was created (read when saving)
 	int64_t									_dayTime  = 0; // Time of day: 0 = sunrise, 24000 ticks a day
 
 	void				   loadLevel();
@@ -153,8 +161,8 @@ class World {
 	void				   save(int64_t key, const std::shared_ptr<Chunk>& chunk, bool unloadAfter);
 	bool				   writeChunk(const std::shared_ptr<Chunk>& chunk);
 	std::vector<uint8_t>   encodeChunkData(const Chunk& chunk) const;
-	std::shared_ptr<Chunk> loadedChunk(int chunkX, int chunkZ);
-	void				   relight(int x, int y, int z, std::vector<LightUpdate>* lightUpdates);
+	// Chunk is ticking when lit and kept by a player. Called with _chunksMutex held
+	static void			   updateTicking(Entry& entry);
 	// Light data as in Chunk Data and Light Update: only the sections flagged in skySections / blockSections, or
 	// all of them (with the ones below and above the world) when these are null
 	void writeLightData(Buffer& buf, const ChunkLight& light, int sectionCount, const std::vector<bool>* skySections,

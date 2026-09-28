@@ -6,10 +6,12 @@
 #include "PacketIds.hpp"
 #include "world/ChunkStreamer.hpp"
 #include "world/Combat.hpp"
+#include "world/Level.hpp"
 #include "world/World.hpp"
 
 #include <algorithm>
 #include "player.hpp"
+#include "world/Level.hpp"
 
 #include <string>
 
@@ -81,6 +83,11 @@ namespace {
 		}
 		server.getPlayerTracker().move(player);
 		if (withPosition) Combat::onMove(server, *player, previousY);
+		// applyEffectsFromBlocks: pressure plates under the player
+		if (withPosition && player->getGameMode() != GameMode::Spectator && !player->combat().dead) {
+			double half = Player::BB_WIDTH / 2.0;
+			server.getLevel().checkInsideBlocks({x - half, y, z - half, x + half, y + Player::BB_HEIGHT, z + half});
+		}
 	}
 
 	enum InteractType { INTERACT = 0, ATTACK = 1, INTERACT_AT = 2 };
@@ -227,6 +234,12 @@ void playPacketRouter(Packet* packet, Server& server) {
 		animation.writeVarInt(player->getPlayerID());
 		animation.writeUByte(packet->getData().readVarInt() == 0 ? ANIMATE_SWING_MAIN_HAND : ANIMATE_SWING_OFF_HAND);
 		server.getPlayerTracker().broadcast(player, PacketId::Play::Clientbound::ANIMATE, animation, false);
+		break;
+	}
+	case PacketId::Play::Serverbound::PLAYER_INPUT: {
+		// The keys held: forward, backward, left, right, jump, sneak (0x20), sprint
+		uint8_t keys = packet->getData().readUByte();
+		player->setShiftKeyDown(keys & 0x20);
 		break;
 	}
 	case PacketId::Play::Serverbound::PLAYER_COMMAND: {

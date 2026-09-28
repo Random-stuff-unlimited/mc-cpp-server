@@ -33,6 +33,7 @@ class ChunkStreamer {
 	void stop();
 	// Whether the client has this chunk, so it must be told when it changes
 	bool hasChunk(int chunkX, int chunkZ) const;
+	int	 viewDistance() const { return _viewDistance; }
 
   private:
 	static constexpr int MAX_BATCHES_IN_FLIGHT = 4;

@@ -1,6 +1,7 @@
 #ifndef CHUNK_HPP
 #define CHUNK_HPP
 
+#include "world/LevelTicks.hpp"
 #include "world/Light.hpp"
 #include "world/PalettedContainer.hpp"
 
@@ -8,6 +9,7 @@
 #include <cstdint>
 #include <memory>
 #include <mutex>
+#include <unordered_map>
 #include <vector>
 
 struct ChunkSection {
@@ -65,6 +67,27 @@ class Chunk {
 
 	size_t memoryUsage() const;
 
+	// Scheduled ticks of the blocks and fluids of this chunk (see Level), saved with it
+	ChunkTicks& blockTicks() { return _blockTicks; }
+	ChunkTicks& fluidTicks() { return _fluidTicks; }
+	const ChunkTicks& blockTicks() const { return _blockTicks; }
+	const ChunkTicks& fluidTicks() const { return _fluidTicks; }
+
+	// Set by World: loaded with its neighbors and kept by a player, so its blocks tick (vanilla's block ticking)
+	bool isTicking() const { return _ticking.load(std::memory_order_relaxed); }
+	void setTicking(bool ticking) { _ticking.store(ticking, std::memory_order_relaxed); }
+	// Set by World when it drops the chunk: whoever still holds it must forget it
+	bool isUnloaded() const { return _unloaded.load(std::memory_order_relaxed); }
+	void setUnloaded() { _unloaded.store(true, std::memory_order_relaxed); }
+
+	// Output of each comparator (ComparatorBlockEntity), by index ((y - minY) << 8 | z << 4 | x). Saved with the chunk:
+	// hold mutex() to use it
+	std::unordered_map<uint32_t, uint8_t>& comparatorOutputs() { return _comparatorOutputs; }
+	const std::unordered_map<uint32_t, uint8_t>& comparatorOutputs() const { return _comparatorOutputs; }
+
+	// Game thread only (see Level): per section, how many of its blocks tick randomly
+	std::vector<uint16_t>& randomTickingCounts() { return _randomTicking; }
+
 	static int64_t key(int x, int z) { return (static_cast<int64_t>(z) << 32) | static_cast<uint32_t>(x); }
 
   private:
@@ -78,6 +101,12 @@ class Chunk {
 	std::atomic<uint64_t>			 _version{0};
 	std::shared_ptr<const std::vector<uint8_t>> _cachedPacket;
 	uint64_t						 _packetGeneration = 0;
+	ChunkTicks						 _blockTicks;
+	ChunkTicks						 _fluidTicks;
+	std::atomic<bool>				 _ticking{false};
+	std::atomic<bool>				 _unloaded{false};
+	std::vector<uint16_t>			 _randomTicking;
+	std::unordered_map<uint32_t, uint8_t> _comparatorOutputs;
 
 	ChunkSection& sectionAt(int y) { return _sections[(y - _minY) >> 4]; }
 	const ChunkSection& sectionAt(int y) const { return _sections[(y - _minY) >> 4]; }

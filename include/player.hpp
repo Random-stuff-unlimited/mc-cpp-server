@@ -2,7 +2,9 @@
 #define PLAYER_HPP
 
 #include "lib/UUID.hpp"
+#include "world/item/PlayerInventory.hpp"
 
+#include <algorithm>
 #include <array>
 #include <atomic>
 #include <mutex>
@@ -107,21 +109,26 @@ class Player : public std::enable_shared_from_this<Player> {
 	float					_yaw	  = 0; // Degrees, 0 = looking south (+z), 90 = west
 	float					_pitch	  = 0; // Degrees, -90 = looking up
 	bool					_onGround = false;
-	std::array<int32_t, 46> _inventory;		  // Item id per inventory slot (window numbering: hotbar is 36-44, offhand 45), -1 = empty
+	PlayerInventory			_inventory;
 	int						_selectedSlot = 3; // Hotbar index 0-8
 	bool					_digging	  = false;
 	bool					_sprinting	  = false;
 	int64_t					_lastAttack	  = 0; // Tick of the last attack: the attack strength recharges from there
 	CombatState				_combat;
 	int						_digX = 0, _digY = 0, _digZ = 0;
+	int						_blockChangesAck = -1; // Highest block action sequence to acknowledge, -1 if none
 	int			  x, y, z;
 	int			  health;
 	UUID		  _uuid;
 	int			  _playerId;
 	Server&		  _server;
 	PlayerConfig* _config;
+	bool		  _shiftKeyDown = false;
 
   public:
+	// The standing player's box (EntityDimensions 0.6 x 1.8, floats)
+	static constexpr float BB_WIDTH = 0.6F, BB_HEIGHT = 1.8F;
+
 	Player(Server& server);
 	Player(const std::string& name, PlayerState state, int socket, Server& server);
 	Player& operator=(const Player& src);
@@ -158,6 +165,9 @@ class Player : public std::enable_shared_from_this<Player> {
 	double getY() const { return _posY; }
 	double getZ() const { return _posZ; }
 	float  getYaw() const { return _yaw; }
+	// Sneak key held (Player Input packet): isSecondaryUseActive
+	bool   isShiftKeyDown() const { return _shiftKeyDown; }
+	void   setShiftKeyDown(bool down) { _shiftKeyDown = down; }
 	float  getPitch() const { return _pitch; }
 	bool   isOnGround() const { return _onGround; }
 	void   setRotation(float yaw, float pitch) {
@@ -166,13 +176,19 @@ class Player : public std::enable_shared_from_this<Player> {
 	}
 	void   setOnGround(bool onGround) { _onGround = onGround; }
 
-	void	setInventorySlot(int slot, int32_t item) {
-		   if (slot >= 0 && slot < static_cast<int>(_inventory.size())) _inventory[slot] = item;
+	PlayerInventory&		inventory() { return _inventory; }
+	const PlayerInventory&	inventory() const { return _inventory; }
+	int						getSelectedSlot() const { return _selectedSlot; }
+	void					setSelectedSlot(int slot) { _selectedSlot = slot; }
+	// Window slot of the hand: 0 = main hand (selected hotbar slot), 1 = offhand
+	int						handSlot(int hand) const { return hand == 0 ? PlayerInventory::HOTBAR + _selectedSlot : PlayerInventory::OFFHAND; }
+	const ItemStack&		getStackInHand(int hand) const { return _inventory.get(handSlot(hand)); }
+	// Item ids, 0 (air) when empty
+	int32_t getItemInHand(int hand) const { return getStackInHand(hand).isEmpty() ? 0 : getStackInHand(hand).item; }
+	int32_t getInventoryItem(int slot) const {
+		if (slot < 0 || slot >= PlayerInventory::SIZE || _inventory.get(slot).isEmpty()) return 0;
+		return _inventory.get(slot).item;
 	}
-	int		getSelectedSlot() const { return _selectedSlot; }
-	void	setSelectedSlot(int slot) { _selectedSlot = slot; }
-	int32_t getItemInHand(int hand) const { return hand == 0 ? _inventory[36 + _selectedSlot] : _inventory[45]; }
-	int32_t getInventoryItem(int slot) const { return slot >= 0 && slot < static_cast<int>(_inventory.size()) ? _inventory[slot] : -1; }
 
 	CombatState& combat() { return _combat; }
 	bool		 isSprinting() const { return _sprinting; }
@@ -189,6 +205,14 @@ class Player : public std::enable_shared_from_this<Player> {
 	}
 	void stopDigging() { _digging = false; }
 	bool isDigging(int x, int y, int z) const { return _digging && _digX == x && _digY == y && _digZ == z; }
+
+	// Block actions handled up to this sequence: acknowledged at the end of the tick, after the block changes
+	void acknowledgeBlockChanges(int sequence) { _blockChangesAck = std::max(_blockChangesAck, sequence); }
+	int	 takeBlockChangesAck() {
+		 int sequence	  = _blockChangesAck;
+		 _blockChangesAck = -1;
+		 return sequence;
+	}
 
 	// Created when the player enters the Play state
 	void		   createChunkStreamer();

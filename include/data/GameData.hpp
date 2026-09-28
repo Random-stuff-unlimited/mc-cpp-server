@@ -49,6 +49,9 @@ class GameData {
 		float speedFactor		  = 1; // Walking speed multiplier ("speed_factor": soul sand, honey)
 		float jumpFactor		  = 1; // "jump_factor"
 		Shape shape				  = Shape::Single; // "shape": "single", "double_height" or "double_length"
+		bool  dynamicShape		  = false;		   // Shape depends on the position (random offset: bamboo...) ("dynamic_shape")
+		// The block's Java class, superclasses and interfaces ("classes"): which vanilla behavior it has
+		std::vector<std::string> classes;
 	};
 	// Per block state, from the game code
 	struct StateProperties {
@@ -57,6 +60,30 @@ class GameData {
 		bool	occludes			= false; // Full opaque block ("occludes")
 		uint8_t lightBlock			= 0;	 // Light absorbed when passing through, 0-15 ("light_block"): air 0, leaves 1, stone 15
 		bool	propagatesSkylightDown = true; // Sky light goes straight down through it without loss ("propagates_skylight_down")
+		bool	blocksMotion		   = false; // "blocks_motion": has a collision and isn't a liquid (vanilla's legacy flag)
+		bool	solid				   = false; // "solid": vanilla's legacySolid (isSolid)
+		bool	replaceable			   = false; // "replaceable": placing a block replaces it (canBeReplaced)
+		bool	randomTicking		   = false; // "random_ticking"
+		bool	liquid				   = false; // "liquid": water, lava, bubble column (vanilla's legacy flag)
+		bool	solidRender			   = false; // "solid_render": opaque full cube for rendering (isSolidRender)
+		bool	useShapeForLightOcclusion = false; // "use_shape_for_light_occlusion": slabs, stairs, snow... block light by shape
+		bool	ignitedByLava		   = false;	// "ignited_by_lava"
+		bool	analogOutput		   = false; // "analog_output": comparators read it (hasAnalogOutputSignal)
+		uint16_t occlusionShape		   = 0;		// "occlusion_shape": index in getCollisionShape's table
+		bool	redstoneConductor	   = false; // "redstone_conductor"
+		uint32_t faceSturdy			   = 0;		// "face_sturdy": bit direction * 3 + SupportType (FULL, CENTER, RIGID)
+		uint16_t collisionShape		   = 0;		// "collision_shape": index in getCollisionShape()
+		uint8_t	 fluid				   = 0;		// "fluid": minecraft:fluid id of its fluid state (0 = empty)
+		uint8_t	 fluidAmount		   = 0;		// "fluid_amount": 1-8, 8 for sources
+		bool	 fluidFalling		   = false; // "fluid_falling"
+		uint8_t	 pushReaction		   = 0;		// "push_reaction": a PushReaction
+	};
+	// What a piston does to a block (PushReaction)
+	enum class PushReaction : uint8_t { Normal = 0, Destroy = 1, Block = 2, Ignore = 3, PushOnly = 4 };
+	enum class SupportType { Full = 0, Center = 1, Rigid = 2 };
+	// Collision boxes, in block coordinates (0-1)
+	struct Box {
+		double minX, minY, minZ, maxX, maxY, maxZ;
 	};
 
 	// Where an item is worn or held for its stats to apply
@@ -72,6 +99,13 @@ class GameData {
 		float		  armor				  = 0;
 		float		  armorToughness	  = 0; // "armor_toughness"
 		float		  knockbackResistance = 0; // "knockback_resistance", 0-1
+		bool		  fireResistant		  = false; // "fire_resistant": its item entity survives fire and lava (netherite...)
+		// "tool_rules": the first rule matching a block with correct_for_drops set decides whether it drops
+		struct ToolRule {
+			std::vector<bool> blocks; // By block id
+			int				  correctForDrops = -1; // 1, 0, or -1 when the rule doesn't say
+		};
+		std::vector<ToolRule> toolRules;
 	};
 
 	struct Dimension {
@@ -85,6 +119,8 @@ class GameData {
 	};
 
 	void load(const std::filesystem::path& directory);
+	// The folder it was loaded from (other game data files live there too)
+	const std::filesystem::path& getDirectory() const { return _directory; }
 
 	const std::string& getVersionName() const { return _versionName; }
 	int				   getProtocolVersion() const { return _protocolVersion; }
@@ -92,6 +128,8 @@ class GameData {
 
 	// Returns -1 for an unknown registry or entry
 	int getStaticId(const std::string& registry, const std::string& entry) const;
+	// Name of an entry of a static registry, "" if unknown
+	const std::string& getStaticName(const std::string& registry, int id) const;
 	int getSyncedId(const std::string& registry, const std::string& entry) const;
 
 	const std::vector<Registry>&	 getSyncedRegistries() const { return _syncedRegistries; }
@@ -104,6 +142,8 @@ class GameData {
 	int				   getBlockStateFromName(const std::string& name) const;
 	const std::string& getBlockStateName(int stateId) const { return _blockStateNames.at(stateId); }
 	int				   getBlockStateCount() const { return static_cast<int>(_blockStateNames.size()); }
+	// Number of blocks (minecraft:block registry)
+	size_t getBlockCount() const { return _staticRegistries.at("minecraft:block").entries.size(); }
 
 	// Block states compiled for the game logic (fast property access)
 	const BlockRegistry& getBlocks() const { return _blocks; }
@@ -113,6 +153,14 @@ class GameData {
 	const BlockProperties& getBlockProperties(int stateId) const { return _blockProperties.at(_stateBlocks.at(stateId)); }
 	const StateProperties& getStateProperties(int stateId) const { return _stateProperties.at(stateId); }
 	float				   getDestroyTime(int stateId) const { return getBlockProperties(stateId).destroyTime; }
+	// Whether the face of this side can support a block (torch, ladder...), vanilla's isFaceSturdy. direction: Direction id
+	bool isFaceSturdy(int stateId, int direction, SupportType type) const {
+		return _stateProperties[stateId].faceSturdy >> (direction * 3 + static_cast<int>(type)) & 1;
+	}
+	const std::vector<Box>& getCollisionShape(int stateId) const { return _collisionShapes[_stateProperties[stateId].collisionShape]; }
+	const std::vector<Box>& getOcclusionShape(int stateId) const { return _collisionShapes[_stateProperties[stateId].occlusionShape]; }
+	// Whether a block's class is (or extends, or implements) this vanilla class, e.g. "DoorBlock"
+	bool isInstanceOf(int blockId, const std::string& javaClass) const;
 	// Same state with one property changed, -1 if the block has no such property/value
 	int withProperty(int stateId, const std::string& property, const std::string& value) const;
 	// Value of a property of a state, "" if it has none
@@ -122,15 +170,20 @@ class GameData {
 	int getPlacedBlockState(int itemId) const;
 	// nullptr for an unknown item id
 	const ItemProperties* getItemProperties(int itemId) const;
+	// Item.isCorrectToolForDrops (the tool component): whether mining this state with this item drops it
+	bool isCorrectToolForDrops(int itemId, int stateId) const;
 
 	// Whether an entry (id in its registry) is in a tag, e.g. isInTag("minecraft:block", "minecraft:replaceable", blockId)
 	bool isInTag(const std::string& registry, const std::string& tag, int entryId) const;
+	// A block tag as a table by block id, for game logic that checks it often (isInTag builds a string each time)
+	std::vector<bool> blockTag(const std::string& tag) const;
 
 	// nullptr for an unknown dimension type
 	const Dimension* getDimension(const std::string& name) const;
 
   private:
-	std::string _versionName;
+	std::filesystem::path _directory;
+	std::string			  _versionName;
 	int			_protocolVersion = 0;
 	int			_dataVersion	 = 0;
 
@@ -147,6 +200,7 @@ class GameData {
 	BlockRegistry		_blocks;
 	std::vector<BlockProperties> _blockProperties;
 	std::vector<StateProperties> _stateProperties;
+	std::vector<std::vector<Box>> _collisionShapes;
 	std::vector<int>	_itemPlacedStates;
 	std::vector<ItemProperties> _itemProperties;
 	std::unordered_map<std::string, std::unordered_set<int>> _tagSets; // "registry#tag" -> ids

@@ -2,6 +2,7 @@
 
 #include "lib/json.hpp"
 
+#include <algorithm>
 #include <fstream>
 #include <stdexcept>
 
@@ -31,6 +32,40 @@ namespace {
 			state.lightBlock = static_cast<uint8_t>(value);
 		} else if (property == "propagates_skylight_down") {
 			state.propagatesSkylightDown = value != 0;
+		} else if (property == "blocks_motion") {
+			state.blocksMotion = value != 0;
+		} else if (property == "solid") {
+			state.solid = value != 0;
+		} else if (property == "replaceable") {
+			state.replaceable = value != 0;
+		} else if (property == "random_ticking") {
+			state.randomTicking = value != 0;
+		} else if (property == "liquid") {
+			state.liquid = value != 0;
+		} else if (property == "solid_render") {
+			state.solidRender = value != 0;
+		} else if (property == "use_shape_for_light_occlusion") {
+			state.useShapeForLightOcclusion = value != 0;
+		} else if (property == "ignited_by_lava") {
+			state.ignitedByLava = value != 0;
+		} else if (property == "analog_output") {
+			state.analogOutput = value != 0;
+		} else if (property == "push_reaction") {
+			state.pushReaction = static_cast<uint8_t>(value);
+		} else if (property == "occlusion_shape") {
+			state.occlusionShape = static_cast<uint16_t>(value);
+		} else if (property == "redstone_conductor") {
+			state.redstoneConductor = value != 0;
+		} else if (property == "face_sturdy") {
+			state.faceSturdy = static_cast<uint32_t>(value);
+		} else if (property == "collision_shape") {
+			state.collisionShape = static_cast<uint16_t>(value);
+		} else if (property == "fluid") {
+			state.fluid = static_cast<uint8_t>(value);
+		} else if (property == "fluid_amount") {
+			state.fluidAmount = static_cast<uint8_t>(value);
+		} else if (property == "fluid_falling") {
+			state.fluidFalling = value != 0;
 		} else {
 			throw std::runtime_error("unknown block property \"" + property + "\"");
 		}
@@ -61,6 +96,7 @@ namespace {
 } // namespace
 
 void GameData::load(const std::filesystem::path& directory) {
+	_directory = directory;
 	json version	 = readJson(directory / "version.json");
 	_versionName	 = version.at("name").get<std::string>();
 	_protocolVersion = version.at("protocol").get<int>();
@@ -148,6 +184,19 @@ void GameData::load(const std::filesystem::path& directory) {
 		for (size_t id = 0; id < values.size(); id++) setStateProperty(_stateProperties[id], property, toNumber(values[id]));
 	}
 
+	for (const auto& shape : readJson(directory / "collision_shapes.json")) {
+		std::vector<Box>& boxes = _collisionShapes.emplace_back();
+		for (const auto& box : shape) {
+			boxes.push_back({box.at(0).get<double>(), box.at(1).get<double>(), box.at(2).get<double>(), box.at(3).get<double>(),
+							 box.at(4).get<double>(), box.at(5).get<double>()});
+		}
+	}
+	for (const StateProperties& state : _stateProperties) {
+		if (state.collisionShape >= _collisionShapes.size() || state.occlusionShape >= _collisionShapes.size()) {
+			throw std::runtime_error("block_states.json: unknown shape");
+		}
+	}
+
 	json dimensions = readJson(directory / "dimensions.json");
 	for (const auto& [name, info] : dimensions.items()) {
 		_dimensions[name] = {info.at("min_y").get<int>(), info.at("height").get<int>()};
@@ -175,6 +224,15 @@ void GameData::setBlockProperty(const std::string& block, const std::string& pro
 			throw std::runtime_error(block + " can't be double_length: it has no part=foot/head and facing states");
 		}
 		_blockProperties[blockId].shape = shape->second;
+		return;
+	}
+
+	if (property == "classes") {
+		_blockProperties[blockId].classes = value.get<std::vector<std::string>>();
+		return;
+	}
+	if (property == "dynamic_shape") {
+		_blockProperties[blockId].dynamicShape = toNumber(value) != 0;
 		return;
 	}
 
@@ -247,9 +305,43 @@ void GameData::setItemProperty(const std::string& item, const std::string& prope
 		props.maxStackSize = size;
 	} else if (auto stat = STATS.find(property); stat != STATS.end()) {
 		props.*(stat->second) = static_cast<float>(toNumber(value));
+	} else if (property == "fire_resistant") {
+		props.fireResistant = toNumber(value) != 0;
+	} else if (property == "tool_rules") {
+		props.toolRules.clear();
+		for (const auto& rule : value) {
+			ItemProperties::ToolRule parsed;
+			parsed.blocks.assign(getBlockCount(), false);
+			std::vector<std::string> names;
+			if (rule.at("blocks").is_array()) {
+				names = rule.at("blocks").get<std::vector<std::string>>();
+			} else {
+				names.push_back(rule.at("blocks").get<std::string>());
+			}
+			for (const std::string& name : names) {
+				if (name.rfind('#', 0) == 0) {
+					std::vector<bool> tag = blockTag(name.substr(1));
+					for (size_t i = 0; i < tag.size(); i++) parsed.blocks[i] = parsed.blocks[i] || tag[i];
+				} else if (int block = getStaticId("minecraft:block", name); block >= 0) {
+					parsed.blocks[block] = true;
+				}
+			}
+			if (rule.contains("correct_for_drops")) parsed.correctForDrops = rule.at("correct_for_drops").get<bool>() ? 1 : 0;
+			props.toolRules.push_back(std::move(parsed));
+		}
 	} else {
 		throw std::runtime_error("unknown item property \"" + property + "\"");
 	}
+}
+
+bool GameData::isCorrectToolForDrops(int itemId, int stateId) const {
+	const ItemProperties* item = getItemProperties(itemId);
+	if (!item) return false;
+	int block = getBlockOfState(stateId);
+	for (const ItemProperties::ToolRule& rule : item->toolRules) {
+		if (rule.correctForDrops >= 0 && rule.blocks[block]) return rule.correctForDrops == 1;
+	}
+	return false;
 }
 
 const GameData::ItemProperties* GameData::getItemProperties(int itemId) const {
@@ -310,6 +402,26 @@ int GameData::getStaticId(const std::string& registry, const std::string& entry)
 	if (registryIt == _staticRegistries.end()) return -1;
 	auto entryIt = registryIt->second.ids.find(entry);
 	return entryIt == registryIt->second.ids.end() ? -1 : entryIt->second;
+}
+
+std::vector<bool> GameData::blockTag(const std::string& tag) const {
+	std::vector<bool> members(getBlockCount(), false);
+	auto			  it = _tagSets.find("minecraft:block#" + tag);
+	if (it == _tagSets.end()) throw std::runtime_error("unknown block tag " + tag);
+	for (int id : it->second) members[id] = true;
+	return members;
+}
+
+bool GameData::isInstanceOf(int blockId, const std::string& javaClass) const {
+	const std::vector<std::string>& classes = _blockProperties.at(blockId).classes;
+	return std::find(classes.begin(), classes.end(), javaClass) != classes.end();
+}
+
+const std::string& GameData::getStaticName(const std::string& registry, int id) const {
+	static const std::string none;
+	auto					 registryIt = _staticRegistries.find(registry);
+	if (registryIt == _staticRegistries.end() || id < 0 || id >= static_cast<int>(registryIt->second.entries.size())) return none;
+	return registryIt->second.entries[id];
 }
 
 int GameData::getSyncedId(const std::string& registry, const std::string& entry) const {

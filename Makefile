@@ -142,9 +142,12 @@ test: $(TEST_TARGET)
 $(TEST_TARGET): $(filter-out $(BUILD_DIR)/main.o,$(OBJECTS)) $(TEST_OBJECTS)
 	@$(CXX) $^ -o $@ $(LDFLAGS) $(LIBS)
 
-$(BUILD_DIR)/tests/%.o: tests/%.cpp tests/Test.hpp
+# -MMD: rebuilt when a header they include changes
+$(BUILD_DIR)/tests/%.o: tests/%.cpp
 	@mkdir -p $(dir $@)
-	@$(CXX) $(CXXFLAGS) $(INCLUDE_FLAGS) -Itests -c $< -o $@
+	@$(CXX) $(CXXFLAGS) $(INCLUDE_FLAGS) -Itests -MMD -MP -c $< -o $@
+
+-include $(TEST_OBJECTS:.o=.d)
 
 # Clean build artifacts
 clean:

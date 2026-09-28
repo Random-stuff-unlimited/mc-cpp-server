@@ -46,6 +46,11 @@ class BlockRegistry {
 	int withBool(int state, int property, bool flag) const;
 	// Next value of the property, wrapping (vanilla's cycle)
 	int cycle(int state, int property) const;
+	// BlockState.withPropertiesOf: the default state of `block`, with the values of `source` for the properties both
+	// have
+	int withPropertiesOf(int block, int source) const;
+	// Largest number the property takes on this block (max age...), -1 if it doesn't have it
+	int maxInt(int block, int property) const;
 
   private:
 	static constexpr uint8_t FLAG_AIR = 1;

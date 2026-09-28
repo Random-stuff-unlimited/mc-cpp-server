@@ -4,6 +4,8 @@
 #include "logger.hpp"
 
 #include <cerrno>
+#include <functional>
+#include <unordered_map>
 #include <cstring>
 #include <fcntl.h>
 #include <fstream>
@@ -12,7 +14,7 @@
 #include <unistd.h>
 
 namespace {
-	constexpr uint8_t PAYLOAD_VERSION  = 1;
+	constexpr uint8_t PAYLOAD_VERSION  = 3; // 1: no scheduled ticks, 2: no comparator outputs
 	constexpr uint8_t COMPRESSION_ZLIB = 1;
 	constexpr int	  ZLIB_LEVEL	   = 4;
 
@@ -127,6 +129,49 @@ namespace {
 			size -= n;
 			offset += n;
 		}
+	}
+	void writeTicks(ByteWriter& w, const std::vector<SavedTick>& ticks, const std::function<std::string(int)>& nameOf) {
+		std::vector<std::string>			 names;
+		std::unordered_map<int, uint32_t>	 indices;
+		for (const SavedTick& tick : ticks) {
+			if (indices.emplace(tick.type, static_cast<uint32_t>(names.size())).second) names.push_back(nameOf(tick.type));
+		}
+		w.varint(static_cast<uint32_t>(names.size()));
+		for (const std::string& name : names) {
+			w.varint(static_cast<uint32_t>(name.size()));
+			w.out.insert(w.out.end(), name.begin(), name.end());
+		}
+		w.varint(static_cast<uint32_t>(ticks.size()));
+		for (const SavedTick& tick : ticks) {
+			w.varint(indices.at(tick.type));
+			w.u8(static_cast<uint8_t>((tick.pos.x & 15) | (tick.pos.z & 15) << 4));
+			w.u32(static_cast<uint32_t>(tick.pos.y));
+			w.u32(static_cast<uint32_t>(tick.delay));
+			w.u8(static_cast<uint8_t>(static_cast<int8_t>(tick.priority)));
+		}
+	}
+
+	// Ticks of types this version doesn't have are dropped
+	std::vector<SavedTick> readTicks(ByteReader& r, int chunkX, int chunkZ, const std::function<int(const std::string&)>& idOf) {
+		std::vector<int> types(r.varint());
+		for (int& type : types) {
+			std::string name(r.varint(), '\0');
+			for (char& c : name) c = static_cast<char>(r.u8());
+			type = idOf(name);
+		}
+		std::vector<SavedTick> ticks;
+		uint32_t			   count = r.varint();
+		for (uint32_t i = 0; i < count; i++) {
+			uint32_t index	   = r.varint();
+			uint8_t	 xz		   = r.u8();
+			int		 y		   = static_cast<int32_t>(r.u32());
+			int		 delay	   = static_cast<int32_t>(r.u32());
+			int		 priority = static_cast<int8_t>(r.u8());
+			if (index >= types.size()) throw std::runtime_error("Bad scheduled tick in chunk data");
+			if (types[index] < 0) continue;
+			ticks.push_back({types[index], {chunkX * 16 + (xz & 15), y, chunkZ * 16 + (xz >> 4)}, delay, priority});
+		}
+		return ticks;
 	}
 } // namespace
 
@@ -280,8 +325,9 @@ void RegionFile::sync() {
 
 // ===================== ChunkStorage =====================
 
-ChunkStorage::ChunkStorage(const std::filesystem::path& worldDirectory, const Layout& layout, DiskPalette& blocks, DiskPalette& biomes)
-	: _regionDirectory(worldDirectory / "regions"), _layout(layout), _blocks(blocks), _biomes(biomes) {
+ChunkStorage::ChunkStorage(const std::filesystem::path& worldDirectory, const Layout& layout, DiskPalette& blocks, DiskPalette& biomes,
+						   TickTypes tickTypes)
+	: _regionDirectory(worldDirectory / "regions"), _layout(layout), _blocks(blocks), _biomes(biomes), _tickTypes(std::move(tickTypes)) {
 	std::filesystem::create_directories(_regionDirectory);
 }
 
@@ -330,7 +376,8 @@ std::unique_ptr<Chunk> ChunkStorage::load(int x, int z) {
 	std::vector<uint8_t> payload = compression::zlibDecompress(blob.data() + 5, blob.size() - 5, rawSize);
 
 	ByteReader r(payload.data(), payload.size());
-	if (r.u8() != PAYLOAD_VERSION) throw std::runtime_error("Unsupported chunk format version");
+	uint8_t	   version = r.u8();
+	if (version < 1 || version > PAYLOAD_VERSION) throw std::runtime_error("Unsupported chunk format version");
 	int sectionCount = r.u8();
 
 	auto chunk = std::make_unique<Chunk>(x, z, _layout.minY, _layout.sectionCount, *_layout.blockConfig, *_layout.biomeConfig, _layout.air,
@@ -341,16 +388,35 @@ std::unique_ptr<Chunk> ChunkStorage::load(int x, int z) {
 		// Sections beyond the current world height (dimension got smaller) are dropped
 		if (i < _layout.sectionCount) chunk->sections()[i] = {std::move(blocks), std::move(biomes)};
 	}
+	if (version >= 2) {
+		chunk->blockTicks().setPending(readTicks(r, x, z, _tickTypes.blockId));
+		chunk->fluidTicks().setPending(readTicks(r, x, z, _tickTypes.fluidId));
+	}
+	if (version >= 3) {
+		// Comparator outputs (their block entities): index in the chunk, output
+		uint32_t count = r.varint();
+		for (uint32_t i = 0; i < count; i++) {
+			uint32_t index					  = r.varint();
+			chunk->comparatorOutputs()[index] = r.u8();
+		}
+	}
 	return chunk;
 }
 
-std::vector<uint8_t> ChunkStorage::encode(const Chunk& chunk) {
+std::vector<uint8_t> ChunkStorage::encode(const Chunk& chunk, int64_t gameTime) {
 	ByteWriter w;
 	w.u8(PAYLOAD_VERSION);
 	w.u8(static_cast<uint8_t>(chunk.sections().size()));
 	for (const ChunkSection& section : chunk.sections()) {
 		writeContainer(w, section.blocks, _blocks);
 		writeContainer(w, section.biomes, _biomes);
+	}
+	writeTicks(w, chunk.blockTicks().pack(gameTime), _tickTypes.blockName);
+	writeTicks(w, chunk.fluidTicks().pack(gameTime), _tickTypes.fluidName);
+	w.varint(static_cast<uint32_t>(chunk.comparatorOutputs().size()));
+	for (const auto& [index, output] : chunk.comparatorOutputs()) {
+		w.varint(index);
+		w.u8(output);
 	}
 	return std::move(w.out);
 }
