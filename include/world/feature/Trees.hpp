@@ -1,10 +1,12 @@
 #ifndef TREES_HPP
 #define TREES_HPP
 
+#include "lib/JavaHashSet.hpp"
 #include "lib/json.hpp"
 #include "world/BlockPos.hpp"
 #include "world/blocks/Vegetation.hpp"
 
+#include <cmath>
 #include <filesystem>
 #include <memory>
 #include <string>
@@ -15,6 +17,16 @@ class GameData;
 class JavaRandom;
 class Level;
 struct BlockContext;
+
+// TreeFeature.BLOCK_UPDATE_FLAGS: Level::UPDATE_ALL | Level::UPDATE_KNOWN_SHAPE
+constexpr int TREE_FLAGS = 19;
+
+// Mth.floor, with Java's (int) of NaN (0)
+inline int javaFloor(double value) {
+	if (std::isnan(value)) return 0;
+	int truncated = static_cast<int>(value);
+	return value < truncated ? truncated - 1 : truncated;
+}
 
 // The blocks, tags and properties trees look at, looked up once for all of them
 struct TreeBlocks {
@@ -51,7 +63,15 @@ class TreeFeature {
 		int		 radiusOffset;
 		bool	 doubleTrunk;
 	};
-	struct Placement;
+
+	// Everything placed by one tree, in vanilla's hash sets (their order decides a few things)
+	struct Placement {
+		Level&					 level;
+		JavaRandom&				 random;
+		JavaHashSet<BlockPos>	 roots, trunk, foliage, decorations;
+
+		void set(JavaHashSet<BlockPos>& into, const BlockPos& pos, int state);
+	};
 
 	enum class TrunkType { Straight, Forking, Giant, MegaJungle, DarkOak, Fancy, Cherry };
 	enum class FoliageType { Blob, Fancy, Spruce, Pine, MegaPine, Acacia, DarkOak, Jungle, Cherry };

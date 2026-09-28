@@ -7,6 +7,7 @@
 #include "data/BlockRegistry.hpp"
 #include "lib/json.hpp"
 #include <map>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -89,6 +90,30 @@ class GameData {
 
 	// Where an item is worn or held for its stats to apply
 	enum class EquipmentSlot { MainHand, OffHand, Head, Chest, Legs, Feet, Body, Saddle };
+	// ItemUseAnimation: how the item is held while used
+	enum class UseAnimation { None, Eat, Drink, Block, Bow, Trident, Crossbow, Spyglass, TootHorn, Brush, Bundle };
+
+	// The minecraft:food component (FoodProperties): what eating the item gives
+	struct Food {
+		int	  nutrition	   = 0;
+		float saturation   = 0; // Already multiplied (FoodConstants.saturationByModifier)
+		bool  canAlwaysEat = false;
+	};
+	// One of Consumable.onConsumeEffects: its "type" (minecraft:apply_effects...) and, for minecraft:play_sound, its sound
+	struct ConsumeEffect {
+		std::string type;
+		std::string sound;
+	};
+	// The minecraft:consumable component (Consumable): eaten or drunk over consumeSeconds
+	struct Consumable {
+		float					   consumeSeconds	   = 1.6F;
+		UseAnimation			   animation		   = UseAnimation::Eat;
+		std::string				   sound			   = "minecraft:entity.generic.eat";
+		bool					   hasConsumeParticles = true;
+		std::vector<ConsumeEffect> onConsumeEffects;
+		// Consumable.consumeTicks
+		int consumeTicks() const { return static_cast<int>(consumeSeconds * 20.0F); }
+	};
 
 	// Per item, from the reports. Combat stats are bonuses added to the player's base values while the item is in
 	// its equipment slot (a sword in the main hand, a chestplate on the chest)
@@ -103,6 +128,13 @@ class GameData {
 		bool		  fireResistant		  = false; // "fire_resistant": its item entity survives fire and lava (netherite...)
 		bool		  canDestroyBlocksInCreative = true; // "can_destroy_blocks_in_creative": false for swords, the mace, the trident
 		std::string	  craftingRemainder;		   // "crafting_remainder": what stays after crafting with it (buckets...)
+		std::optional<Food>		  food;		  // "food"
+		std::optional<Consumable> consumable; // "consumable"
+		std::string				  useRemainder; // "use_remainder": what a used one turns into (bowls, bottles, buckets), "" if none
+		int						  useRemainderCount = 0;
+		bool		  swappable	 = false; // "swappable": worn by using it (Equippable.swappable)
+		std::string	  equipSound;		  // "equip_sound": played when worn (Equippable.equipSound)
+		bool		  blocksAttacks = false; // "blocks_attacks": used (raised) until released, like shields
 		// "tool_rules": the first rule matching a block with correct_for_drops set decides whether it drops
 		struct ToolRule {
 			std::vector<bool> blocks; // By block id
@@ -114,6 +146,37 @@ class GameData {
 	struct Dimension {
 		int minY;
 		int height;
+	};
+
+	// MobCategory: what a type counts as for spawning and despawning
+	enum class MobCategory { Monster, Creature, Ambient, Axolotls, UndergroundWaterCreature, WaterCreature, WaterAmbient, Misc };
+	// Per attribute (minecraft:attribute registry), from entity_types.json: Attribute / RangedAttribute
+	struct AttributeInfo {
+		double defaultValue = 0;
+		double minValue		= -1.0E300, maxValue = 1.0E300; // RangedAttribute's bounds (unbounded otherwise)
+		bool   syncable		= false;					   // Sent to the client (Update Attributes)
+	};
+	// Per entity type (minecraft:entity_type registry), from entity_types.json: EntityType and DefaultAttributes
+	struct EntityTypeInfo {
+		float		width = 0, height = 0, eyeHeight = 0;
+		bool		fixedSize		  = false;
+		int			trackingRange	  = 5; // clientTrackingRange, in chunks
+		int			updateInterval	  = 3;
+		bool		trackDeltas		  = true;
+		bool		fireImmune		  = false;
+		bool		summonable		  = true;
+		bool		serializable	  = true;
+		bool		allowedInPeaceful = true;
+		MobCategory category		  = MobCategory::Misc;
+		std::string lootTable;			 // "minecraft:entities/cow", empty if none
+		std::vector<std::string> classes; // The entity class, its superclasses and interfaces ("Cow", "Animal", "Mob"...)
+		// Base value of each attribute (by minecraft:attribute id) the type has (DefaultAttributes), NaN if it has none;
+		// empty for types that aren't living
+		std::vector<double> attributes;
+		int					spawnEgg = -1; // Item id of its spawn egg
+		bool				living = false, mob = false;
+
+		bool is(const std::string& javaClass) const;
 	};
 
 	struct RegistryTags {
@@ -162,6 +225,8 @@ class GameData {
 	}
 	const std::vector<Box>& getCollisionShape(int stateId) const { return _collisionShapes[_stateProperties[stateId].collisionShape]; }
 	const std::vector<Box>& getOcclusionShape(int stateId) const { return _collisionShapes[_stateProperties[stateId].occlusionShape]; }
+	// BlockState.getShape: the outline the cursor and ray casts (ClipContext.Block.OUTLINE) hit
+	const std::vector<Box>& getOutlineShape(int stateId) const { return _outlineShapes[_outlineShapeOfState[stateId]]; }
 	// Whether a block's class is (or extends, or implements) this vanilla class, e.g. "DoorBlock"
 	bool isInstanceOf(int blockId, const std::string& javaClass) const;
 	// Same state with one property changed, -1 if the block has no such property/value
@@ -183,6 +248,15 @@ class GameData {
 
 	// nullptr for an unknown dimension type
 	const Dimension* getDimension(const std::string& name) const;
+	// DamageType.exhaustion of a damage type ("minecraft:player_attack"...): hunger a player gets when hurt by it, 0 if unknown
+	float getDamageExhaustion(const std::string& type) const;
+
+	// nullptr for an unknown entity type id
+	const EntityTypeInfo* getEntityType(int typeId) const;
+	const AttributeInfo&  getAttribute(int attributeId) const { return _attributes.at(attributeId); }
+	size_t				  getAttributeCount() const { return _attributes.size(); }
+	// The entity type a spawn egg item spawns, -1 if the item isn't one
+	int					  getSpawnEggType(int itemId) const;
 
   private:
 	std::filesystem::path _directory;
@@ -204,11 +278,19 @@ class GameData {
 	std::vector<BlockProperties> _blockProperties;
 	std::vector<StateProperties> _stateProperties;
 	std::vector<std::vector<Box>> _collisionShapes;
+	std::vector<std::vector<Box>> _outlineShapes;
+	std::vector<uint16_t>		  _outlineShapeOfState;
+	std::unordered_map<std::string, float> _damageExhaustion;
 	std::vector<int>	_itemPlacedStates;
 	std::vector<ItemProperties> _itemProperties;
 	std::unordered_map<std::string, std::unordered_set<int>> _tagSets; // "registry#tag" -> ids
 
 	std::unordered_map<std::string, Dimension> _dimensions;
+	std::vector<EntityTypeInfo>				   _entityTypes;
+	std::vector<AttributeInfo>				   _attributes;
+	std::unordered_map<int, int>			   _spawnEggTypes;
+
+	void loadEntityTypes(const std::filesystem::path& file);
 
 	void			   addBlockState(const std::string& key, int id);
 	void			   applyOverrides(const std::filesystem::path& file);

@@ -52,6 +52,15 @@ namespace compression {
 		return out;
 	}
 
+	std::vector<uint8_t> gzipCompress(const uint8_t* data, size_t size, int level) {
+		libdeflate_compressor* compressor = t_compressors.compressor(level);
+		std::vector<uint8_t>   out(libdeflate_gzip_compress_bound(compressor, size));
+		size_t				   written = libdeflate_gzip_compress(compressor, data, size, out.data(), out.size());
+		if (written == 0) throw std::runtime_error("gzip compression failed");
+		out.resize(written);
+		return out;
+	}
+
 	bool zlibDecompressInto(const uint8_t* data, size_t size, uint8_t* out, size_t expectedSize) {
 		size_t actual = 0;
 		return libdeflate_zlib_decompress(t_compressors.decompressorInstance(), data, size, out, expectedSize, &actual) == LIBDEFLATE_SUCCESS &&

@@ -96,8 +96,8 @@ class World {
 	// done on the I/O threads before whenLit's callback, so the game thread normally only gets the cached one
 	std::shared_ptr<const std::vector<uint8_t>> getChunkPacket(const std::shared_ptr<Chunk>& chunk);
 
-	// Unloads idle chunks and autosaves. Call about once per second
-	void tick();
+	// Unloads idle chunks and autosaves. Call about once per second. True when it autosaved (players are saved too)
+	bool tick();
 	// Game thread, once per tick unless the game is frozen: advances the game time and the time of day
 	void	tickTime();
 	int64_t getGameTime() const { return _gameTime.load(std::memory_order_relaxed); }
@@ -105,8 +105,13 @@ class World {
 	void	setDayTime(int64_t time) { _dayTime = time; }
 	// Saves every modified chunk. The world can't load chunks anymore afterwards
 	void shutdown();
+	// Runs a save job on the I/O threads (at once after shutdown). The jobs queued before shutdown are all run
+	void submitSave(std::function<void()> job);
 
 	const Spawn&	   getSpawn() const { return _spawn; }
+	// The world's spawn point (from level.json, the vanilla world's level.dat, or the generator): where players
+	// without a bed appear. Saved to level.json
+	void			   setSpawn(double x, double y, double z);
 	const std::string& getDimensionName() const { return _dimensionName; }
 	int				   getMinY() const { return _layout.minY; }
 	int				   getSectionCount() const { return _layout.sectionCount; }

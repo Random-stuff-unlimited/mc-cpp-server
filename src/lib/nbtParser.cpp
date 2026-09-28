@@ -44,6 +44,12 @@ namespace nbt {
 		return NBT(rootName, rootComp);
 	}
 
+	Tag Parser::parseNetwork(const std::vector<uint8_t>& data, size_t& cursor) {
+		uint8_t type = read<uint8_t>(data, cursor);
+		if (type == TAG_END) return Tag();
+		return parseTag(data, cursor, type);
+	}
+
 	template <typename T> T Parser::read(const std::vector<uint8_t>& data, size_t& cursor) {
 		if (cursor + sizeof(T) > data.size()) {
 			throw std::runtime_error("NBT parsing error: unexpected end of data.");
@@ -141,6 +147,9 @@ namespace nbt {
 				throw std::runtime_error("NBT parsing error: negative TAG_Byte_Array length.");
 			}
 			TagByteArray array;
+			if (cursor + static_cast<size_t>(length) > data.size()) {
+				throw std::runtime_error("NBT parsing error: invalid TAG_Byte_Array length.");
+			}
 			if (length > 0) {
 				array.resize(static_cast<size_t>(length));
 				std::memcpy(array.data(), &data[cursor], static_cast<size_t>(length));

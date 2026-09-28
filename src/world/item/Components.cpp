@@ -2,6 +2,7 @@
 
 #include "data/GameData.hpp"
 
+#include <algorithm>
 #include <stdexcept>
 #include <unordered_map>
 
@@ -201,6 +202,40 @@ namespace {
 				in.varint(); // Effect
 				in.varint(); // Duration
 			}
+		// ----- Container-like blocks (jukeboxes, decorated pots, lecterns) -----
+		} else if (type == "minecraft:pot_decorations") {
+			for (int i = in.varint(); i > 0; i--) in.varint(); // Item ids
+		} else if (type == "minecraft:jukebox_playable") {
+			// EitherHolder: a song (registry id + 1, or 0 and the song inline), or its key
+			if (in.boolean()) {
+				if (in.varint() == 0) {
+					if (in.varint() == 0) { // Sound event inline: its id, maybe a fixed range
+						in.string();
+						if (in.boolean()) in.skip(4);
+					}
+					in.nbt();	  // Description
+					in.skip(4);	  // Length in seconds
+					in.varint();  // Comparator output
+				}
+			} else {
+				in.string();
+			}
+		} else if (type == "minecraft:writable_book_content") {
+			for (int i = in.varint(); i > 0; i--) { // Pages: raw text, maybe filtered
+				in.string();
+				if (in.boolean()) in.string();
+			}
+		} else if (type == "minecraft:written_book_content") {
+			in.string(); // Title
+			if (in.boolean()) in.string();
+			in.string(); // Author
+			in.varint(); // Generation
+			for (int i = in.varint(); i > 0; i--) { // Pages: text components
+				in.nbt();
+				if (in.boolean()) in.nbt();
+			}
+			in.skip(1); // Resolved
+		// ----- End of container-like blocks -----
 		} else if (type == "minecraft:container") {
 			for (int i = in.varint(); i > 0; i--) readStack(in, gameData, true);
 		} else if (type == "minecraft:bundle_contents") {
@@ -345,6 +380,74 @@ namespace Components {
 		stack.components = patch->encode();
 		return true;
 	}
+
+	// ----- Container-like blocks (jukeboxes, decorated pots, lecterns) -----
+
+	std::vector<uint8_t> encodePotDecorations(const std::array<int, 4>& items) {
+		std::vector<uint8_t> out;
+		writeVarInt(out, 4);
+		for (int item : items) writeVarInt(out, item);
+		return out;
+	}
+
+	std::optional<std::array<int, 4>> decodePotDecorations(const std::vector<uint8_t>& value) {
+		size_t pos = 0;
+		Reader in{value, pos};
+		try {
+			std::array<int, 4> items{0, 0, 0, 0};
+			int				   count = in.varint();
+			for (int i = 0; i < count; i++) {
+				int item = in.varint();
+				if (i < 4) items[i] = item;
+			}
+			return items;
+		} catch (const std::exception&) {
+			return std::nullopt;
+		}
+	}
+
+	std::optional<JukeboxSongRef> decodeJukeboxPlayable(const std::vector<uint8_t>& value) {
+		size_t pos = 0;
+		Reader in{value, pos};
+		try {
+			JukeboxSongRef song;
+			if (in.boolean()) {
+				song.registryId = in.varint() - 1; // -1: a song given inline
+			} else {
+				int length = in.varint();
+				in.need(static_cast<size_t>(length));
+				song.key.assign(value.begin() + static_cast<std::ptrdiff_t>(pos), value.begin() + static_cast<std::ptrdiff_t>(pos + length));
+			}
+			return song;
+		} catch (const std::exception&) {
+			return std::nullopt;
+		}
+	}
+
+	int bookPageCount(const std::vector<uint8_t>& value, bool written) {
+		size_t pos = 0;
+		Reader in{value, pos};
+		try {
+			if (written) {
+				in.string();
+				if (in.boolean()) in.string();
+				in.string();
+				in.varint();
+			}
+			return in.varint();
+		} catch (const std::exception&) {
+			return 0;
+		}
+	}
+
+	bool isRemoved(const ItemStack& stack, const GameData& gameData, const std::string& name) {
+		std::optional<ComponentPatch> patch = ComponentPatch::parse(stack.components, gameData);
+		if (!patch) return false;
+		int type = typeId(gameData, name);
+		return std::find(patch->removed.begin(), patch->removed.end(), type) != patch->removed.end();
+	}
+
+	// ----- End of container-like blocks -----
 
 	std::optional<ItemStack> readStack(const std::vector<uint8_t>& data, size_t& pos, const GameData& gameData) {
 		size_t start = pos;

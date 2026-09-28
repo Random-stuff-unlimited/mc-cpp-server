@@ -9,6 +9,7 @@
 #include "world/LevelTicks.hpp"
 #include "world/NeighborUpdater.hpp"
 #include "world/entity/EntityManager.hpp"
+#include "world/entity/MobRegistry.hpp"
 #include "world/entity/Geometry.hpp"
 #include "world/item/LootTables.hpp"
 #include "world/item/Recipes.hpp"
@@ -24,7 +25,9 @@
 #include <vector>
 
 class Chunk;
+class FuelValues;
 class GameData;
+class PotionBrewing;
 class Player;
 class Server;
 
@@ -61,9 +64,17 @@ class Level : public NeighborUpdateTarget {
 	const RecipeManager& recipes() const { return _recipes; }
 	const BlockBehavior& behavior(int state) const { return _behaviors.get(_blocks.blockOf(state)); }
 	int64_t				 getGameTime() const { return _world.getGameTime(); }
+	// The dimension this level is: the world's name ("minecraft:overworld")
+	const std::string& dimensionName() const { return _world.getDimensionName(); }
 	Server&				 server() { return _server; }
 	const GameData&		 gameData() const { return _gameData; }
 	EntityManager&		 entities() { return _entities; }
+	// How each mob type is made and which goals it gets (the AI's registration point)
+	MobRegistry&		 mobs() { return _mobs; }
+	// Block and entity loot tables
+	const LootTables&	 loot() const { return _loot; }
+	// Level.addFreshEntity: the entity joins the level and the players around see it
+	Entity*				 addFreshEntity(std::unique_ptr<Entity> entity) { return _entities.add(std::move(entity)); }
 	int					 minY() const { return _minY; }
 	int					 maxY() const { return _maxY; } // Exclusive
 	// Nether-like dimension: lava flows faster and further
@@ -78,6 +89,11 @@ class Level : public NeighborUpdateTarget {
 	Fluids&				 fluids() { return *_fluids; }
 	// The world's random source (vanilla's level random)
 	JavaRandom&			 random() { return _random; }
+	// ----- Furnaces and brewing stands -----
+	// Level.fuelValues and Level.potionBrewing: the vanilla fuel table and brewing mixes (made on first use)
+	const FuelValues&	 fuelValues();
+	const PotionBrewing& potionBrewing();
+	// ----- End furnaces and brewing stands -----
 
 	// ----- Reading -----
 
@@ -92,6 +108,8 @@ class Level : public NeighborUpdateTarget {
 	// Full sky light here (LevelReader.canSeeSky)
 	bool canSeeSky(const BlockPos& pos) { return lightAt(pos, true) >= 15; }
 	bool hasChunkAt(const BlockPos& pos) { return chunkAt(pos.chunkX(), pos.chunkZ()) != nullptr; }
+	// The chunk at these chunk coordinates if it is loaded, nullptr otherwise
+	Chunk* loadedChunk(int chunkX, int chunkZ) { return chunkAt(chunkX, chunkZ); }
 	bool isOutsideBuildHeight(int y) const { return y < _minY || y >= _maxY; }
 	// Whether blocks tick at this position (vanilla's shouldTickBlocksAt)
 	bool shouldTickBlocksAt(const BlockPos& pos);
@@ -203,7 +221,7 @@ class Level : public NeighborUpdateTarget {
 	}
 	void playSoundAt(Player* except, double x, double y, double z, const std::string& sound, SoundSource source, float volume = 1.0F,
 					 float pitch = 1.0F);
-	// Entities touching the box (EntitySelector.NO_SPECTATORS): players and items, or players only (living)
+	// Entities touching the box (EntitySelector.NO_SPECTATORS): players and the other entities, or living ones only
 	int	 countEntities(const AABB& box, bool livingOnly);
 	// Entity.checkInsideBlocks: the blocks whose cell the box touches learn it (pressure plates)
 	void checkInsideBlocks(const AABB& box, Entity* entity);
@@ -235,6 +253,9 @@ class Level : public NeighborUpdateTarget {
 	void sendChanges();
 	// Forgets the chunks the world unloaded. About once per second
 	void dropUnloadedChunks();
+	// The entities to save go into their chunks (marked modified when they changed): before the world saves or
+	// unloads chunks (World::tick, World::shutdown)
+	void saveEntities();
 	// Game thread: a chunk finished loading (its saved ticks start counting)
 	void onChunkLoaded(const std::shared_ptr<Chunk>& chunk);
 
@@ -297,6 +318,8 @@ class Level : public NeighborUpdateTarget {
 	int						_redstoneBlock, _power;
 	JavaRandom				_soundSeeds{0};
 	std::vector<bool>		_hasBlockEntity; // Per block: an EntityBlock
+	std::shared_ptr<FuelValues>	   _fuelValues;	   // Furnaces and brewing stands
+	std::shared_ptr<PotionBrewing> _potionBrewing;
 
 	// Block entity tickers in vanilla's order: one slot per position, kept when its block entity is replaced
 	struct TickerSlot {
@@ -310,6 +333,7 @@ class Level : public NeighborUpdateTarget {
 	std::vector<std::shared_ptr<BlockEntity>> _removedBlockEntities;
 	std::function<void(PistonMovingBlockEntity&)> _tickMovingPiston, _finalTickPiston;
 	LootTables				_loot;
+	MobRegistry				_mobs;
 	EntityManager			_entities{*this}; // Last: its entities use the rest while being destroyed
 
 	static constexpr uint8_t RANDOM_BLOCK = 1, RANDOM_FLUID = 2;

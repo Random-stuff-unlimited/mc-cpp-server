@@ -13,6 +13,9 @@
 #include "world/blocks/Containers.hpp"
 #include "world/inventory/Menu.hpp"
 #include "world/item/Components.hpp"
+#include "world/item/ItemUse.hpp"
+#include "world/Survival.hpp"
+#include "world/item/SpawnEggItem.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -25,7 +28,7 @@
 // sequence after it. When it refuses, it sends the real block first so the client undoes its prediction.
 
 namespace {
-	enum PlayerActionStatus { START_DIGGING = 0, CANCEL_DIGGING = 1, FINISH_DIGGING = 2, DROP_ALL_ITEMS = 3, DROP_ITEM = 4, SWAP_HANDS = 6 };
+	enum PlayerActionStatus { START_DIGGING = 0, CANCEL_DIGGING = 1, FINISH_DIGGING = 2, DROP_ALL_ITEMS = 3, DROP_ITEM = 4, RELEASE_USE_ITEM = 5, SWAP_HANDS = 6 };
 	constexpr int LEVEL_EVENT_BLOCK_BREAK = 2001; // Particles and sound of a broken block
 
 	// Direction ids: down, up, north, south, west, east
@@ -125,7 +128,10 @@ namespace {
 		if (creative && held && !held->canDestroyBlocksInCreative) return false;
 		if (!creative && gameData.getDestroyTime(state) < 0) return false; // Bedrock...
 
-		// Block.playerWillDestroy: particles and sound for the others (the breaker's client played them already)
+		// Block.playerWillDestroy: the block's own (a shulker box dropping itself in creative, a pot cracking), then
+		// particles and sound for the others (the breaker's client played them already)
+		level.behavior(state).playerWillDestroy(level, pos, state, player);
+		state			= level.getBlockState(pos);
 		bool canHarvest = hasCorrectToolForDrops(player, gameData, state);
 		level.levelEvent(&player, LEVEL_EVENT_BLOCK_BREAK, pos, state);
 		if (creative || !canHarvest) preventDropFromOtherPart(player, level, gameData, pos, state);
@@ -134,6 +140,7 @@ namespace {
 		bool	  removed = level.removeBlock(pos, false);
 		// Block.playerDestroy: what it drops, with the tool used (the other half of a door follows through updateShape)
 		if (removed && !creative && canHarvest) {
+			Survival::causeFoodExhaustion(player, FoodData::EXHAUSTION_MINE); // Block.playerDestroy
 			level.dropResources(state, pos, &player, &tool);
 			// IceBlock.playerDestroy: water stays, over something solid or liquid (silk touch isn't known yet)
 			if (gameData.isInstanceOf(level.blocks().blockOf(state), "IceBlock") && !level.isUltraWarm()) {
@@ -182,6 +189,11 @@ void handlePlayerActionPacket(Packet& packet, Server& server) {
 		ItemStack offhand = player.inventory().get(player.handSlot(1));
 		player.inventory().set(player.handSlot(1), player.inventory().get(player.handSlot(0)));
 		player.inventory().set(player.handSlot(0), std::move(offhand));
+		ItemUse::stopUsingItem(player);
+		return;
+	}
+	if (status == RELEASE_USE_ITEM) {
+		ItemUse::releaseUsingItem(level, player);
 		return;
 	}
 
@@ -233,15 +245,30 @@ void handleUseItemOnPacket(Packet& packet, Server& server) {
 		return;
 	}
 
-	// ServerPlayerGameMode.useItemOn: the block first (levers, doors...), unless sneaking with something in a hand
+	// ServerPlayerGameMode.useItemOn: the block first (levers, doors, a disc into a jukebox...), unless sneaking with
+	// something in a hand: useItemOn with the hand's stack, then useWithoutItem if it lets the empty hand try
 	int	 item	  = player.getItemInHand(hand);
 	bool sneaking = player.isShiftKeyDown() && (player.getItemInHand(0) != 0 || player.getItemInHand(1) != 0);
-	if (!sneaking && hand == 0) {
-		int state = level.getBlockState(hit);
-		if (level.behavior(state).useWithoutItem(level, hit, state, player)) {
+	if (!sneaking) {
+		int					 state	  = level.getBlockState(hit);
+		const BlockBehavior& behavior = level.behavior(state);
+		BlockHit			 blockHit{hit, static_cast<Direction>(face), x + cursorX, y + static_cast<double>(cursorY), z + static_cast<double>(cursorZ)};
+		UseResult			 result = behavior.useItemOn(level, hit, state, player, hand, blockHit);
+		bool				 used	= result == UseResult::Success || result == UseResult::Consume;
+		if (!used && result == UseResult::TryWithEmptyHand && hand == 0) used = behavior.useWithoutItemAt(level, hit, state, player, blockHit);
+		if (used) {
 			player.acknowledgeBlockChanges(sequence);
 			return;
 		}
+	}
+
+	// SpawnEggItem.useOn (adventure mode can't use items on blocks)
+	if (gameData.getSpawnEggType(item) >= 0) {
+		if (player.getGameMode() != GameMode::Adventure) {
+			SpawnEggItem::useOn(level, &player, player.inventory().getMutable(player.handSlot(hand)), hit, static_cast<Direction>(face));
+		}
+		player.acknowledgeBlockChanges(sequence);
+		return;
 	}
 
 	// BlockItem.place, only in survival and creative (adventure mode can't build)
@@ -299,15 +326,44 @@ void handleUseItemOnPacket(Packet& packet, Server& server) {
 		level.setBlock({parts[i].x, parts[i].y, parts[i].z}, parts[i].state, i == 0 ? Level::UPDATE_ALL_IMMEDIATE : Level::UPDATE_ALL);
 	}
 	int state = level.getBlockState(target);
-	if (state == parts[0].state) level.behavior(state).setPlacedBy(level, target, state);
+	if (state == parts[0].state) {
+		// BlockItem.updateBlockEntityComponents: the item's components (a shulker box's items and name...) go to the new
+		// block entity (BlockEntity.applyComponentsFromItemStack)
+		if (BlockEntity* entity = level.getBlockEntity(target)) ContainerItems::apply(*entity, player.getStackInHand(hand), gameData);
+		level.behavior(state).setPlacedBy(level, target, state);
+	}
 	// One item used, except with infinite materials
 	if (player.getGameMode() != GameMode::Creative) player.inventory().getMutable(player.handSlot(hand)).shrink(1);
 	player.acknowledgeBlockChanges(sequence);
 }
 
+// ServerGamePacketListenerImpl.handleUseItem: right click in the air (or after USE_ITEM_ON did nothing)
+void handleUseItemPacket(Packet& packet, Server& server) {
+	Buffer& data	 = packet.getData();
+	int		hand	 = data.readVarInt();
+	int		sequence = data.readVarInt();
+	float	yaw		 = data.readFloat();
+	float	pitch	 = data.readFloat();
+	Player& player	 = *packet.getPlayer();
+	player.acknowledgeBlockChanges(sequence);
+	if (hand < 0 || hand > 1 || player.combat().dead || player.getStackInHand(hand).isEmpty()) return;
+	// Mth.wrapDegrees, then absSnapRotationTo
+	auto wrap = [](float degrees) {
+		float wrapped = std::fmod(degrees, 360.0F);
+		if (wrapped >= 180.0F) wrapped -= 360.0F;
+		if (wrapped < -180.0F) wrapped += 360.0F;
+		return wrapped;
+	};
+	player.setRotation(wrap(yaw), wrap(pitch));
+	ItemUse::useItem(server.getLevel(), player, hand);
+}
+
 void handleSetCarriedItemPacket(Packet& packet, Server& server) {
-	int slot = packet.getData().readShort();
-	if (slot >= 0 && slot <= 8) packet.getPlayer()->setSelectedSlot(slot);
+	int		slot   = packet.getData().readShort();
+	Player& player = *packet.getPlayer();
+	if (slot < 0 || slot > 8) return;
+	if (player.getSelectedSlot() != slot && player.getUsedItemHand() == 0) ItemUse::stopUsingItem(player);
+	player.setSelectedSlot(slot);
 	(void)server;
 }
 

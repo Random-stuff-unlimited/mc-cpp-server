@@ -213,11 +213,17 @@ void World::saveLevel() {
 		}
 		level["time"]	  = getGameTime();
 		level["day-time"] = _dayTime;
+		level["spawn"]	  = {{"x", _spawn.x}, {"y", _spawn.y}, {"z", _spawn.z}};
 		std::ofstream out(levelFile);
 		out << level.dump(2) << "\n";
 	} catch (const std::exception& e) {
 		g_logger->logGameInfo(ERROR, "Cannot save level.json: " + std::string(e.what()), "World");
 	}
+}
+
+void World::setSpawn(double x, double y, double z) {
+	_spawn = {x, y, z};
+	saveLevel();
 }
 
 void World::tickTime() {
@@ -552,7 +558,7 @@ void World::save(int64_t key, const std::shared_ptr<Chunk>& chunk, bool unloadAf
 	}
 }
 
-void World::tick() {
+bool World::tick() {
 	auto now	  = std::chrono::steady_clock::now();
 	bool autosave = now - _lastAutosave >= _settings.autosaveInterval;
 	if (autosave) _lastAutosave = now;
@@ -561,7 +567,7 @@ void World::tick() {
 	std::vector<std::pair<int64_t, std::shared_ptr<Chunk>>> toAutosave;
 	{
 		std::lock_guard<std::mutex> lock(_chunksMutex);
-		if (_stopped) return;
+		if (_stopped) return false;
 		for (auto it = _chunks.begin(); it != _chunks.end();) {
 			Entry& entry = it->second;
 			if (!entry.chunk || entry.saving) {
@@ -590,6 +596,18 @@ void World::tick() {
 	if (autosave && !toAutosave.empty()) {
 		g_logger->logGameInfo(INFO, "Autosaving " + std::to_string(toAutosave.size()) + " chunks", "World");
 	}
+	return autosave;
+}
+
+void World::submitSave(std::function<void()> job) {
+	{
+		std::lock_guard<std::mutex> lock(_chunksMutex);
+		if (!_stopped) {
+			_io.submitSave(std::move(job));
+			return;
+		}
+	}
+	job();
 }
 
 void World::shutdown() {

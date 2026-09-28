@@ -16,6 +16,17 @@ struct PlaceContext;
 // placement (axis, facing, two-block shapes) decides
 constexpr int GENERIC_PLACEMENT = -2;
 
+// ----- Using an item on a block (ServerPlayerGameMode.useItemOn) -----
+// BlockHitResult: the block clicked, the face and where it was hit (world coordinates)
+struct BlockHit {
+	BlockPos  pos;
+	Direction face;
+	double	  x, y, z;
+};
+// InteractionResult as useItemOn reads it: Success and Consume end the use, TryWithEmptyHand lets useWithoutItem
+// run (main hand only), Pass goes on to the item's own use (placing a block...)
+enum class UseResult { Success, Consume, Pass, TryWithEmptyHand };
+
 // What a block does, like vanilla's Block methods. States are block state ids; the default does nothing, so only
 // blocks with a behavior (redstone, plants, fluids...) override anything. One instance per block, shared by all
 // its states: behaviors keep no per-position data.
@@ -66,6 +77,13 @@ class BlockBehavior {
 	virtual void setPlacedBy(Level& level, const BlockPos& pos, int state) const;
 	// Right-clicked with nothing it uses (useWithoutItem): true if it did something
 	virtual bool useWithoutItem(Level& level, const BlockPos& pos, int state, Player& player) const;
+	// The same, knowing where the block was hit (chiseled bookshelves, shelves); the default ignores it
+	virtual bool useWithoutItemAt(Level& level, const BlockPos& pos, int state, Player& player, const BlockHit&) const {
+		return useWithoutItem(level, pos, state, player);
+	}
+	// Right-clicked holding the stack of that hand (BlockBehaviour.useItemOn): a disc into a jukebox, a book on a
+	// lectern... TryWithEmptyHand by default
+	virtual UseResult useItemOn(Level& level, const BlockPos& pos, int state, Player& player, int hand, const BlockHit& hit) const;
 	// An entity is in its cell (pressure plates, hoppers...); nullptr for a player
 	virtual void entityInside(Level& level, const BlockPos& pos, int state, Entity* entity) const;
 	// A player is about to break it (Block.playerWillDestroy)

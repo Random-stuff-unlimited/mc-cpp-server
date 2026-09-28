@@ -15,6 +15,9 @@ namespace compression {
 	// Same into out[0, expectedSize). Returns false instead of throwing
 	bool zlibDecompressInto(const uint8_t* data, size_t size, uint8_t* out, size_t expectedSize);
 
+	// gzip stream (vanilla's NbtIo.writeCompressed files: level.dat, playerdata)
+	std::vector<uint8_t> gzipCompress(const uint8_t* data, size_t size, int level);
+
 	// Unknown output size (vanilla files): zlib or gzip stream, throws past maxSize
 	std::vector<uint8_t> inflateUnknownSize(const uint8_t* data, size_t size, bool gzip, size_t maxSize);
 } // namespace compression

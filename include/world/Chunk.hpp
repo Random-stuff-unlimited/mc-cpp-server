@@ -88,6 +88,11 @@ class Chunk {
 	const BlockEntities& blockEntities() const { return _blockEntities; }
 	uint32_t			 indexOf(int x, int y, int z) const { return static_cast<uint32_t>(y - _minY) << 8 | (z & 15) << 4 | (x & 15); }
 
+	// The entities saved with the chunk (mobs), encoded by EntityManager::encodeChunk: written by the game thread
+	// (Level::saveEntities) and read when the chunk joins the level, under mutex()
+	std::vector<uint8_t>&		savedEntities() { return _savedEntities; }
+	const std::vector<uint8_t>& savedEntities() const { return _savedEntities; }
+
 	// Game thread only (see Level): per section, how many of its blocks tick randomly
 	std::vector<uint16_t>& randomTickingCounts() { return _randomTicking; }
 
@@ -110,6 +115,7 @@ class Chunk {
 	std::atomic<bool>				 _unloaded{false};
 	std::vector<uint16_t>			 _randomTicking;
 	BlockEntities					 _blockEntities;
+	std::vector<uint8_t>			 _savedEntities;
 
 	ChunkSection& sectionAt(int y) { return _sections[(y - _minY) >> 4]; }
 	const ChunkSection& sectionAt(int y) const { return _sections[(y - _minY) >> 4]; }

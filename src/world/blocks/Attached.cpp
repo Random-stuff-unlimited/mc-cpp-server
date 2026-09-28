@@ -1,5 +1,7 @@
 #include "world/blocks/Attached.hpp"
 
+#include "network/server.hpp"
+#include "player.hpp"
 #include "world/Level.hpp"
 #include "world/Shapes.hpp"
 
@@ -202,4 +204,18 @@ int BedBlock::updateShape(Level&, const BlockPos&, int state, Direction directio
 		return c.blocks.with(state, c.occupied, c.blocks.get(neighborState, c.occupied));
 	}
 	return _air;
+}
+
+// The player sets its respawn point here (Player.startSleepInBed's setRespawnPosition). Lying down and skipping the
+// night aren't ported yet: the bed only records where the player respawns
+bool BedBlock::useWithoutItem(Level& level, const BlockPos& pos, int state, Player& player) const {
+	// BedBlock.isObstructed: a solid block above stops sleeping
+	if (level.isRedstoneConductor(level.getBlockState(pos.above()))) {
+		level.server().sendSystemMessage(player, "block.minecraft.bed.obstructed");
+		return true;
+	}
+	player.spawn() = {true, pos.x, pos.y, pos.z, level.dimensionName(), false};
+	level.server().sendSystemMessage(player, "block.minecraft.set_spawn");
+	level.playSound(&player, pos, "minecraft:entity.player.sleep", Level::SoundSource::Players);
+	return true;
 }

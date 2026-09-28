@@ -3,6 +3,7 @@
 
 #include "world/item/ItemStack.hpp"
 
+#include <array>
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -43,6 +44,22 @@ namespace Components {
 	std::optional<std::vector<uint8_t>> get(const ItemStack& stack, const GameData& gameData, const std::string& name);
 	// Sets or removes one component of a stack; false if its patch can't be read
 	bool set(ItemStack& stack, const GameData& gameData, const std::string& name, std::optional<std::vector<uint8_t>> value);
+
+	// ----- Container-like blocks (jukeboxes, decorated pots, lecterns) -----
+	// minecraft:pot_decorations (PotDecorations): back, left, right, front item ids
+	std::vector<uint8_t>			  encodePotDecorations(const std::array<int, 4>& items);
+	std::optional<std::array<int, 4>> decodePotDecorations(const std::vector<uint8_t>& value);
+	// minecraft:jukebox_playable (EitherHolder<JukeboxSong>): the song's registry id (-1 if given inline) or its key
+	struct JukeboxSongRef {
+		int			registryId = -1;
+		std::string key; // "minecraft:cat" when given by key
+	};
+	std::optional<JukeboxSongRef> decodeJukeboxPlayable(const std::vector<uint8_t>& value);
+	// The pages of minecraft:writable_book_content (written = false) or minecraft:written_book_content
+	int							  bookPageCount(const std::vector<uint8_t>& value, bool written);
+	// Whether the stack's patch removes the component (!name)
+	bool						  isRemoved(const ItemStack& stack, const GameData& gameData, const std::string& name);
+	// ----- End of container-like blocks -----
 
 	// Reads one Slot (ItemStack.OPTIONAL_STREAM_CODEC) from data at pos; nullopt if its components can't be read
 	std::optional<ItemStack> readStack(const std::vector<uint8_t>& data, size_t& pos, const GameData& gameData);

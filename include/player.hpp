@@ -1,7 +1,9 @@
 #ifndef PLAYER_HPP
 #define PLAYER_HPP
 
+#include "lib/JavaRandom.hpp"
 #include "lib/UUID.hpp"
+#include "world/FoodData.hpp"
 #include "world/item/PlayerInventory.hpp"
 
 #include <algorithm>
@@ -14,21 +16,30 @@
 #include <vector>
 class Menu;
 class Server;
+namespace nbt {
+	struct TagCompound;
+}
 class ChunkStreamer;
 
 enum class PlayerState { None, Configuration, Handshake, Status, Login, Play };
 
+// Where the player respawns (vanilla's RespawnPosition): the bed or respawn anchor it slept in, with the dimension
+// it is in. Only the dimension loaded by the server counts: a spawn elsewhere sends the player to the world spawn
+struct PlayerSpawn {
+	bool		valid = false;
+	int			x = 0, y = 0, z = 0;
+	std::string dimension; // "minecraft:overworld"
+	bool		forced = false; // Set by /spawnpoint: respawn there even without a bed
+};
+
 // Health and combat. Game thread only. Times are in ticks (TickLoop::getTickCount)
 struct CombatState {
 	float health	 = 20;
-	int	  food		 = 20;
-	float saturation = 5;
 	bool  dead		 = false;
 
 	int64_t invulnerableUntil = 0; // 10 ticks after a hit, only stronger hits get through
 	float	lastDamage		  = 0;
 	double	fallDistance	  = 0;
-	int64_t lastRegeneration  = 0;
 
 	bool	inCombat	= false;
 	int64_t combatStart = 0;
@@ -53,6 +64,29 @@ struct PlayerOutput {
 
 // Protocol ids
 enum class GameMode : uint8_t { Survival = 0, Creative = 1, Adventure = 2, Spectator = 3 };
+// Vanilla's Pose, protocol ids (the player uses standing, crouching and swimming here)
+enum class Pose : uint8_t { Standing = 0, FallFlying = 1, Sleeping = 2, Swimming = 3, SpinAttack = 4, Crouching = 5, LongJumping = 6, Dying = 7 };
+
+// What Survival and ItemUse keep per player (vanilla's LivingEntity / Player / ServerPlayer fields). Game thread only
+struct SurvivalState {
+	int	 airSupply = 300; // Entity.getAirSupply, saved by vanilla as "Air"
+	Pose pose	   = Pose::Standing;
+	bool flying	   = false; // Abilities.flying
+	// Entity.wasTouchingWater, isEyeInFluid(WATER) and isSwimming, as of the last tick
+	bool	inWater = false, eyeInWater = false, swimming = false;
+	int64_t tickCount = 0; // Entity.tickCount
+
+	// LivingEntity.useItem and useItemRemaining, and DATA_LIVING_ENTITY_FLAGS (1: using an item, 2: with the offhand)
+	ItemStack useItem;
+	int		  useItemRemaining = 0;
+	uint8_t	  livingFlags	   = 0;
+	uint8_t	  dirtyData		   = 0; // Entity data changed since it was last sent (Survival::DATA_* bits)
+
+	// ServerPlayer.lastSentHealth, lastSentFood and lastFoodSaturationZero: SET_HEALTH when they change
+	float lastSentHealth		 = -1.0E8F;
+	int	  lastSentFood			 = -99999999;
+	bool  lastFoodSaturationZero = true;
+};
 
 class PlayerConfig {
   private:
@@ -106,6 +140,7 @@ class Player : public std::enable_shared_from_this<Player> {
 
 	// Game state. Only used on the game thread (see TickLoop)
 	GameMode				_gameMode = GameMode::Survival;
+	int						_previousGameMode = -1; // ServerPlayerGameMode.previousGameModeForPlayer, -1 = none
 	double					_posX = 0, _posY = 0, _posZ = 0;
 	float					_yaw	  = 0; // Degrees, 0 = looking south (+z), 90 = west
 	float					_pitch	  = 0; // Degrees, -90 = looking up
@@ -116,6 +151,7 @@ class Player : public std::enable_shared_from_this<Player> {
 	bool					_sprinting	  = false;
 	int64_t					_lastAttack	  = 0; // Tick of the last attack: the attack strength recharges from there
 	CombatState				_combat;
+	PlayerSpawn				_spawn; // The respawn point (bed or respawn anchor)
 	int						_digX = 0, _digY = 0, _digZ = 0;
 	int						_blockChangesAck = -1; // Highest block action sequence to acknowledge, -1 if none
 	int			  x, y, z;
@@ -128,7 +164,14 @@ class Player : public std::enable_shared_from_this<Player> {
 	std::array<ItemStack, 27> _enderChest;
 	std::unique_ptr<Menu> _inventoryMenu, _openMenu;
 	int					  _containerCounter = 0;
+	int					  _teleportId		 = 0; // Teleport id of the last Synchronize Player Position, echoed by Accept Teleportation
 	std::array<bool, 8>	  _recipeBookSettings{}; // RecipeBookSettings: open and filtering, for crafting, furnace, blast furnace, smoker
+	// The playerdata file this player was loaded from: written back with our values over it, so what the server
+	// doesn't simulate yet (attributes, effects, advancements' data...) isn't lost. Null for a new player
+	std::shared_ptr<const nbt::TagCompound> _savedData;
+	FoodData			  _foodData;
+	SurvivalState		  _survival;
+	JavaRandom			  _random{0}; // Entity.random (seeded in the constructors)
 
   public:
 	// The standing player's box (EntityDimensions 0.6 x 1.8, floats)
@@ -160,6 +203,9 @@ class Player : public std::enable_shared_from_this<Player> {
 
 	GameMode getGameMode() const { return _gameMode; }
 	void	 setGameMode(GameMode mode) { _gameMode = mode; }
+	// Protocol id of the game mode before the last change, -1 if none
+	int		 getPreviousGameMode() const { return _previousGameMode; }
+	void	 setPreviousGameMode(int mode) { _previousGameMode = mode; }
 
 	void   setPosition(double x, double y, double z) {
 		  _posX = x;
@@ -189,7 +235,13 @@ class Player : public std::enable_shared_from_this<Player> {
 	std::unique_ptr<Menu>&	openMenuSlot() { return _openMenu; }
 	// ServerPlayer.nextContainerCounter: 1 to 100
 	int						nextContainerCounter() { return _containerCounter = _containerCounter % 100 + 1; }
+	// A new teleport id for the next Synchronize Player Position
+	int						nextTeleportId() { return ++_teleportId; }
 	std::array<bool, 8>&	recipeBookSettings() { return _recipeBookSettings; }
+	const std::array<bool, 8>& recipeBookSettings() const { return _recipeBookSettings; }
+	const std::array<ItemStack, 27>& enderChest() const { return _enderChest; }
+	const std::shared_ptr<const nbt::TagCompound>& savedData() const { return _savedData; }
+	void setSavedData(std::shared_ptr<const nbt::TagCompound> data) { _savedData = std::move(data); }
 	const PlayerInventory&	inventory() const { return _inventory; }
 	int						getSelectedSlot() const { return _selectedSlot; }
 	void					setSelectedSlot(int slot) { _selectedSlot = slot; }
@@ -204,6 +256,25 @@ class Player : public std::enable_shared_from_this<Player> {
 	}
 
 	CombatState& combat() { return _combat; }
+	const CombatState& combat() const { return _combat; }
+	// The respawn point: a bed or a respawn anchor, set when the player sleeps in one (or by /spawnpoint)
+	PlayerSpawn&		spawn() { return _spawn; }
+	const PlayerSpawn&	spawn() const { return _spawn; }
+	// Hunger (Player.getFoodData): food level, saturation, exhaustion and tick timer, with their getters and setters
+	FoodData&		foodData() { return _foodData; }
+	const FoodData& foodData() const { return _foodData; }
+	// Air (Entity.getAirSupply / setAirSupply, 300 = full): sent to the client in the entity data
+	int	 getAirSupply() const { return _survival.airSupply; }
+	void setAirSupply(int air) {
+		if (air != _survival.airSupply) _survival.dirtyData |= 1;
+		_survival.airSupply = air;
+	}
+	SurvivalState&		 survival() { return _survival; }
+	const SurvivalState& survival() const { return _survival; }
+	JavaRandom&			 random() { return _random; }
+	// LivingEntity.isUsingItem / getUsedItemHand (0 main hand, 1 offhand)
+	bool isUsingItem() const { return _survival.livingFlags & 1; }
+	int	 getUsedItemHand() const { return _survival.livingFlags & 2 ? 1 : 0; }
 	bool		 isSprinting() const { return _sprinting; }
 	void		 setSprinting(bool sprinting) { _sprinting = sprinting; }
 	int64_t		 getLastAttack() const { return _lastAttack; }

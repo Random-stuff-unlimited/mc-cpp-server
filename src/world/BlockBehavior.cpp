@@ -26,6 +26,7 @@ int	 BlockBehavior::getStateForPlacement(Level&, const PlaceContext&) const { re
 bool BlockBehavior::canSurvive(Level&, const BlockPos&, int) const { return true; }
 void BlockBehavior::setPlacedBy(Level&, const BlockPos&, int) const {}
 bool BlockBehavior::useWithoutItem(Level&, const BlockPos&, int, Player&) const { return false; }
+UseResult BlockBehavior::useItemOn(Level&, const BlockPos&, int, Player&, int, const BlockHit&) const { return UseResult::TryWithEmptyHand; }
 void BlockBehavior::entityInside(Level&, const BlockPos&, int, Entity*) const {}
 void BlockBehavior::playerWillDestroy(Level&, const BlockPos&, int, Player&) const {}
 bool BlockBehavior::keepsBlockEntityOf(int) const { return false; }

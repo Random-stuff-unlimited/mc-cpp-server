@@ -11,6 +11,8 @@
 #include "world/ChunkStreamer.hpp"
 #include "world/blocks/VanillaBlocks.hpp"
 #include "world/entity/ItemEntity.hpp"
+#include "world/item/FuelValues.hpp"
+#include "world/item/PotionBrewing.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -47,7 +49,7 @@ Level::Level(Server& server, World& world, const GameData& gameData)
 		  return it != _chunks.end() && !it->second->isUnloaded() && it->second->isTicking();
 	  }),
 	  _minY(world.getMinY()), _maxY(world.getMinY() + world.getSectionCount() * 16),
-	  _random(std::chrono::steady_clock::now().time_since_epoch().count()) {
+	  _random(std::chrono::steady_clock::now().time_since_epoch().count()), _mobs(gameData) {
 	_recipes.load(gameData.getDirectory() / "recipes.json", gameData.getDirectory().parent_path() / "recipes", gameData);
 	auto block		= [&](const char* name) { return gameData.getStaticId("minecraft:block", name); };
 	_voidAir		= gameData.getDefaultBlockState("minecraft:void_air");
@@ -66,6 +68,8 @@ Level::Level(Server& server, World& world, const GameData& gameData)
 	_recipes.load(gameData.getDirectory() / "recipes.json", gameData.getDirectory().parent_path() / "recipes", gameData);
 	_cactusBlock	   = block("minecraft:cactus");
 	_loot.load(gameData.getDirectory() / "block_loot_tables.json", gameData);
+	_loot.loadEntities(gameData.getDirectory() / "entity_loot_tables.json");
+	registerVanillaMobs(_mobs);
 	_fluids = std::make_unique<Fluids>(*this, gameData, _ultraWarm);
 	registerVanillaBlocks(*this, gameData);
 	_randValue = _random.nextInt();
@@ -124,6 +128,13 @@ void Level::attach(const std::shared_ptr<Chunk>& chunk) {
 		entity->setLevel(this);
 		if (entity->ticks()) addTicker(entity->pos());
 	}
+	// Its saved entities join at the start of the next entity phase
+	std::vector<uint8_t> saved;
+	{
+		std::lock_guard<std::mutex> lock(chunk->mutex());
+		saved = chunk->savedEntities();
+	}
+	if (!saved.empty()) _entities.queueLoad(std::move(saved));
 }
 
 // LevelChunkSection.recalcBlockCounts, for the randomly ticking blocks and fluids only
@@ -155,12 +166,25 @@ void Level::detach(int64_t key) {
 	}
 	_blockTicks.removeContainer(key);
 	_fluidTicks.removeContainer(key);
+	_entities.unloadChunk(key);
 	_chunks.erase(key);
 	if (_lastKey == key) _lastChunk = nullptr;
 }
 
 void Level::onChunkLoaded(const std::shared_ptr<Chunk>& chunk) {
 	if (!chunk->isUnloaded()) attach(chunk);
+}
+
+void Level::saveEntities() {
+	_entities.processPendingLoads(); // A chunk's entities must be back in the level before it is saved again
+	for (const auto& [key, chunk] : _chunks) {
+		if (chunk->isUnloaded()) continue;
+		std::vector<uint8_t>		encoded = _entities.encodeChunk(key);
+		std::lock_guard<std::mutex> lock(chunk->mutex());
+		if (encoded == chunk->savedEntities()) continue;
+		chunk->savedEntities() = std::move(encoded);
+		chunk->setDirty(true);
+	}
 }
 
 void Level::dropUnloadedChunks() {
@@ -531,7 +555,7 @@ void Level::removeBlockEntityOnChange(const BlockPos& pos, int oldState, int new
 	int oldBlock = _blocks.blockOf(oldState), newBlock = _blocks.blockOf(newState);
 	if (oldBlock == newBlock || !_hasBlockEntity[oldBlock] || behavior(newState).keepsBlockEntityOf(oldState)) return;
 	if (!(flags & UPDATE_SKIP_BLOCK_ENTITY_SIDEEFFECTS)) {
-		if (BlockEntity* entity = getBlockEntity(pos)) entity->preRemoveSideEffects(*this);
+		if (BlockEntity* entity = getBlockEntity(pos)) entity->preRemoveSideEffectsWithState(*this, oldState);
 	}
 	removeBlockEntity(pos);
 }
@@ -579,8 +603,8 @@ int Level::countEntities(const AABB& box, bool livingOnly) {
 						 player->getZ() + half};
 		if (playerBox.intersects(box)) count++;
 	}
-	if (livingOnly) return count;
-	return count + static_cast<int>(_entities.entitiesIn(box).size());
+	_entities.forEachIn(box, [&](Entity& entity) { count += !livingOnly || entity.isLiving(); });
+	return count;
 }
 
 bool Level::hasBlockCollision(const AABB& box) {
@@ -825,6 +849,31 @@ void Level::sendChanges() {
 			packetId = PacketId::Play::Clientbound::SECTION_BLOCKS_UPDATE;
 		}
 		_server.broadcastToChunk(sectionX, sectionZ, packetId, packet);
+		// ChunkHolder.broadcastBlockEntityIfNeeded: the changed blocks' block entities that have an update packet
+		for (uint16_t local : positions) {
+			BlockPos	 at{sectionX * 16 + (local >> 8), sectionY * 16 + (local & 15), sectionZ * 16 + ((local >> 4) & 15)};
+			BlockEntity* entity = getBlockEntity(at);
+			if (!entity || !entity->hasUpdatePacket()) continue;
+			Buffer data;
+			data.writePosition(at.x, at.y, at.z);
+			data.writeVarInt(_gameData.getStaticId("minecraft:block_entity_type", entity->type()));
+			std::vector<uint8_t> tag;
+			entity->writeUpdateTag(tag);
+			data.writeBytes(tag);
+			_server.broadcastToChunk(sectionX, sectionZ, PacketId::Play::Clientbound::BLOCK_ENTITY_DATA, data);
+		}
 	}
 	_changedSections.clear();
+}
+
+// ----- Furnaces and brewing stands -----
+
+const FuelValues& Level::fuelValues() {
+	if (!_fuelValues) _fuelValues = std::make_shared<FuelValues>(_gameData);
+	return *_fuelValues;
+}
+
+const PotionBrewing& Level::potionBrewing() {
+	if (!_potionBrewing) _potionBrewing = std::make_shared<PotionBrewing>(_gameData);
+	return *_potionBrewing;
 }

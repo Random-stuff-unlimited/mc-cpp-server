@@ -19,6 +19,9 @@ namespace nbt {
 		// Parse an NBT payload (binary) into an NBT object.
 		// Expects the data to start with a root tag type and name.
 		NBT parse(const std::vector<uint8_t>& data);
+		// Network NBT (anonymous root, 1.20.2+): a tag type then its payload, from data at cursor. TAG_END alone
+		// (no tag) gives an empty Tag
+		Tag parseNetwork(const std::vector<uint8_t>& data, size_t& cursor);
 
 	  private:
 		// Helper utilities for decoding the binary stream (big-endian).

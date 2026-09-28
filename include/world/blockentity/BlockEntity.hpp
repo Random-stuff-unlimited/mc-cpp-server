@@ -77,12 +77,17 @@ class BlockEntity {
 	virtual void tick(Level&) {}
 	// The block is going away (BlockEntity.preRemoveSideEffects): containers drop their items...
 	virtual void preRemoveSideEffects(Level&) {}
+	// The same knowing the state that was there (vanilla's preRemoveSideEffects(pos, state): a lectern's facing)
+	virtual void preRemoveSideEffectsWithState(Level& level, int /*oldState*/) { preRemoveSideEffects(level); }
 
 	virtual void save(BlockEntityWriter& out) const	  = 0;
 	virtual void load(BlockEntityReader& in)		  = 0;
 	// BlockEntity.getUpdateTag as network NBT (what the client renders: campfire items...). Nothing by default: the
 	// client gets a null tag
 	virtual void writeUpdateTag(std::vector<uint8_t>& out) const { out.push_back(0); }
+	// getUpdatePacket: whether the clients get its update tag again (Block Entity Data packet) when its block is sent
+	// again (Level::sendBlockUpdated): shelves, decorated pots...
+	virtual bool hasUpdatePacket() const { return false; }
 
 	// Creates an empty block entity of a type (a generic one, that only keeps its data, for the types not ported)
 	static std::unique_ptr<BlockEntity> create(const std::string& type, const BlockPos& pos);

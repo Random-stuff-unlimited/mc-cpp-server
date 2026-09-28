@@ -10,17 +10,19 @@
 #include "player.hpp"
 #include "world/ChunkStreamer.hpp"
 #include "world/PlayerTracker.hpp"
+#include "world/Survival.hpp"
 #include "world/Level.hpp"
 #include "world/World.hpp"
+#include "world/entity/LivingEntity.hpp"
 
 #include <algorithm>
 #include <cmath>
+#include <optional>
 #include <unordered_map>
 
 namespace {
 	constexpr float	  MAX_HEALTH			= 20;
 	constexpr int64_t INVULNERABILITY_TICKS = 10;
-	constexpr int64_t REGENERATION_TICKS	= 80;  // When food >= 18
 	constexpr int64_t COMBAT_END_TICKS		= 300; // Without damage
 	constexpr double  BASE_KNOCKBACK		= 0.4;
 	constexpr double  SPRINT_KNOCKBACK		= 0.5;
@@ -67,20 +69,48 @@ namespace {
 	}
 
 	// Distance from the attacker's eyes to the closest point of the target's hitbox
-	double reachDistance(const Player& attacker, const Player& target) {
+	double reachDistance(const Player& attacker, const AABB& box) {
 		double eyeX = attacker.getX(), eyeY = attacker.getY() + EYE_HEIGHT, eyeZ = attacker.getZ();
-		double x = std::clamp(eyeX, target.getX() - PLAYER_HALF_WIDTH, target.getX() + PLAYER_HALF_WIDTH);
-		double y = std::clamp(eyeY, target.getY(), target.getY() + PLAYER_HEIGHT);
-		double z = std::clamp(eyeZ, target.getZ() - PLAYER_HALF_WIDTH, target.getZ() + PLAYER_HALF_WIDTH);
+		double x = std::clamp(eyeX, box.minX, box.maxX);
+		double y = std::clamp(eyeY, box.minY, box.maxY);
+		double z = std::clamp(eyeZ, box.minZ, box.maxZ);
 		return std::sqrt((x - eyeX) * (x - eyeX) + (y - eyeY) * (y - eyeY) + (z - eyeZ) * (z - eyeZ));
 	}
 
-	void sendHealthValues(Server& server, Player& player, float health, int food, float saturation) {
-		Buffer buf;
-		buf.writeFloat(health);
-		buf.writeVarInt(food);
-		buf.writeFloat(saturation);
-		Packet::send(player.shared_from_this(), PacketId::Play::Clientbound::SET_HEALTH, buf, server);
+	// The part of Player.attack both kinds of targets share: the held item's damage scaled by how charged the attack
+	// is (spamming clicks does little), critical hits when falling. Resets the attack cooldown
+	struct AttackRoll {
+		float damage;
+		bool  strong, critical;
+	};
+	std::optional<AttackRoll> rollAttack(Server& server, Player& attacker, const AABB& target) {
+		if (attacker.getGameMode() == GameMode::Spectator || attacker.combat().dead) return std::nullopt;
+		double fallDistance = attacker.combat().fallDistance;
+		// Vanilla entity interaction range: 3 blocks, 5 in creative, plus a margin for latency
+		double range = (attacker.getGameMode() == GameMode::Creative ? 5.0 : 3.0) + 1.0;
+		if (reachDistance(attacker, target) > range) return std::nullopt;
+
+		const GameData::ItemProperties* item		= server.getGameData().getItemProperties(attacker.getItemInHand(0));
+		float							baseDamage	= 1.0f + (item ? item->attackDamage : 0.0f);
+		float							attackSpeed = std::max(0.1f, 4.0f + (item ? item->attackSpeed : 0.0f));
+		int64_t							now			= currentTick(server);
+		// Vanilla getAttackStrengthScale(0.5): ticks since the last attack against the item's cooldown
+		double strength = std::clamp((now - attacker.getLastAttack() + 0.5) / (20.0 / attackSpeed), 0.0, 1.0);
+		attacker.setLastAttack(now);
+
+		AttackRoll roll;
+		roll.damage	  = baseDamage * static_cast<float>(0.2 + strength * strength * 0.8);
+		roll.strong	  = strength > 0.9;
+		roll.critical = roll.strong && fallDistance > 0 && !attacker.isOnGround() && !attacker.isSprinting();
+		if (roll.critical) roll.damage *= 1.5f;
+		return roll;
+	}
+
+	void sendCriticalHit(Server& server, int targetId, Player& attacker) {
+		Buffer animation;
+		animation.writeVarInt(targetId);
+		animation.writeUByte(ANIMATE_CRITICAL_HIT);
+		server.getPlayerTracker().broadcast(&attacker, PacketId::Play::Clientbound::ANIMATE, animation, true);
 	}
 
 	void die(Server& server, Player& victim, const Combat::DamageSource& source) {
@@ -130,38 +160,37 @@ namespace {
 			Packet::sendFrame(player, frame, server);
 		}
 	}
+
+	// Whether the block at pos is still a valid respawn point: a bed or a respawn anchor (Vanilla's
+	// ServerPlayer.getBedSpawnLocation), with nothing solid blocking the space above
+	bool isSpawnBlock(Level& level, const BlockPos& pos) {
+		const GameData& data = level.gameData();
+		auto			isBedOrAnchor = [&](const BlockPos& at) {
+			int state = level.getBlockState(at);
+			if (state < 0) return false;
+			int block = level.blocks().blockOf(state);
+			return data.isInstanceOf(block, "BedBlock") || data.isInstanceOf(block, "RespawnAnchorBlock");
+		};
+		return (isBedOrAnchor(pos) || isBedOrAnchor(pos.below())) && !level.isRedstoneConductor(level.getBlockState(pos.above()));
+	}
 } // namespace
 
 namespace Combat {
 
-	void sendHealth(Server& server, Player& player) {
-		sendHealthValues(server, player, player.combat().health, player.combat().food, player.combat().saturation);
-	}
+	void sendHealth(Server& server, Player& player) { Survival::sendHealth(server, player); }
 
 	void attack(Server& server, Player& attacker, Player& target) {
-		if (&attacker == &target || attacker.getGameMode() == GameMode::Spectator) return;
-		if (attacker.combat().dead) return;
-		double fallDistance = attacker.combat().fallDistance;
-		// Vanilla entity interaction range: 3 blocks, 5 in creative, plus a margin for latency
-		double range = (attacker.getGameMode() == GameMode::Creative ? 5.0 : 3.0) + 1.0;
-		if (reachDistance(attacker, target) > range) return;
-
-		// Damage of the held item, scaled by how charged the attack is (spamming clicks does little)
-		const GameData::ItemProperties* item		= server.getGameData().getItemProperties(attacker.getItemInHand(0));
-		float							baseDamage	= 1.0f + (item ? item->attackDamage : 0.0f);
-		float							attackSpeed = std::max(0.1f, 4.0f + (item ? item->attackSpeed : 0.0f));
-		int64_t							now			= currentTick(server);
-		// Vanilla getAttackStrengthScale(0.5): ticks since the last attack against the item's cooldown
-		double strength = std::clamp((now - attacker.getLastAttack() + 0.5) / (20.0 / attackSpeed), 0.0, 1.0);
-		attacker.setLastAttack(now);
-
-		float damage = baseDamage * static_cast<float>(0.2 + strength * strength * 0.8);
-		bool  strong = strength > 0.9;
-		bool  critical = strong && fallDistance > 0 && !attacker.isOnGround() && !attacker.isSprinting();
-		if (critical) damage *= 1.5f;
+		if (&attacker == &target) return;
+		std::optional<AttackRoll> roll = rollAttack(server, attacker,
+													AABB{target.getX() - PLAYER_HALF_WIDTH, target.getY(), target.getZ() - PLAYER_HALF_WIDTH,
+														 target.getX() + PLAYER_HALF_WIDTH, target.getY() + PLAYER_HEIGHT, target.getZ() + PLAYER_HALF_WIDTH});
+		if (!roll) return;
+		float damage = roll->damage;
+		bool  strong = roll->strong, critical = roll->critical;
 
 		DamageSource source{"minecraft:player_attack", &attacker};
 		if (!Combat::damage(server, target, damage, source)) return;
+		Survival::causeFoodExhaustion(attacker, FoodData::EXHAUSTION_ATTACK); // Player.attack
 
 		if (strong && attacker.isSprinting()) {
 			// Sprint hit: extra knockback in the attacker's look direction
@@ -181,6 +210,38 @@ namespace Combat {
 		}
 	}
 
+	// Player.attack against a LivingEntity: hurtServer, then the sprint knockback along the attacker's look, the
+	// critical hit animation and the attack sounds
+	void attack(Server& server, Player& attacker, LivingEntity& target) {
+		if (!target.isAlive()) return; // Entity.isAttackable
+		std::optional<AttackRoll> roll = rollAttack(server, attacker, target.boundingBox());
+		if (!roll) return;
+		Level&		level  = target.level();
+		bool		sprint = roll->strong && attacker.isSprinting();
+		auto		sound  = [&](const char* name) {
+			  level.playSoundAt(nullptr, attacker.getX(), attacker.getY(), attacker.getZ(), name, Level::SoundSource::Players, 1.0F, 1.0F);
+		};
+		if (sprint) sound("minecraft:entity.player.attack.knockback");
+		if (!target.hurtServer({"minecraft:player_attack", &attacker}, roll->damage)) {
+			sound("minecraft:entity.player.attack.nodamage");
+			return;
+		}
+		// getKnockback: the attack_knockback attribute (0 for players without enchantments), +1 when sprinting
+		float knockback = sprint ? 1.0F : 0.0F;
+		if (knockback > 0.0F) {
+			float yaw = attacker.getYaw() * (float)(M_PI / 180.0);
+			target.knockback(knockback * 0.5F, Mth::sin(yaw), -Mth::cos(yaw));
+			// The attacker slows down and stops sprinting on its side (its movement is the client's)
+		}
+		// Sweeping attacks aren't ported
+		if (roll->critical) {
+			sound("minecraft:entity.player.attack.crit");
+			sendCriticalHit(server, target.id(), attacker);
+		} else {
+			sound(roll->strong ? "minecraft:entity.player.attack.strong" : "minecraft:entity.player.attack.weak");
+		}
+	}
+
 	bool damage(Server& server, Player& victim, float amount, const DamageSource& source) {
 		const GameData& gameData = server.getGameData();
 		int				typeId	 = gameData.getSyncedId("minecraft:damage_type", source.type);
@@ -189,8 +250,6 @@ namespace Combat {
 
 		int64_t now	 = currentTick(server);
 		Armor	armor = wornArmor(gameData, victim);
-		float	health, saturation;
-		int		food;
 		bool	died = false, enteredCombat = false;
 		{
 			CombatState& state = victim.combat();
@@ -209,8 +268,9 @@ namespace Combat {
 				state.lastAttacker	 = source.attacker->getPlayerName();
 				state.lastAttackedAt = now;
 			}
-			if (state.health >= MAX_HEALTH) state.lastRegeneration = now; // Regeneration starts counting from the first damage
 			if (!gameData.isInTag("minecraft:damage_type", "minecraft:bypasses_armor", typeId)) applied = afterArmor(applied, armor);
+			// Player.actuallyHurt: the damage type's exhaustion
+			if (applied != 0) Survival::causeFoodExhaustion(victim, gameData.getDamageExhaustion(source.type));
 
 			state.health -= applied;
 			if (state.health <= 0) {
@@ -230,12 +290,9 @@ namespace Combat {
 				}
 				state.lastCombat = now;
 			}
-			health	   = state.health;
-			food	   = state.food;
-			saturation = state.saturation;
 		}
 
-		sendHealthValues(server, victim, health, food, saturation);
+		// SET_HEALTH follows at the player's tick (ServerPlayer.doTick)
 		if (enteredCombat) {
 			Buffer empty;
 			Packet::send(victim.shared_from_this(), PacketId::Play::Clientbound::PLAYER_COMBAT_ENTER, empty, server);
@@ -326,14 +383,18 @@ namespace Combat {
 			if (!state.dead) return;
 			state.dead				= false;
 			state.health			= MAX_HEALTH;
-			state.food				= 20;
-			state.saturation		= 5;
 			state.fallDistance		= 0;
 			state.lastDamage		= 0;
 			state.invulnerableUntil = 0;
 		}
-		const World::Spawn& spawn = server.getWorld().getSpawn();
-		player.setPosition(spawn.x, spawn.y, spawn.z);
+		Survival::reset(player); // A new ServerPlayer: full food and air
+
+		// The respawn position: the player's bed or respawn anchor if it is still there, the world spawn otherwise
+		bool	 invalid = false;
+		Vec3	 respawn = respawnPosition(server.getLevel(), {server.getWorld().getSpawn().x, server.getWorld().getSpawn().y, server.getWorld().getSpawn().z},
+										  player.spawn(), invalid);
+		if (invalid) server.sendSystemMessage(player, "block.minecraft.spawn.not_valid");
+		player.setPosition(respawn.x, respawn.y, respawn.z);
 		player.setOnGround(true);
 		std::shared_ptr<Player> self = player.shared_from_this();
 
@@ -353,19 +414,24 @@ namespace Combat {
 		setHeldItemPacket(packet, server);
 		sendHealth(server, player);
 
-		if (ChunkStreamer* streamer = player.getChunkStreamer()) streamer->onPlayerMove(spawn.x, spawn.z);
+		if (ChunkStreamer* streamer = player.getChunkStreamer()) streamer->onPlayerMove(respawn.x, respawn.z);
 		server.getPlayerTracker().respawn(&player);
+	}
+
+	Vec3 respawnPosition(Level& level, const Vec3& fallback, const PlayerSpawn& home, bool& invalid) {
+		invalid = false;
+		if (home.valid && home.dimension == level.dimensionName()) {
+			BlockPos at(home.x, home.y, home.z);
+			if (isSpawnBlock(level, at)) return {at.x + 0.5, static_cast<double>(at.y), at.z + 0.5};
+			invalid = true; // The bed or anchor is missing or obstructed
+		}
+		return {fallback.x, fallback.y, fallback.z};
 	}
 
 	void tick(Server& server, Player& player) {
 		CombatState& state = player.combat();
 		if (state.dead) return;
-		int64_t now = currentTick(server);
-		if (state.health < MAX_HEALTH && state.food >= 18 && now - state.lastRegeneration >= REGENERATION_TICKS) {
-			state.health		   = std::min(MAX_HEALTH, state.health + 1);
-			state.lastRegeneration = now;
-			sendHealth(server, player);
-		}
+		int64_t now = currentTick(server); // Natural regeneration is FoodData's (Survival::tick)
 		if (state.inCombat && now - state.lastCombat > COMBAT_END_TICKS) {
 			state.inCombat = false;
 			Buffer end;

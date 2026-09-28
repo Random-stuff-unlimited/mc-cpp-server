@@ -7,6 +7,7 @@
 #include "network/TextComponent.hpp"
 #include "network/server.hpp"
 #include "player.hpp"
+#include "world/Survival.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -330,6 +331,9 @@ void PlayerTracker::show(Tracked& target, Tracked& viewer) {
 	spawn.writeUByte(target.sentYaw); // Head
 	spawn.writeVarInt(0);			  // Entity-specific data
 	Packet::send(viewer.player, PacketId::Play::Clientbound::ADD_ENTITY, spawn, _server);
+	// Its entity data that isn't at the default (air, item in use)
+	Buffer data;
+	if (Survival::writeNonDefaultData(data, *target.player)) Packet::send(viewer.player, PacketId::Play::Clientbound::SET_ENTITY_DATA, data, _server);
 }
 
 // Encoded once for all the viewers

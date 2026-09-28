@@ -1,4 +1,5 @@
 #include "config.hpp"
+#include "Commands.hpp"
 #include "lib/filesystem.hpp"
 #include "lib/json.hpp"
 #include "logger.hpp"
@@ -7,9 +8,11 @@
 #include "player.hpp"
 #include "world/Level.hpp"
 #include "world/inventory/Menu.hpp"
+#include "world/PlayerDataStorage.hpp"
 #include "world/World.hpp"
 #include "world/ChunkStreamer.hpp"
 #include "world/Combat.hpp"
+#include "world/Survival.hpp"
 #include "PacketIds.hpp"
 #include "network/packet.hpp"
 #include "network/TextComponent.hpp"
@@ -36,8 +39,10 @@ static void handleStopSignal(int) { g_stopRequested = 1; }
 Server::Server() : _playerLst(), _config(), _networkManager(nullptr), _playerTracker(*this), _tickLoop(*this) {}
 
 Server::~Server() {
-	// No more packets first, then save the world, then drop the players (they release their chunks)
+	// No more packets first, then save the players and the world, then drop the players (they release their chunks)
 	if (_networkManager) _networkManager->stopThreads();
+	if (_world && _level) _level->saveEntities(); // Mobs go into their chunks first
+	if (_world && _playerData) savePlayers(); // PlayerList.saveAll, before the I/O threads stop
 	if (_world) _world->shutdown();
 	_gamePlayers.clear();
 	_level.reset();
@@ -69,6 +74,13 @@ void Server::kick(Player* player, const std::string& translationKey) {
 	}
 	g_logger->logNetwork(INFO, player->getPlayerName() + " kicked: " + translationKey, "SERVER");
 	_networkManager->requestDisconnect(player); // After the message is sent
+}
+
+void Server::sendSystemMessage(Player& player, const std::string& translationKey) {
+	Buffer message;
+	TextComponent::writeTranslatable(message, translationKey, {});
+	message.writeBool(false); // In the chat, not above the hotbar
+	Packet::send(player.shared_from_this(), PacketId::Play::Clientbound::SYSTEM_CHAT, message, *this);
 }
 
 std::vector<std::shared_ptr<Player>> Server::findPlayersByName(const std::string& name) {
@@ -118,6 +130,7 @@ void Server::sendTickingState(const std::shared_ptr<Player>& to) {
 }
 
 void Server::sendTime(const std::shared_ptr<Player>& to) {
+	if (!_world) return; // A server without its world (tests)
 	Buffer time;
 	time.writeLong(_world->getGameTime());
 	time.writeLong(_world->getDayTime());
@@ -167,7 +180,10 @@ void Server::tick(bool worldRuns) {
 
 	// Entities: players, then the others (items...), which stop while the game is frozen
 	for (const auto& player : _gamePlayers) {
-		if (!player->isDisconnected()) Combat::tick(*this, *player);
+		if (!player->isDisconnected()) {
+			Combat::tick(*this, *player);
+			Survival::tick(*_level, *player);
+		}
 	}
 	if (worldRuns) {
 		_level->tickEntities();
@@ -175,6 +191,10 @@ void Server::tick(bool worldRuns) {
 	}
 	// The movements of this tick to the players that see them
 	_playerTracker.tick(_tickLoop.getTickCount());
+	// Their entity data that changed (air, item in use)
+	for (const auto& player : _gamePlayers) {
+		if (!player->isDisconnected()) Survival::sendDirtyData(*this, *player);
+	}
 	// The block changes, then the actions they answer (Block Changed Ack), the entities and the inventories
 	_level->sendChanges();
 	_level->sendEntityChanges();
@@ -195,7 +215,8 @@ void Server::tick(bool worldRuns) {
 	auto now = std::chrono::steady_clock::now();
 	if (now - _lastWorldMaintenance >= std::chrono::seconds(1)) {
 		_lastWorldMaintenance = now;
-		_world->tick();
+		_level->saveEntities(); // Before chunks are saved or unloaded
+		if (_world->tick()) savePlayers(); // MinecraftServer.saveEverything: the players with the chunks
 		_level->dropUnloadedChunks();
 	}
 }
@@ -226,6 +247,10 @@ void Server::addGamePlayer(const std::shared_ptr<Player>& player) {
 
 // Also cleans up after an enterPlay that failed halfway
 void Server::leaveGame(Player* player) {
+	// PlayerList.remove: saved first, then the menus close. Only a player that entered the game: one whose
+	// enterPlay failed may not have its data
+	auto inGame = std::find_if(_gamePlayers.begin(), _gamePlayers.end(), [player](const auto& p) { return p.get() == player; });
+	if (inGame != _gamePlayers.end()) savePlayer(*player);
 	if (ChunkStreamer* streamer = player->getChunkStreamer()) streamer->stop();
 	_playerTracker.leave(player);
 	// Player.remove: the menus close, what the cursor and the crafting grid held falls on the ground
@@ -239,6 +264,14 @@ void Server::leaveGame(Player* player) {
 	if (it == _gamePlayers.end()) return;
 	*it = std::move(_gamePlayers.back());
 	_gamePlayers.pop_back();
+}
+
+void Server::savePlayer(const Player& player) {
+	_playerData->save(player.getUUID(), PlayerData::save(player, _gameData, _world->getDimensionName()));
+}
+
+void Server::savePlayers() {
+	for (const auto& player : _gamePlayers) savePlayer(*player);
 }
 
 int Server::start_server() {
@@ -266,6 +299,8 @@ int Server::start_server() {
 			g_logger->logGameInfo(WARN, "Death messages unavailable (" + std::string(e.what()) + "): \"<player> died\" instead", "SERVER");
 		}
 
+		Commands::registerCommands();
+
 		World::Settings worldSettings;
 		worldSettings.directory		   = getPath().parent_path() / _config.getWorldName();
 		worldSettings.autosaveInterval = std::chrono::seconds(_config.getAutosaveInterval());
@@ -278,7 +313,8 @@ int Server::start_server() {
 			return 1;
 		}
 
-		_level = std::make_unique<Level>(*this, *_world, _gameData);
+		_level		= std::make_unique<Level>(*this, *_world, _gameData);
+		_playerData = std::make_unique<PlayerDataStorage>(worldSettings.directory, [this](std::function<void()> job) { _world->submitSave(std::move(job)); });
 		// Chunks finish loading on I/O threads: their scheduled ticks start counting on the game thread
 		_world->setChunkLoadListener([this](const std::shared_ptr<Chunk>& chunk) { _tickLoop.post([this, chunk] { _level->onChunkLoaded(chunk); }); });
 

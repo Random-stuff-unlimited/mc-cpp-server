@@ -4,6 +4,7 @@
 class Level;
 class NetworkManager;
 class Packet;
+class PlayerDataStorage;
 class World;
 #include "../TickLoop.hpp"
 #include "../world/PlayerTracker.hpp"
@@ -40,6 +41,7 @@ class Server {
 	IdManager						 _idManager;
 	std::unique_ptr<World>			 _world;
 	std::unique_ptr<Level>			 _level;
+	std::unique_ptr<PlayerDataStorage> _playerData;
 	PlayerTracker					 _playerTracker;
 	TickLoop						 _tickLoop;
 
@@ -53,6 +55,8 @@ class Server {
   public:
 	// Disconnects a player with a message (a translation key of the game, e.g. "multiplayer.disconnect.kicked")
 	void kick(Player* player, const std::string& translationKey);
+	// A translated message in the player's own chat (System Chat, in the chat): its language's wording
+	void sendSystemMessage(Player& player, const std::string& translationKey);
 	// Logged-in players (login, configuration or play) with this name, ignoring case
 	std::vector<std::shared_ptr<Player>> findPlayersByName(const std::string& name);
 
@@ -84,6 +88,8 @@ class Server {
 	// The world for the game logic (game thread)
 	Level&			getLevel() { return *_level; }
 	PlayerTracker&	getPlayerTracker() { return _playerTracker; }
+	// <world>/playerdata
+	PlayerDataStorage& getPlayerData() { return *_playerData; }
 	TickLoop&		getTickLoop() { return _tickLoop; }
 
 	// ----- Game thread only -----
@@ -98,6 +104,9 @@ class Server {
 	void addGamePlayer(const std::shared_ptr<Player>& player);
 	// After a disconnection: releases the player's chunks and removes it from the world
 	void leaveGame(Player* player);
+	// PlayerList.save / saveAll: written on the I/O threads
+	void savePlayer(const Player& player);
+	void savePlayers();
 	const std::vector<std::shared_ptr<Player>>& getGamePlayers() const { return _gamePlayers; }
 
 	// Sends a packet to every player that has this chunk, except `except`

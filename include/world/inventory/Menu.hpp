@@ -86,18 +86,26 @@ class ResultContainer : public SimpleContainer {
 
 // Vanilla's Slot: a slot of a container, as the menu shows it
 struct Slot {
-	enum class Kind { Normal, Armor, Result, NoShulkerBox };
+	// NonInteractive: NonInteractiveResultSlot (the crafter's result, only shown); Crafter: CrafterSlot (nothing goes in
+	// a disabled slot)
+	enum class Kind { Normal, Armor, Result, NoShulkerBox, NonInteractive, Crafter };
 
 	Container*				container;
 	int						containerSlot;
 	int						index = 0; // In the menu
 	Kind					kind  = Kind::Normal;
 	GameData::EquipmentSlot armor = GameData::EquipmentSlot::MainHand; // Armor slots: which one
+	// ----- Furnaces and brewing stands -----
+	// Rules of a slot class of its own (FurnaceFuelSlot, PotionSlot...): which items it takes (Slot.mayPlace), and its
+	// stack limit for an item (Slot.getMaxStackSize(stack); 0: the default one)
+	std::function<bool(const ItemStack&)> placeRule;
+	std::function<int(const ItemStack&)>  stackLimit;
+	// ----- End furnaces and brewing stands -----
 
 	ItemStack& item() const { return container->item(containerSlot); }
 	bool	   hasItem() const { return !item().isEmpty(); }
 	bool	   mayPlace(const ItemStack& stack, const GameData& gameData) const;
-	bool	   mayPickup() const { return true; }
+	bool	   mayPickup() const { return kind != Kind::NonInteractive; }
 	int		   maxStackSize() const { return kind == Kind::Armor ? 1 : container->maxStackSize(); }
 	int		   maxStackSize(const ItemStack& stack, const GameData& gameData) const;
 	void	   set(ItemStack stack) const;
@@ -131,6 +139,8 @@ class Menu {
 
 	// AbstractContainerMenu.clicked
 	void clicked(int slot, int button, ClickType type);
+	// clickMenuButton (Container Button Click packet): a lectern's page buttons...; true if it did something
+	virtual bool clickMenuButton(int) { return false; }
 	bool isValidSlotIndex(int slot) const { return slot == -1 || slot == -999 || slot < static_cast<int>(_slots.size()); }
 
 	// Synchronization with the client (ContainerSynchronizer)
@@ -153,6 +163,12 @@ class Menu {
 	std::vector<Slot> _slots;
 
 	Slot& addSlot(Container& container, int containerSlot, Slot::Kind kind = Slot::Kind::Normal);
+	// addDataSlots: values the client's screen shows (a furnace's burn and cook progress...), read through dataSlot()
+	// and sent when they change (ContainerData, CONTAINER_SET_DATA)
+	void		addDataSlots(int count) { _remoteData.assign(static_cast<size_t>(count), 0); }
+	virtual int dataSlot(int) const { return 0; }
+	// Run first by broadcastChanges: a menu that follows its slots (ContainerListener.slotChanged) looks at them here
+	virtual void beforeBroadcastChanges() {}
 	// moveItemStackTo: into the slots [start, end), stacks of the same item first
 	bool  moveItemStackTo(ItemStack& stack, int start, int end, bool reverse);
 	int	  maxStackSize(const ItemStack& stack) const;
@@ -163,6 +179,7 @@ class Menu {
 	// Slot.safeTake, then onTake
 	ItemStack	 safeTake(Slot& slot, int count, int decrement);
 	void		 sendSlot(int slot, const ItemStack& stack);
+	void		 sendData(int slot, int value);
 	// CraftingMenu.slotChangedCraftingGrid: the result of what the grid (width wide) holds, sent right away (hint: the
 	// recipe to try first)
 	void		 updateCraftingResult(Container& grid, int width, Container& result, const Recipe* hint = nullptr);
@@ -189,6 +206,7 @@ class Menu {
 	RemoteSlot				 _remoteCarried;
 	bool					 _suppressRemoteUpdates = false;
 	bool					 _synchronized			= false;
+	std::vector<int>		 _remoteData; // The data slots' values the client has
 	int						 _quickcraftType		= -1;
 	int						 _quickcraftStatus		= 0;
 	std::vector<int>		 _quickcraftSlots; // Menu slot indexes, in the order they were dragged over

@@ -28,9 +28,12 @@ void handleLoginAcknowledgedPacket(Packet& packet, Server& server);
 void serverboundKnownPacksPacket(Packet& packet);
 void handlePlayerActionPacket(Packet& packet, Server& server);
 void handleUseItemOnPacket(Packet& packet, Server& server);
+void handleUseItemPacket(Packet& packet, Server& server);
 void handleContainerClickPacket(Packet& packet, Server& server);
 void handleContainerClosePacket(Packet& packet, Server& server);
-// Recipe book (recipeBookPackets.cpp)
+void handleContainerButtonClickPacket(Packet& packet, Server& server);
+void handleContainerSlotStateChangedPacket(Packet& packet, Server& server);
+// Container clicks and recipe book (playPackets.cpp)
 void sendInitialRecipeBook(Packet& packet, Server& server);
 void handlePlaceRecipePacket(Packet& packet, Server& server);
 void handleRecipeBookChangeSettingsPacket(Packet& packet, Server& server);
@@ -50,6 +53,8 @@ void handleStatusState(Packet* packet, Server& server);
 void handleLoginState(Packet* packet, Server& server);
 void handleConfigurationState(Packet* packet, Server& server);
 void handlePlayState(Packet* packet, Server& server);
+// Shared by the state routers: the packet's player is disconnected (state None, PACKET_DISCONNECT)
+void disconnect(Packet* packet);
 void sendRegistryData(Packet& packet, Server& server);
 void sendUpdateTags(Packet& packet, Server& server);
 

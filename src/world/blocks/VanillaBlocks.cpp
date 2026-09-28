@@ -9,7 +9,9 @@
 #include "world/blocks/Dispensers.hpp"
 #include "world/blocks/LiquidBlock.hpp"
 #include "world/blocks/Pistons.hpp"
+#include "world/blocks/ProcessingBlocks.hpp"
 #include "world/blocks/Redstone.hpp"
+#include "world/blocks/StorageBlocks.hpp"
 #include "world/blocks/Vegetation.hpp"
 #include "world/feature/Trees.hpp"
 
@@ -176,6 +178,18 @@ void registerVanillaBlocks(Level& level, const GameData& gameData) {
 			{"EnderChestBlock", [context, ids](int) { return std::make_unique<EnderChestBlock>(context, ids); }},
 			{"HopperBlock", [context, ids](int) { return std::make_unique<HopperBlock>(context, ids); }},
 			{"DispenserBlock", [context, ids](int) { return std::make_unique<DispenserBlock>(context, ids, false); }},
+			// ----- Furnaces and brewing stands -----
+			{"AbstractFurnaceBlock", [context, ids](int) { return std::make_unique<AbstractFurnaceBlock>(context, ids); }},
+			{"BrewingStandBlock", [context, ids](int) { return std::make_unique<BrewingStandBlock>(context, ids); }},
+			// ----- End furnaces and brewing stands -----
+			// ----- Container-like blocks -----
+			{"ChiseledBookShelfBlock", [context, ids](int) { return std::make_unique<ChiseledBookShelfBlock>(context, ids); }},
+			{"DecoratedPotBlock", [context, ids](int) { return std::make_unique<DecoratedPotBlock>(context, ids); }},
+			{"JukeboxBlock", [context, ids](int) { return std::make_unique<JukeboxBlock>(context, ids); }},
+			{"LecternBlock", [context, ids](int) { return std::make_unique<LecternBlock>(context, ids); }},
+			{"CrafterBlock", [context, ids](int) { return std::make_unique<CrafterBlock>(context, ids); }},
+			{"ShelfBlock", [context, ids](int) { return std::make_unique<ShelfBlock>(context, ids); }},
+			// ----- End of container-like blocks -----
 			{"ObserverBlock", [context, ids](int) { return std::make_unique<ObserverBlock>(context, ids); }},
 			{"RedstoneLampBlock", [context, ids](int) { return std::make_unique<RedstoneLampBlock>(context, ids); }},
 			{"PoweredBlock", [](int) { return std::make_unique<PoweredBlock>(); }},
@@ -263,6 +277,12 @@ void registerVanillaBlocks(Level& level, const GameData& gameData) {
 		next[block] = gameData.getStaticId("minecraft:block", std::string("minecraft:") + prefixes[age] + base);
 	}
 	for (int block = 0; block < static_cast<int>(gameData.getBlockCount()); block++) {
-		if ((*ages)[block] >= 0) level.behaviors().setRandomTick(block, std::make_unique<WeatheringBlock>(context, next[block], ages));
+		if ((*ages)[block] < 0) continue;
+		// Containers: copper chests only oxidize closed
+		if (gameData.isInstanceOf(block, "WeatheringCopperChestBlock")) {
+			level.behaviors().setRandomTick(block, std::make_unique<CopperChestWeathering>(context, next[block], ages));
+			continue;
+		}
+		level.behaviors().setRandomTick(block, std::make_unique<WeatheringBlock>(context, next[block], ages));
 	}
 }

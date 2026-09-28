@@ -2,6 +2,7 @@
 #define CONTAINER_BLOCKS_HPP
 
 #include "world/blockentity/ContainerEntities.hpp"
+#include "world/blocks/Growth.hpp"
 #include "world/blocks/Redstone.hpp"
 
 #include <memory>
@@ -53,6 +54,14 @@ class ChestBlock : public ContainerBlock {
 	std::shared_ptr<Container> container(Level& level, const BlockPos& pos, bool ignoreBlocked, std::vector<uint8_t>* title, bool* isDouble) const;
 };
 
+// WeatheringCopperChestBlock.randomTick: oxidizes like copper, but only the left or single half, while nobody has it
+// open (the right half follows through updateShape)
+class CopperChestWeathering : public WeatheringBlock {
+  public:
+	using WeatheringBlock::WeatheringBlock;
+	void randomTick(Level& level, const BlockPos& pos, int state) const override;
+};
+
 // BarrelBlock: faces where placed from, "open" while someone looks inside
 class BarrelBlock : public ContainerBlock {
   public:
@@ -68,7 +77,7 @@ class ShulkerBoxBlock : public ContainerBlock {
 	using ContainerBlock::ContainerBlock;
 	int	 getStateForPlacement(Level& level, const PlaceContext& context) const override;
 	bool useWithoutItem(Level& level, const BlockPos& pos, int state, Player& player) const override;
-	bool triggerEvent(Level& level, const BlockPos& pos, int state, int type, int data) const override { return type == 1; }
+	bool triggerEvent(Level& level, const BlockPos& pos, int state, int type, int data) const override;
 	void playerWillDestroy(Level& level, const BlockPos& pos, int state, Player& player) const override;
 };
 

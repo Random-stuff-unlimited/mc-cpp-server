@@ -4,6 +4,9 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
+import java.lang.reflect.ParameterizedType;
+import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -21,9 +24,12 @@ import java.util.TreeMap;
  *
  * The jar is obfuscated: names are translated with Mojang's official mappings ("-" when the jar isn't obfuscated).
  * Output: {"blocks": {block: {property: value}}, "states": {property: [value per state id]}, "block_items": {item: block},
- *          "collision_shapes": [[[minX, minY, minZ, maxX, maxY, maxZ], ...], ...]}
- * The "collision_shape" state property is an index into collision_shapes. "classes" (per block) lists the block's class,
+ *          "collision_shapes": [[[minX, minY, minZ, maxX, maxY, maxZ], ...], ...], "outline_shapes": [...]}
+ * The "collision_shape" state property is an index into collision_shapes, "outline_shape" (getShape: what the cursor
+ * targets) an index into outline_shapes. "classes" (per block) lists the block's class,
  * its superclasses and interfaces (simple names), so the server knows which vanilla behavior it has.
+ * "entity_types" (per entity type): dimensions, tracking, category, loot table, Java classes and default attribute base
+ * values; "attributes" (per attribute): default, range and whether the client is sent it.
  */
 public class GameDataExtractor {
 	// Deobfuscated class -> obfuscated class, and back
@@ -67,7 +73,7 @@ public class GameDataExtractor {
 		// Per block state, computed from the state in an empty world at 0, 0, 0 (the state alone decides, except for the
 		// few blocks with a random offset: bamboo, dripstone...)
 		String[] contextProperties = {"redstone_conductor", "face_sturdy", "collision_shape", "fluid", "fluid_amount", "fluid_falling", "occlusion_shape",
-									  "push_reaction"};
+									  "push_reaction", "outline_shape"};
 		Method	 pushReaction	   = method(stateBase, "getPistonPushReaction", "");
 		Method	 occlusionShape	   = method(stateBase, "getOcclusionShape", "");
 		String	 getter			   = "net.minecraft.world.level.BlockGetter";
@@ -79,6 +85,7 @@ public class GameDataExtractor {
 		Object[] directions		   = find("net.minecraft.core.Direction").getEnumConstants();
 		Object[] supportTypes	   = find("net.minecraft.world.level.block.SupportType").getEnumConstants(); // FULL, CENTER, RIGID
 		Method	 collisionShape	   = method(stateBase, "getCollisionShape", getter + "," + pos);
+		Method	 outlineShape	   = method(stateBase, "getShape", getter + "," + pos);
 		Method	 toAabbs		   = method("net.minecraft.world.phys.shapes.VoxelShape", "toAabbs", "");
 		String	 aabb			   = "net.minecraft.world.phys.AABB";
 		Field[]	 aabbFields		   = {field(aabb, "minX"), field(aabb, "minY"), field(aabb, "minZ"), field(aabb, "maxX"), field(aabb, "maxY"), field(aabb, "maxZ")};
@@ -101,6 +108,7 @@ public class GameDataExtractor {
 		Object	 blockEntityTypes  = staticField("net.minecraft.core.registries.BuiltInRegistries", "BLOCK_ENTITY_TYPE");
 		Method	 defaultState	   = method(block, "defaultBlockState", "");
 		Map<String, Integer> shapeIds = new LinkedHashMap<>();
+		Map<String, Integer> outlineShapeIds = new LinkedHashMap<>(); // Own list: the collision shape ids stay the same
 		Method	 stateDefinition  = method(block, "getStateDefinition", "");
 		Method	 possibleStates	  = method("net.minecraft.world.level.block.state.StateDefinition", "getPossibleStates", "");
 		Method	 stateId		  = method(block, "getId", "net.minecraft.world.level.block.state.BlockState");
@@ -141,6 +149,7 @@ public class GameDataExtractor {
 				values[n++]	 = (Boolean) hasProperty.invoke(fluid, falling) && (Boolean) getValue.invoke(fluid, falling);
 				values[n++]	 = shapeIds.computeIfAbsent(boxesOf(toAabbs, aabbFields, occlusionShape.invoke(state)), k -> shapeIds.size());
 				values[n++]	 = ((Enum<?>) pushReaction.invoke(state)).ordinal(); // NORMAL, DESTROY, BLOCK, IGNORE, PUSH_ONLY
+				values[n++]	 = outlineShapeIds.computeIfAbsent(boxesOf(toAabbs, aabbFields, outlineShape.invoke(state, emptyGetter, zero)), k -> outlineShapeIds.size());
 				states.put((Integer) stateId.invoke(null, state), values);
 			}
 		}
@@ -178,10 +187,105 @@ public class GameDataExtractor {
 			writeEntries(out, blockItems);
 			out.write("},\"crafting_remainders\":{");
 			writeEntries(out, craftingRemainders);
-			out.write("},\"collision_shapes\":[" + String.join(",", shapeIds.keySet()) + "]}\n");
+			out.write("},\"collision_shapes\":[" + String.join(",", shapeIds.keySet()) + "]");
+			out.write(",\"outline_shapes\":[" + String.join(",", outlineShapeIds.keySet()) + "],");
+			out.write(entityTypes() + "}\n");
 		}
 		System.out.println("Extracted " + states.size() + " block states and " + blockItems.size() + " block items");
 		System.exit(0); // The game leaves non-daemon threads running
+	}
+
+	// Entity types (EntityType and DefaultAttributes) and attributes (Attribute, RangedAttribute), as two JSON members
+	private static String entityTypes() throws Exception {
+		Object	 types		  = staticField("net.minecraft.core.registries.BuiltInRegistries", "ENTITY_TYPE");
+		Object	 attributes	  = staticField("net.minecraft.core.registries.BuiltInRegistries", "ATTRIBUTE");
+		Method	 getKey		  = method("net.minecraft.core.Registry", "getKey", "java.lang.Object");
+		Method	 wrapAsHolder = method("net.minecraft.core.Registry", "wrapAsHolder", "java.lang.Object");
+		String	 type		  = "net.minecraft.world.entity.EntityType";
+		Method	 dimensions	  = method(type, "getDimensions", "");
+		Method[] typeGetters  = {method(type, "clientTrackingRange", ""), method(type, "updateInterval", ""), method(type, "trackDeltas", ""),
+								 method(type, "fireImmune", ""), method(type, "canSummon", ""), method(type, "canSerialize", ""),
+								 method(type, "isAllowedInPeaceful", "")};
+		String[] typeNames	  = {"tracking_range", "update_interval", "track_deltas", "fire_immune", "summonable", "serializable", "allowed_in_peaceful"};
+		Method	 category	  = method(type, "getCategory", "");
+		Method	 lootTable	  = method(type, "getDefaultLootTable", "");
+		Method	 location	  = method("net.minecraft.resources.ResourceKey", "location", "");
+		String	 dims		  = "net.minecraft.world.entity.EntityDimensions";
+		Method[] dimGetters	  = {method(dims, "width", ""), method(dims, "height", ""), method(dims, "eyeHeight", ""), method(dims, "fixed", "")};
+		String[] dimNames	  = {"width", "height", "eye_height", "fixed"};
+		String	 defaults	  = "net.minecraft.world.entity.ai.attributes.DefaultAttributes";
+		Method	 hasSupplier  = method(defaults, "hasSupplier", type);
+		Method	 getSupplier  = method(defaults, "getSupplier", type);
+		String	 supplier	  = "net.minecraft.world.entity.ai.attributes.AttributeSupplier";
+		Method	 hasAttribute = method(supplier, "hasAttribute", "net.minecraft.core.Holder");
+		Method	 baseValue	  = method(supplier, "getBaseValue", "net.minecraft.core.Holder");
+		String	 attribute	  = "net.minecraft.world.entity.ai.attributes.Attribute";
+		Method	 defaultValue = method(attribute, "getDefaultValue", "");
+		Method	 syncable	  = method(attribute, "isClientSyncable", "");
+		Class<?> ranged		  = find("net.minecraft.world.entity.ai.attributes.RangedAttribute");
+		Method	 minValue	  = method("net.minecraft.world.entity.ai.attributes.RangedAttribute", "getMinValue", "");
+		Method	 maxValue	  = method("net.minecraft.world.entity.ai.attributes.RangedAttribute", "getMaxValue", "");
+
+		// The entity class of each type, from the generic type of its EntityType field (EntityType<Cow> COW)
+		Map<Object, Class<?>> classes = new HashMap<>();
+		for (Field field : find(type).getDeclaredFields()) {
+			if (!Modifier.isStatic(field.getModifiers()) || field.getType() != find(type)) continue;
+			Type generic = field.getGenericType();
+			if (!(generic instanceof ParameterizedType parameterized) || !(parameterized.getActualTypeArguments()[0] instanceof Class<?> c)) continue;
+			field.setAccessible(true);
+			classes.put(field.get(null), c);
+		}
+
+		StringBuilder json = new StringBuilder("\"attributes\":{");
+		List<Object[]> holders = new ArrayList<>(); // Name, holder
+		for (Object a : (Iterable<?>) attributes) {
+			String name = getKey.invoke(attributes, a).toString();
+			holders.add(new Object[] {name, wrapAsHolder.invoke(attributes, a)});
+			json.append(holders.size() > 1 ? "," : "").append("\"").append(name).append("\":{\"default\":").append(defaultValue.invoke(a));
+			if (ranged.isInstance(a)) json.append(",\"min\":").append(minValue.invoke(a)).append(",\"max\":").append(maxValue.invoke(a));
+			json.append(",\"syncable\":").append(syncable.invoke(a)).append("}");
+		}
+		json.append("},\"entity_types\":{");
+		int n = 0;
+		for (Object t : (Iterable<?>) types) {
+			json.append(n++ > 0 ? "," : "").append("\"").append(getKey.invoke(types, t)).append("\":{");
+			Object d = dimensions.invoke(t);
+			for (int i = 0; i < dimGetters.length; i++) json.append(i > 0 ? "," : "").append("\"").append(dimNames[i]).append("\":").append(dimGetters[i].invoke(d));
+			for (int i = 0; i < typeGetters.length; i++) json.append(",\"").append(typeNames[i]).append("\":").append(typeGetters[i].invoke(t));
+			json.append(",\"category\":\"").append(((Enum<?>) category.invoke(t)).name().toLowerCase()).append("\"");
+			Object loot = ((java.util.Optional<?>) lootTable.invoke(t)).orElse(null);
+			if (loot != null) json.append(",\"loot_table\":\"").append(location.invoke(loot)).append("\"");
+			Class<?> c = classes.get(t);
+			if (c != null) {
+				json.append(",\"classes\":[");
+				int i = 0;
+				for (String name : entityClassNames(c)) json.append(i++ > 0 ? "," : "").append("\"").append(name).append("\"");
+				json.append("]");
+			}
+			if ((Boolean) hasSupplier.invoke(null, t)) {
+				Object s = getSupplier.invoke(null, t);
+				json.append(",\"attributes\":{");
+				int i = 0;
+				for (Object[] holder : holders) {
+					if (!(Boolean) hasAttribute.invoke(s, holder[1])) continue;
+					json.append(i++ > 0 ? "," : "").append("\"").append(holder[0]).append("\":").append(baseValue.invoke(s, holder[1]));
+				}
+				json.append("}");
+			}
+			json.append("}");
+		}
+		return json.append("}").toString();
+	}
+
+	// The class, its superclasses up to Entity, and every interface along the way, as simple deobfuscated names
+	private static Set<String> entityClassNames(Class<?> type) {
+		Set<String> names = new LinkedHashSet<>();
+		for (Class<?> c = type; c != null && !c.getName().equals("java.lang.Object"); c = c.getSuperclass()) {
+			names.add(simpleName(c));
+			for (Class<?> i : c.getInterfaces()) names.add(simpleName(i));
+			if (simpleName(c).equals("Entity")) break;
+		}
+		return names;
 	}
 
 	private static void writeEntries(FileWriter out, Map<String, ?> entries) throws IOException {

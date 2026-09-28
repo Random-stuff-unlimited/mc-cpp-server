@@ -21,10 +21,15 @@ and writes compact JSON files the server loads at startup:
                                                collision_shapes.json), fluid (minecraft:fluid id), fluid_amount, fluid_falling, push_reaction
                                                (piston: 0 normal, 1 destroy, 2 block, 3 ignore, 4 push only)
     resources/gamedata/collision_shapes.json   collision shapes: lists of boxes [minX, minY, minZ, maxX, maxY, maxZ]
+    resources/gamedata/outline_shapes.json     outline shapes (BlockState.getShape, what the cursor and ray casts hit):
+                                               {"states": [index in shapes per state id], "shapes": [lists of boxes]}
+    resources/gamedata/damage_types.json       damage types (exhaustion, scaling...), as in the game's data
     resources/gamedata/block_loot_tables.json  loot table of each block (what it drops), as in the game's data
     resources/gamedata/tree_features.json      trees (configured features of type minecraft:tree), as in the game's data
     resources/gamedata/recipes.json            recipes, as in the game's data
-    resources/gamedata/items.json              per item: max_stack_size, equipment_slot, tool_rules, can_destroy_blocks_in_creative, fire_resistant, crafting_remainder and combat stats (attack_damage,
+    resources/gamedata/items.json              per item: max_stack_size, equipment_slot, tool_rules, can_destroy_blocks_in_creative, fire_resistant, crafting_remainder,
+                                               food, consumable, use_remainder (components as in the reports), equip_sound and swappable (equippable),
+                                               blocks_attacks and combat stats (attack_damage,
                                                attack_speed, armor, armor_toughness, knockback_resistance: bonuses
                                                given while the item is in its slot, from the reports)
 
@@ -113,7 +118,9 @@ def extract_from_code(cache, mappings, version):
     """Runs tools/GameDataExtractor.java on the server jar (the data generator run unpacked it and its libraries)"""
     out = cache / "extracted.json"
     if out.exists():
-        return json.load(open(out))
+        cached = json.load(open(out))
+        if "outline_shapes" in cached and "entity_types" in cached:  # Else made by an older extractor: run again
+            return cached
     jars = [cache / "versions" / version / f"server-{version}.jar"] + sorted((cache / "libraries").rglob("*.jar"))
     print("Extracting values from the game code...")
     subprocess.run(["java", "-cp", ":".join(str(j) for j in jars), str(ROOT / "tools" / "GameDataExtractor.java"),
@@ -188,6 +195,18 @@ def item_properties(components):
         # Swords, the mace, the trident: they don't break blocks in creative
         if tool.get("can_destroy_blocks_in_creative") is False:
             props["can_destroy_blocks_in_creative"] = False
+    # Eating and drinking: the components as they are (FoodProperties, Consumable, UseRemainder)
+    for component in ("food", "consumable", "use_remainder"):
+        if "minecraft:" + component in components:
+            props[component] = components["minecraft:" + component]
+    # Right click to wear it (Equippable.swappable, true by default) and the sound then
+    equippable = components.get("minecraft:equippable")
+    if equippable:
+        props["swappable"] = equippable.get("swappable", True)
+        props["equip_sound"] = equippable.get("equip_sound", "minecraft:item.armor.equip_generic")
+    # Shields: used (raised) until released
+    if "minecraft:blocks_attacks" in components:
+        props["blocks_attacks"] = True
     # Survives fire and lava as an item entity (netherite...)
     if "minecraft:damage_resistant" in components:
         props["fire_resistant"] = True
@@ -230,6 +249,21 @@ def write_packet_ids(packets, version_name):
         lines.append("\t}")
     lines += ["} // namespace PacketId", "", "#endif", ""]
     PACKET_IDS_HEADER.write_text("\n".join(lines))
+
+
+def write_entity_data(extracted, data, reports):
+    """entity_types.json (attributes, then per entity type: size, tracking, classes, default attributes, spawn egg) and
+    entity_loot_tables.json (data/minecraft/loot_table/entities/, by table name)"""
+    types = extracted["entity_types"]
+    for name, content in json.load(open(reports / "items.json")).items():
+        entity = content["components"].get("minecraft:entity_data", {}).get("id")
+        if name.endswith("_spawn_egg") and entity in types:
+            types[entity]["spawn_egg"] = name
+    write("entity_types.json", {"attributes": extracted["attributes"], "types": types})
+    folder = data / "loot_table" / "entities"
+    loot = {"minecraft:entities/" + f.relative_to(folder).with_suffix("").as_posix(): json.load(open(f))
+            for f in sorted(folder.rglob("*.json"))}
+    write("entity_loot_tables.json", loot)
 
 
 def main():
@@ -300,11 +334,17 @@ def main():
         items[name]["crafting_remainder"] = remainder
     write("items.json", items)
     state_count = 1 + max(max(s[0] for s in b.get("states", [[b["default"]]])) for b in blocks.values())
-    for name, values in extracted["states"].items():
+    for name, values in extracted["states"].items():  # outline_shape included
         if len(values) != state_count:
             sys.exit(f"block_states.json: {name} has {len(values)} values for {state_count} states")
-    write("block_states.json", extracted["states"])
+    states = dict(extracted["states"])
+    outline = states.pop("outline_shape")
+    write("block_states.json", states)
     write("collision_shapes.json", extracted["collision_shapes"])
+    write("outline_shapes.json", {"states": outline, "shapes": extracted["outline_shapes"]})
+    # Damage types (exhaustion caused, difficulty scaling...), by name
+    damage_types = {"minecraft:" + f.stem: json.load(open(f)) for f in sorted((data / "damage_type").glob("*.json"))}
+    write("damage_types.json", damage_types)
     # What each block drops: its loot table (data/minecraft/loot_table/blocks/<block>.json), by block
     loot = {"minecraft:" + f.stem: json.load(open(f)) for f in sorted((data / "loot_table" / "blocks").glob("*.json"))}
     write("block_loot_tables.json", loot)
@@ -318,6 +358,7 @@ def main():
     # Recipes (crafting, cooking, stonecutting, smithing...), by name
     recipes = {"minecraft:" + f.stem: json.load(open(f)) for f in sorted((data / "recipe").glob("*.json"))}
     write("recipes.json", recipes)
+    write_entity_data(extracted, data, reports)
     overrides = OUT_DIR / "overrides.json"
     if not overrides.exists():
         overrides.write_text(json.dumps({"blocks": {}, "items": {}, "block_items": {}}, indent=2) + "\n")

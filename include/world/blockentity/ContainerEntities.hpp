@@ -18,8 +18,9 @@ std::unique_ptr<BlockEntity> createContainerBlockEntity(const std::string& type,
 std::unique_ptr<BlockEntity> createProcessingBlockEntity(const std::string& type, const BlockPos& pos);
 
 // DoubleBlockCombiner for chests: the other half of a double chest at pos (nullptr if single, or if a half is
-// blocked by a solid block above and ignoreBlocked is false); first: whether pos is the first half (the right one)
-std::shared_ptr<BlockEntity> chestPartner(Level& level, const BlockPos& pos, bool ignoreBlocked, bool& first);
+// blocked by a solid block above and ignoreBlocked is false; partnerBlocked then tells the other half is, which
+// makes the whole chest unusable); first: whether pos is the first half (the right one)
+std::shared_ptr<BlockEntity> chestPartner(Level& level, const BlockPos& pos, bool ignoreBlocked, bool& first, bool* partnerBlocked = nullptr);
 // ChestBlock.isChestBlockedAt: a solid (redstone conductor) block above (cats don't exist yet)
 bool						 isChestBlocked(Level& level, const BlockPos& pos);
 
@@ -68,14 +69,20 @@ class OpenersListener {
 
 class OpenersCounter {
   public:
-	void increment(Level& level, const BlockPos& pos, OpenersListener& listener);
+	// range: the player's container interaction range (its block interaction range)
+	void increment(Level& level, const BlockPos& pos, OpenersListener& listener, double range);
 	void decrement(Level& level, const BlockPos& pos, OpenersListener& listener);
 	void recheck(Level& level, const BlockPos& pos, OpenersListener& listener);
 	int	 count() const { return _count; }
+	// getEntitiesWithContainerOpen: the players around that have it open
+	int	 playersWithContainerOpen(Level& level, const BlockPos& pos, OpenersListener& listener, double* maxRange = nullptr) const;
 
   private:
-	int _count = 0;
+	int	   _count				= 0;
+	double _maxInteractionRange = 0.0;
 };
+// Player.blockInteractionRange (the attribute's base value)
+double blockInteractionRange(const Player& player);
 
 // CompoundContainer: a double chest's two halves as one (the first one's slots, then the second's)
 class CompoundContainer : public Container {
@@ -107,6 +114,8 @@ class ChestBlockEntity : public ContainerBlockEntity, public OpenersListener {
 		   if (level()) _openers.recheck(*level(), pos(), *this);
 	}
 	int			openCount() const { return _openers.count(); }
+	// getEntitiesWithContainerOpen: how many players around have it open
+	int			playersWithContainerOpen() { return level() ? _openers.playersWithContainerOpen(*level(), pos(), *this) : 0; }
 
 	void onOpen(Level& level) override;
 	void onClose(Level& level) override;
@@ -150,6 +159,8 @@ class ShulkerBoxBlockEntity : public ContainerBlockEntity {
 	void		preRemoveSideEffects(Level&) override {} // Its items go with the dropped box
 	bool		ticks() const override { return true; }
 	void		tick(Level& level) override;
+	// The open count block event (type 1)
+	bool		triggerEvent(int type, int data);
 	Animation	animation() const { return _animation; }
 	float		progress() const { return _progress; }
 

@@ -16,7 +16,7 @@
 #include <unistd.h>
 
 namespace {
-	constexpr uint8_t PAYLOAD_VERSION  = 4; // 1: no scheduled ticks, 2: no comparator outputs, 3: comparator outputs only
+	constexpr uint8_t PAYLOAD_VERSION  = 5; // 1: no scheduled ticks, 2: no comparator outputs, 3: comparator outputs only, 4: no entities
 	constexpr uint8_t COMPRESSION_ZLIB = 1;
 	constexpr int	  ZLIB_LEVEL	   = 4;
 
@@ -430,6 +430,13 @@ std::unique_ptr<Chunk> ChunkStorage::load(int x, int z) {
 			}
 		}
 	}
+	// Version 5: the saved entities, kept encoded (EntityManager reads them when the chunk joins the level). Older
+	// chunks have none
+	if (version >= 5) {
+		uint32_t size = r.varint();
+		chunk->savedEntities().reserve(size);
+		for (uint32_t b = 0; b < size; b++) chunk->savedEntities().push_back(r.u8());
+	}
 	return chunk;
 }
 
@@ -445,6 +452,8 @@ std::vector<uint8_t> ChunkStorage::encode(const Chunk& chunk, int64_t gameTime) 
 	writeTicks(w, chunk.fluidTicks().pack(gameTime), _tickTypes.fluidName);
 	if (!_gameData) {
 		w.varint(0);
+		w.varint(static_cast<uint32_t>(chunk.savedEntities().size()));
+		w.out.insert(w.out.end(), chunk.savedEntities().begin(), chunk.savedEntities().end());
 		return std::move(w.out);
 	}
 	w.varint(static_cast<uint32_t>(chunk.blockEntities().size()));
@@ -457,6 +466,8 @@ std::vector<uint8_t> ChunkStorage::encode(const Chunk& chunk, int64_t gameTime) 
 		w.varint(static_cast<uint32_t>(data.out.size()));
 		for (uint8_t b : data.out) w.u8(b);
 	}
+	w.varint(static_cast<uint32_t>(chunk.savedEntities().size()));
+	w.out.insert(w.out.end(), chunk.savedEntities().begin(), chunk.savedEntities().end());
 	return std::move(w.out);
 }
 

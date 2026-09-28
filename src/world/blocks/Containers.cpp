@@ -1,4 +1,5 @@
 #include "world/blocks/Containers.hpp"
+#include "world/blocks/StorageBlocks.hpp"
 
 #include "player.hpp"
 #include "world/Level.hpp"
@@ -88,14 +89,30 @@ int ChestBlock::getStateForPlacement(Level& level, const PlaceContext& context) 
 	int state = blocks().with(blocks().with(self, _context->facing, _context->directionValue(facing)), _type, type);
 	state	  = blocks().withBool(state, _context->waterlogged, level.getFluidState(context.clickedPos).type == level.fluids().water());
 	if (_kind == Kind::Copper && type != _single) {
-		// getLeastOxidizedChestOfConnectedBlocks: both halves become the least oxidized one (waxed ones aren't there yet)
+		// getLeastOxidizedChestOfConnectedBlocks: both halves become the least oxidized one (this one if as oxidized),
+		// unwaxed if only one of them is waxed
 		int other = level.getBlockState(context.clickedPos.relative(connectedDirection(state)));
 		if (canConnectTo(state, other)) {
-			auto age = [&](int s) {
-				std::string name = _context->data.getStaticName("minecraft:block", blockOf(s));
-				return name.find("oxidized") != std::string::npos ? 3 : name.find("weathered") != std::string::npos ? 2 : name.find("exposed") != std::string::npos ? 1 : 0;
+			auto name = [&](int s) { return _context->data.getStaticName("minecraft:block", blockOf(s)); };
+			auto age  = [&](int s) {
+				std::string n = name(s);
+				return n.find("oxidized") != std::string::npos ? 3 : n.find("weathered") != std::string::npos ? 2 : n.find("exposed") != std::string::npos ? 1 : 0;
 			};
-			if (age(other) < age(state)) state = blocks().withPropertiesOf(blockOf(other), state);
+			auto waxed	 = [&](int s) { return name(s).find("waxed_") != std::string::npos; };
+			// HoneycombItem.WAX_OFF_BY_BLOCK: the same chest without "waxed_"
+			auto unwaxed = [&](int s) {
+				std::string n  = name(s);
+				size_t		at = n.find("waxed_");
+				if (at == std::string::npos) return s;
+				int block = _context->block(n.substr(0, at) + n.substr(at + 6));
+				return block >= 0 ? blocks().withPropertiesOf(block, s) : s;
+			};
+			int mine = state;
+			if (waxed(mine) != waxed(other)) {
+				mine  = unwaxed(mine);
+				other = unwaxed(other);
+			}
+			state = blocks().withPropertiesOf(blockOf(age(state) <= age(other) ? mine : other), mine);
 		}
 	}
 	return state;
@@ -127,8 +144,9 @@ std::shared_ptr<Container> ChestBlock::container(Level& level, const BlockPos& p
 	std::shared_ptr<BlockEntity> entity = level.getSharedBlockEntity(pos);
 	auto*						 chest	= dynamic_cast<ChestBlockEntity*>(entity.get());
 	if (!chest || (!ignoreBlocked && isChestBlocked(level, pos))) return nullptr;
-	bool						 first = false;
-	std::shared_ptr<BlockEntity> other = chestPartner(level, pos, ignoreBlocked, first);
+	bool						 first = false, partnerBlocked = false;
+	std::shared_ptr<BlockEntity> other = chestPartner(level, pos, ignoreBlocked, first, &partnerBlocked);
+	if (partnerBlocked) return nullptr;
 	if (!other) {
 		if (title) *title = chest->customName;
 		if (isDouble) *isDouble = false;
@@ -175,6 +193,14 @@ int ChestBlock::getDirectSignal(Level& level, const BlockPos& pos, int state, Di
 	return direction == Direction::Up ? getSignal(level, pos, state, direction) : 0;
 }
 
+void CopperChestWeathering::randomTick(Level& level, const BlockPos& pos, int state) const {
+	const BlockRegistry& blocks = level.blocks();
+	if (blocks.valueName(blocks.get(state, blocks.property("type"))) == "right") return;
+	auto* chest = level.getBlockEntity<ChestBlockEntity>(pos);
+	if (!chest || chest->playersWithContainerOpen() != 0) return;
+	WeatheringBlock::randomTick(level, pos, state);
+}
+
 // ===== Barrel, shulker box, ender chest =====
 
 int BarrelBlock::getStateForPlacement(Level&, const PlaceContext& context) const {
@@ -219,6 +245,12 @@ bool ShulkerBoxBlock::useWithoutItem(Level& level, const BlockPos& pos, int stat
 	Menus::openContainer(player, level, std::shared_ptr<Container>(entity, box), "minecraft:shulker_box", box->customName, box->defaultName(),
 						 Slot::Kind::NoShulkerBox);
 	return true;
+}
+
+// BaseEntityBlock.triggerEvent: the block entity's
+bool ShulkerBoxBlock::triggerEvent(Level& level, const BlockPos& pos, int, int type, int data) const {
+	auto* box = level.getBlockEntity<ShulkerBoxBlockEntity>(pos);
+	return box ? box->triggerEvent(type, data) : false;
 }
 
 // playerWillDestroy: in creative (no drops), a box with items still drops, with them
@@ -295,6 +327,9 @@ void HopperBlock::entityInside(Level& level, const BlockPos& pos, int, Entity* e
 
 namespace ContainerItems {
 	void collect(const BlockEntity& entity, ItemStack& stack, const GameData& gameData) {
+		// ----- Container-like blocks -----
+		if (StorageItems::collect(entity, stack, gameData)) return;
+		// ----- End of container-like blocks -----
 		auto* container = dynamic_cast<const ContainerBlockEntity*>(&entity);
 		if (!container) return;
 		bool anyItem = std::any_of(container->items().begin(), container->items().end(), [](const ItemStack& s) { return !s.isEmpty(); });
@@ -303,6 +338,12 @@ namespace ContainerItems {
 	}
 
 	void apply(BlockEntity& entity, const ItemStack& stack, const GameData& gameData) {
+		// ----- Container-like blocks -----
+		if (StorageItems::apply(entity, stack, gameData)) {
+			entity.markChanged();
+			return;
+		}
+		// ----- End of container-like blocks -----
 		auto* container = dynamic_cast<ContainerBlockEntity*>(&entity);
 		if (!container || stack.components.empty()) return;
 		if (std::optional<std::vector<uint8_t>> name = Components::get(stack, gameData, "minecraft:custom_name")) container->customName = *name;

@@ -2,6 +2,7 @@
 
 #include "data/GameData.hpp"
 #include "network/server.hpp"
+#include "world/Combat.hpp"
 #include "world/Fluids.hpp"
 #include "world/Level.hpp"
 #include "world/Shapes.hpp"
@@ -16,6 +17,24 @@ namespace {
 		uint64_t most  = (static_cast<uint64_t>(random.nextLong()) & 0xFFFFFFFFFFFF0FFFULL) | 0x4000ULL;
 		uint64_t least = (static_cast<uint64_t>(random.nextLong()) & 0x3FFFFFFFFFFFFFFFULL) | 0x8000000000000000ULL;
 		return UUID(most, least);
+	}
+
+	// Block kinds the movement code checks every tick, as tables by block id (isInTag and isInstanceOf compare strings)
+	struct MovementBlocks {
+		std::vector<bool> fences, wallsOrGates, beds;
+		explicit MovementBlocks(const GameData& data) : fences(data.blockTag("minecraft:fences")), wallsOrGates(data.blockTag("minecraft:walls")) {
+			beds.assign(data.getBlockCount(), false);
+			wallsOrGates.resize(data.getBlockCount(), false);
+			for (int block = 0; block < static_cast<int>(data.getBlockCount()); block++) {
+				beds[block] = data.isInstanceOf(block, "BedBlock");
+				if (data.isInstanceOf(block, "FenceGateBlock")) wallsOrGates[block] = true;
+			}
+			fences.resize(data.getBlockCount(), false);
+		}
+	};
+	const MovementBlocks& movementBlocks(const GameData& data) {
+		static const MovementBlocks blocks(data);
+		return blocks;
 	}
 
 	bool hasLargeShape(const std::vector<GameData::Box>& boxes) {
@@ -82,10 +101,85 @@ AABB Entity::boundingBox() const {
 void Entity::tick() { baseTick(); }
 
 void Entity::baseTick() {
-	updateInWaterStateAndDoFluidPushing();
+	if (!_skipFluidUpdate) updateInWaterStateAndDoFluidPushing();
+	// Burning: 1 damage a second, not in lava (lava hurts on its own)
+	if (_remainingFireTicks > 0) {
+		if (fireImmune()) {
+			clearFire();
+		} else {
+			if (_remainingFireTicks % 20 == 0 && !isInLava()) hurtServer({"minecraft:on_fire", nullptr}, 1.0F);
+			_remainingFireTicks--;
+		}
+	}
+	if (isInLava()) _fallDistance *= 0.5;
 	// checkBelowWorld
-	if (_position.y < _level.minY() - 64) discard();
+	if (_position.y < _level.minY() - 64) onBelowWorld();
 	_firstTick = false;
+}
+
+void Entity::snapTo(const Vec3& position, float yRot, float xRot) {
+	_position	 = position;
+	_oldPosition = position;
+	_yRot = _yRotO = yRot;
+	_xRot = _xRotO = xRot;
+}
+
+void Entity::pushAgainst(Entity& other) {
+	if (other._noPhysics || _noPhysics) return;
+	double dx	   = other._position.x - _position.x;
+	double dz	   = other._position.z - _position.z;
+	double largest = Mth::absMax(dx, dz);
+	if (!(largest >= 0.01F)) return;
+	largest = std::sqrt(largest);
+	dx /= largest;
+	dz /= largest;
+	double factor = std::min(1.0 / largest, 1.0);
+	dx *= factor * 0.05F;
+	dz *= factor * 0.05F;
+	if (isPushable()) push(-dx, 0.0, -dz);
+	if (other.isPushable()) other.push(dx, 0.0, dz);
+}
+
+void Entity::moveRelative(float speed, const Vec3& input) {
+	double lengthSqr = input.lengthSqr();
+	if (lengthSqr < 1.0E-7) return;
+	Vec3  scaled = (lengthSqr > 1.0 ? input.normalize() : input).scale(speed);
+	float sin	 = Mth::sin(_yRot * (float)(M_PI / 180.0));
+	float cos	 = Mth::cos(_yRot * (float)(M_PI / 180.0));
+	_delta		 = _delta + Vec3{scaled.x * cos - scaled.z * sin, scaled.y, scaled.z * cos + scaled.x * sin};
+}
+
+double Entity::collideDown(Level& level, const AABB& box, const AABB& area, double desired) {
+	std::vector<AABB>& boxes = collisionScratch();
+	boxes.clear();
+	forEachBlockCollision(level, area, [&](const BlockPos&, const AABB& b) { boxes.push_back(b); });
+	return collideAxis(1, box, boxes, desired);
+}
+
+std::vector<AABB>& Entity::collisionScratch() {
+	static thread_local std::vector<AABB> boxes;
+	return boxes;
+}
+
+void Entity::checkFallDamage(double dy, bool onGround, const BlockPos& onPos) {
+	if (!isInWater() && dy < 0.0) _fallDistance -= (float)dy;
+	if (!onGround) return;
+	if (_fallDistance > 0.0) {
+		// Block.fallOn: hay bales and honey soften the fall, slime cancels it, beds halve it
+		const GameData& data  = _level.gameData();
+		int				block = data.getBlocks().blockOf(_level.getBlockState(onPos));
+		float			multiplier = 1.0F;
+		double			distance   = _fallDistance;
+		if (block == _level.slimeBlock()) {
+			multiplier = 0.0F; // Unless suppressing the bounce (sneaking players only)
+		} else if (data.isInstanceOf(block, "HayBlock") || data.isInstanceOf(block, "HoneyBlock")) {
+			multiplier = 0.2F;
+		} else if (data.isInstanceOf(block, "BedBlock")) {
+			distance *= 0.5;
+		}
+		causeFallDamage(distance, multiplier);
+	}
+	resetFallDistance();
 }
 
 // ----- Movement -----
@@ -108,19 +202,21 @@ void Entity::move(Vec3 movement) {
 	_verticalCollision = movement.y != allowed.y;
 	_onGround		   = _verticalCollision && movement.y < 0.0;
 	checkSupportingBlock(_onGround, allowed);
+	checkFallDamage(allowed.y, _onGround, getOnPos(0.2f)); // getOnPosLegacy
 	if (_removed) return;
 
 	if (_horizontalCollision) _delta = {collidedX ? 0.0 : _delta.x, _delta.y, collidedZ ? 0.0 : _delta.z};
-	// Block.updateEntityMovementAfterFallOn: landing stops the fall, slime and beds bounce (non-living: 0.8)
+	// Block.updateEntityMovementAfterFallOn: landing stops the fall, slime and beds bounce (living: 1.0, others: 0.8)
 	if (movement.y != allowed.y) {
+		double bounce = isLiving() ? 1.0 : 0.8;
 		BlockPos		 on		 = getOnPos(0.2f); // getOnPosLegacy
 		int				 onState = _level.getBlockState(on);
 		const GameData&	 data	 = _level.gameData();
 		int				 block	 = data.getBlocks().blockOf(onState);
 		if (block == _level.slimeBlock()) {
-			if (_delta.y < 0.0) _delta.y = -_delta.y * 0.8;
-		} else if (data.isInstanceOf(block, "BedBlock")) {
-			if (_delta.y < 0.0) _delta.y = -_delta.y * 0.66f * 0.8;
+			if (_delta.y < 0.0) _delta.y = -_delta.y * bounce;
+		} else if (block >= 0 && movementBlocks(data).beds[block]) {
+			if (_delta.y < 0.0) _delta.y = -_delta.y * 0.66f * bounce;
 		} else {
 			_delta.y = 0.0;
 		}
@@ -155,8 +251,9 @@ void Entity::moveByPiston(Vec3 movement) {
 
 Vec3 Entity::collide(const Vec3& movement) {
 	if (movement.lengthSqr() == 0.0) return movement;
-	AABB			  box = boundingBox();
-	std::vector<AABB> boxes;
+	AABB			   box	 = boundingBox();
+	std::vector<AABB>& boxes = collisionScratch();
+	boxes.clear();
 	forEachBlockCollision(_level, box.expandTowards(movement), [&](const BlockPos&, const AABB& b) { boxes.push_back(b); });
 	if (boxes.empty()) return movement;
 	// Direction.axisStepOrder: y first, then the larger horizontal axis
@@ -191,7 +288,8 @@ void Entity::checkSupportingBlock(bool onGround, const Vec3& movement) {
 std::optional<BlockPos> Entity::findSupportingBlock(const AABB& box) {
 	std::optional<BlockPos> best;
 	double					bestDistance = std::numeric_limits<double>::max();
-	std::vector<BlockPos>	seen;
+	static thread_local std::vector<BlockPos> seen;
+	seen.clear();
 	forEachBlockCollision(_level, box, [&](const BlockPos& pos, const AABB&) {
 		if (std::find(seen.begin(), seen.end(), pos) != seen.end()) return;
 		seen.push_back(pos);
@@ -217,8 +315,8 @@ BlockPos Entity::getOnPos(float offset) {
 		if (!(offset > 1.0E-5f)) return support;
 		const GameData& data  = _level.gameData();
 		int				block = data.getBlocks().blockOf(_level.getBlockState(support));
-		bool fence = data.isInTag("minecraft:block", "minecraft:fences", block);
-		bool wall  = data.isInTag("minecraft:block", "minecraft:walls", block) || data.isInstanceOf(block, "FenceGateBlock");
+		bool fence = block >= 0 && movementBlocks(data).fences[block];
+		bool wall  = block >= 0 && movementBlocks(data).wallsOrGates[block];
 		if ((offset <= 0.5 && fence) || wall) return support;
 		return {support.x, Mth::floor(_position.y - offset), support.z};
 	}
@@ -232,6 +330,12 @@ float Entity::blockSpeedFactor() {
 	float			speed = data.getBlockProperties(state).speedFactor;
 	if (block == _level.waterBlock() || block == _level.bubbleColumnBlock()) return speed;
 	return speed == 1.0f ? data.getBlockProperties(_level.getBlockState(blockPosBelowAffectingMovement())).speedFactor : speed;
+}
+
+float Entity::blockJumpFactor() {
+	const GameData& data = _level.gameData();
+	float			here = data.getBlockProperties(_level.getBlockState(blockPosition())).jumpFactor;
+	return here == 1.0f ? data.getBlockProperties(_level.getBlockState(blockPosBelowAffectingMovement())).jumpFactor : here;
 }
 
 bool Entity::noCollision(const AABB& box) {
@@ -266,9 +370,14 @@ void Entity::moveTowardsClosestSpace(double x, double y, double z) {
 
 bool Entity::updateInWaterStateAndDoFluidPushing() {
 	_waterHeight = _lavaHeight = 0;
-	_wasTouchingWater		   = updateFluidHeightAndDoFluidPushing(false, 0.014);
+	updateInWaterStateAndDoWaterCurrentPushing();
 	bool lava				   = updateFluidHeightAndDoFluidPushing(true, _level.isUltraWarm() ? 0.007 : 0.0023333333333333335);
 	return isInWater() || lava;
+}
+
+void Entity::updateInWaterStateAndDoWaterCurrentPushing() {
+	_wasTouchingWater = updateFluidHeightAndDoFluidPushing(false, 0.014);
+	if (_wasTouchingWater) resetFallDistance();
 }
 
 bool Entity::touchingUnloadedChunk() {

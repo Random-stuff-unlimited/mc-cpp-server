@@ -114,11 +114,12 @@ class DoorBlock : public AttachedBlock {
 	int updateShape(Level& level, const BlockPos& pos, int state, Direction direction, const BlockPos& neighborPos, int neighborState) const override;
 };
 
-// BedBlock: the foot and the head go together
+// BedBlock: the foot and the head go together; using it sets the player's respawn point
 class BedBlock : public AttachedBlock {
   public:
 	using AttachedBlock::AttachedBlock;
-	int updateShape(Level& level, const BlockPos& pos, int state, Direction direction, const BlockPos& neighborPos, int neighborState) const override;
+	int	 updateShape(Level& level, const BlockPos& pos, int state, Direction direction, const BlockPos& neighborPos, int neighborState) const override;
+	bool useWithoutItem(Level& level, const BlockPos& pos, int state, Player& player) const override;
 };
 
 #endif

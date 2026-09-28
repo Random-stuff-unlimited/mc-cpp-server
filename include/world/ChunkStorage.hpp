@@ -19,6 +19,9 @@
 // Version 2 adds the scheduled ticks, blocks then fluids: VarInt name count, the names (VarInt length + bytes),
 // VarInt tick count, then per tick: VarInt name index, u8 x | z << 4 (in the chunk), u32 y, u32 delay (both
 // signed), u8 priority (signed).
+// Version 4 adds the block entities (VarInt count, then per entity: VarInt index in the chunk, type name, VarInt size
+// and its bytes); version 5 the entities: VarInt size, then EntityManager::encodeChunk's bytes (entities are saved by
+// type name, like the block states; chunks from older versions load without entities).
 // All integers are little-endian.
 
 #include "world/Chunk.hpp"

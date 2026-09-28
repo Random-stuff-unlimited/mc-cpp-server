@@ -1,7 +1,9 @@
 #ifndef GEOMETRY_HPP
 #define GEOMETRY_HPP
 
+#include <algorithm>
 #include <cmath>
+#include <cstdint>
 
 // Vanilla's Vec3, AABB and the Mth functions entities use
 struct Vec3 {
@@ -53,6 +55,22 @@ namespace Mth {
 	float cos(float radians);
 	// Mth.equal
 	inline bool equal(double a, double b) { return std::abs(b - a) < 1.0E-5; }
+	// Mth.atan2: vanilla's table approximation (not std::atan2), for rotations computed from positions
+	double atan2(double y, double x);
+	inline float clamp(float value, float min, float max) { return value < min ? min : (value > max ? max : value); }
+	// Mth.wrapDegrees: in [-180, 180)
+	inline float wrapDegrees(float degrees) {
+		float wrapped = std::fmod(degrees, 360.0f);
+		if (wrapped >= 180.0f) wrapped -= 360.0f;
+		if (wrapped < -180.0f) wrapped += 360.0f;
+		return wrapped;
+	}
+	inline float degreesDifference(float from, float to) { return wrapDegrees(to - from); }
+	// Mth.rotateIfNecessary: current brought within max degrees of target
+	inline float rotateIfNecessary(float current, float target, float max) { return target - clamp(degreesDifference(current, target), -max, max); }
+	// Mth.packDegrees: an angle as a byte (1/256 of a turn), as sent in movement packets
+	inline int8_t packDegrees(float degrees) { return static_cast<int8_t>(floor(degrees * 256.0f / 360.0f)); }
+	inline double absMax(double a, double b) { return std::max(std::abs(a), std::abs(b)); }
 } // namespace Mth
 
 #endif

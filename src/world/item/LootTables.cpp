@@ -1,8 +1,11 @@
 #include "world/item/LootTables.hpp"
 
 #include "data/GameData.hpp"
+#include "world/Combat.hpp"
 #include "world/Level.hpp"
+#include "world/entity/LivingEntity.hpp"
 #include "world/blocks/Containers.hpp"
+#include "world/blocks/StorageBlocks.hpp"
 #include "world/item/Components.hpp"
 
 #include <algorithm>
@@ -23,9 +26,22 @@ void LootTables::load(const std::filesystem::path& file, const GameData& gameDat
 	}
 }
 
-std::vector<ItemStack> LootTables::blockDrops(Context& context) const {
+void LootTables::loadEntities(const std::filesystem::path& file) {
+	std::ifstream in(file);
+	if (!in) throw std::runtime_error("cannot open " + file.string());
+	json tables = json::parse(in);
+	for (auto& [name, table] : tables.items()) _entityTables[name] = std::move(table);
+}
+
+std::vector<ItemStack> LootTables::blockDrops(Context& context) const { return this->drops(_byBlock[_gameData->getBlocks().blockOf(context.blockState)], context); }
+
+std::vector<ItemStack> LootTables::entityDrops(const std::string& table, Context& context) const {
+	auto it = _entityTables.find(table);
+	return it == _entityTables.end() ? std::vector<ItemStack>() : this->drops(it->second, context);
+}
+
+std::vector<ItemStack> LootTables::drops(const json& table, Context& context) const {
 	std::vector<ItemStack> drops;
-	const json&			   table = _byBlock[_gameData->getBlocks().blockOf(context.blockState)];
 	if (table.is_null() || !table.contains("pools")) return drops;
 
 	for (const json& pool : table["pools"]) {
@@ -93,6 +109,12 @@ bool LootTables::expand(const json& entry, Context& context, std::vector<const j
 }
 
 void LootTables::createItems(const json& entry, const json& pool, Context& context, std::vector<ItemStack>& out) const {
+	// ----- Container-like blocks: dynamic drops of the block entity (a cracked pot's sherds) -----
+	if (entry.value("type", "") == "minecraft:dynamic") {
+		if (context.blockEntity) StorageItems::dynamicDrops(*context.blockEntity, entry.value("name", ""), out, *_gameData);
+		return;
+	}
+	// ----- End of container-like blocks -----
 	if (entry.value("type", "") != "minecraft:item") return;
 	int item = _gameData->getStaticId("minecraft:item", entry.value("name", ""));
 	if (item <= 0) return;
@@ -153,7 +175,15 @@ void LootTables::applyFunction(const json& function, ItemStack& stack, Context& 
 			if (const std::vector<uint8_t>* value = from->get(type)) Components::set(stack, *_gameData, include.get<std::string>(), *value);
 		}
 	}
-	// copy_state sets item components, not supported yet
+	else if (name == "minecraft:furnace_smelt" && !stack.isEmpty()) {
+		// SmeltItemFunction: what smelting gives, as many as the stack
+		CraftingInput input{1, 1, {stack}, 1};
+		if (const Recipe* recipe = context.level.recipes().getRecipeFor(RecipeType::Smelting, input)) {
+			ItemStack result = recipe->assemble(input);
+			if (!result.isEmpty()) stack = result.copyWithCount(stack.count * result.count);
+		}
+	}
+	// copy_state sets item components, not supported yet; enchanted_count_increase needs looting (0 for now)
 }
 
 bool LootTables::conditionsPass(const json& holder, Context& context) const {
@@ -184,7 +214,25 @@ bool LootTables::condition(const json& c, Context& context) const {
 	if (name == "minecraft:random_chance") return random.nextFloat() < numberFloat(c["chance"], context);
 	if (name == "minecraft:table_bonus") return random.nextFloat() < c["chances"].at(0).get<float>(); // Enchantment level 0
 	if (name == "minecraft:match_tool") return context.tool && !context.tool->isEmpty() && toolMatches(c["predicate"], context);
-	if (name == "minecraft:entity_properties") return context.hasEntity;
+	if (name == "minecraft:entity_properties") {
+		if (!context.entity) return context.hasEntity; // Block tables: "this" is the player breaking it
+		return entityMatches(c.value("predicate", json::object()), c.value("entity", "this"), context);
+	}
+	if (name == "minecraft:killed_by_player") return context.killedByPlayer;
+	// Looting isn't known: its level is 0
+	if (name == "minecraft:random_chance_with_enchanted_bonus") return random.nextFloat() < numberFloat(c["unenchanted_chance"], context);
+	if (name == "minecraft:damage_source_properties") {
+		if (!context.damage) return false;
+		const json& predicate = c.value("predicate", json::object());
+		for (const auto& [key, value] : predicate.items()) {
+			if (key != "tags") return false; // Source entities (frogs, fireballs...) aren't ported: never them
+			int type = _gameData->getSyncedId("minecraft:damage_type", context.damage->type);
+			for (const json& tag : value) {
+				if (_gameData->isInTag("minecraft:damage_type", tag.value("id", ""), type) != tag.value("expected", true)) return false;
+			}
+		}
+		return true;
+	}
 
 	// Block and state checks: the table's block itself, or the block at an offset (location_check)
 	int state = context.blockState;
@@ -213,6 +261,46 @@ bool LootTables::condition(const json& c, Context& context) const {
 			auto bound	= [](const json& v) { return v.is_string() ? std::stoi(v.get<std::string>()) : v.get<int>(); };
 			if (expected.contains("min") && number < bound(expected["min"])) return false;
 			if (expected.contains("max") && number > bound(expected["max"])) return false;
+		}
+	}
+	return true;
+}
+
+bool LootTables::entityMatches(const json& predicate, const std::string& which, Context& context) const {
+	// Attackers are players (the only ones that can hurt entities yet): "attacker" and "direct_attacker" have no
+	// equipment or type the tables ask about
+	if (which != "this") {
+		if (!context.damage || !context.damage->attacker) return false;
+		for (const auto& [key, value] : predicate.items()) {
+			if (key != "type") return false;
+			std::string type = value.get<std::string>();
+			int			player = _gameData->getStaticId("minecraft:entity_type", "minecraft:player");
+			if (type.rfind('#', 0) == 0 ? !_gameData->isInTag("minecraft:entity_type", type.substr(1), player) : type != "minecraft:player") return false;
+		}
+		return true;
+	}
+	const LivingEntity& entity = *context.entity;
+	for (const auto& [key, value] : predicate.items()) {
+		if (key == "flags") {
+			for (const auto& [flag, expected] : value.items()) {
+				bool actual;
+				if (flag == "is_on_fire") {
+					actual = entity.isOnFire();
+				} else if (flag == "is_baby") {
+					actual = false; // No babies yet
+				} else {
+					return false;
+				}
+				if (actual != expected.get<bool>()) return false;
+			}
+		} else if (key == "type") {
+			std::string type = value.get<std::string>();
+			if (type.rfind('#', 0) == 0 ? !_gameData->isInTag("minecraft:entity_type", type.substr(1), entity.typeId())
+										: _gameData->getStaticId("minecraft:entity_type", type) != entity.typeId()) {
+				return false;
+			}
+		} else {
+			return false; // Vehicles, components, type-specific data: not ported
 		}
 	}
 	return true;

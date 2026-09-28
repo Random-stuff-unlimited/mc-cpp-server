@@ -3,6 +3,7 @@
 #include "lib/json.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <fstream>
 #include <stdexcept>
 
@@ -197,10 +198,30 @@ void GameData::load(const std::filesystem::path& directory) {
 		}
 	}
 
+	json outline = readJson(directory / "outline_shapes.json");
+	for (const auto& shape : outline.at("shapes")) {
+		std::vector<Box>& boxes = _outlineShapes.emplace_back();
+		for (const auto& box : shape) {
+			boxes.push_back({box.at(0).get<double>(), box.at(1).get<double>(), box.at(2).get<double>(), box.at(3).get<double>(),
+							 box.at(4).get<double>(), box.at(5).get<double>()});
+		}
+	}
+	const json& outlineStates = outline.at("states");
+	if (outlineStates.size() != _stateProperties.size()) throw std::runtime_error("outline_shapes.json: wrong number of states");
+	_outlineShapeOfState.reserve(outlineStates.size());
+	for (const auto& index : outlineStates) {
+		if (index.get<size_t>() >= _outlineShapes.size()) throw std::runtime_error("outline_shapes.json: unknown shape");
+		_outlineShapeOfState.push_back(index.get<uint16_t>());
+	}
+
+	json damageTypes = readJson(directory / "damage_types.json");
+	for (const auto& [name, type] : damageTypes.items()) _damageExhaustion[name] = type.at("exhaustion").get<float>();
+
 	json dimensions = readJson(directory / "dimensions.json");
 	for (const auto& [name, info] : dimensions.items()) {
 		_dimensions[name] = {info.at("min_y").get<int>(), info.at("height").get<int>()};
 	}
+	loadEntityTypes(directory / "entity_types.json");
 
 	applyOverrides(directory / "overrides.json");
 }
@@ -311,6 +332,37 @@ void GameData::setItemProperty(const std::string& item, const std::string& prope
 		props.*(stat->second) = static_cast<float>(toNumber(value));
 	} else if (property == "crafting_remainder") {
 		props.craftingRemainder = value.get<std::string>();
+	} else if (property == "food") {
+		props.food = Food{value.at("nutrition").get<int>(), value.at("saturation").get<float>(), value.value("can_always_eat", false)};
+	} else if (property == "consumable") {
+		static const std::map<std::string, UseAnimation> ANIMATIONS = {
+				{"none", UseAnimation::None},	{"eat", UseAnimation::Eat},			  {"drink", UseAnimation::Drink},
+				{"block", UseAnimation::Block}, {"bow", UseAnimation::Bow},			  {"trident", UseAnimation::Trident},
+				{"crossbow", UseAnimation::Crossbow}, {"spyglass", UseAnimation::Spyglass}, {"toot_horn", UseAnimation::TootHorn},
+				{"brush", UseAnimation::Brush}, {"bundle", UseAnimation::Bundle}};
+		// Absent fields have Consumable.CODEC's defaults
+		Consumable consumable;
+		consumable.consumeSeconds	   = value.value("consume_seconds", consumable.consumeSeconds);
+		auto animation				   = ANIMATIONS.find(value.value("animation", std::string("eat")));
+		consumable.animation		   = animation != ANIMATIONS.end() ? animation->second : UseAnimation::None;
+		consumable.sound			   = value.value("sound", consumable.sound);
+		consumable.hasConsumeParticles = value.value("has_consume_particles", true);
+		if (value.contains("on_consume_effects")) {
+			for (const auto& effect : value.at("on_consume_effects")) {
+				consumable.onConsumeEffects.push_back({effect.at("type").get<std::string>(),
+													   effect.contains("sound") && effect.at("sound").is_string() ? effect.at("sound").get<std::string>() : ""});
+			}
+		}
+		props.consumable = std::move(consumable);
+	} else if (property == "use_remainder") {
+		props.useRemainder		= value.at("id").get<std::string>();
+		props.useRemainderCount = value.value("count", 1);
+	} else if (property == "swappable") {
+		props.swappable = value.get<bool>();
+	} else if (property == "equip_sound") {
+		props.equipSound = value.is_string() ? value.get<std::string>() : "";
+	} else if (property == "blocks_attacks") {
+		props.blocksAttacks = value.get<bool>();
 	} else if (property == "fire_resistant") {
 		props.fireResistant = toNumber(value) != 0;
 	} else if (property == "can_destroy_blocks_in_creative") {
@@ -350,6 +402,80 @@ bool GameData::isCorrectToolForDrops(int itemId, int stateId) const {
 		if (rule.correctForDrops >= 0 && rule.blocks[block]) return rule.correctForDrops == 1;
 	}
 	return false;
+}
+
+float GameData::getDamageExhaustion(const std::string& type) const {
+	auto it = _damageExhaustion.find(type);
+	return it != _damageExhaustion.end() ? it->second : 0.0F;
+}
+
+void GameData::loadEntityTypes(const std::filesystem::path& file) {
+	json data = readJson(file);
+	_attributes.resize(_staticRegistries.at("minecraft:attribute").entries.size());
+	for (const auto& [name, info] : data.at("attributes").items()) {
+		int id = getStaticId("minecraft:attribute", name);
+		if (id < 0) throw std::runtime_error("entity_types.json: unknown attribute " + name);
+		AttributeInfo& attribute = _attributes[id];
+		attribute.defaultValue	 = info.at("default").get<double>();
+		attribute.minValue		 = info.value("min", attribute.minValue);
+		attribute.maxValue		 = info.value("max", attribute.maxValue);
+		attribute.syncable		 = info.value("syncable", false);
+	}
+	static const std::map<std::string, MobCategory> CATEGORIES = {
+			{"monster", MobCategory::Monster},
+			{"creature", MobCategory::Creature},
+			{"ambient", MobCategory::Ambient},
+			{"axolotls", MobCategory::Axolotls},
+			{"underground_water_creature", MobCategory::UndergroundWaterCreature},
+			{"water_creature", MobCategory::WaterCreature},
+			{"water_ambient", MobCategory::WaterAmbient},
+			{"misc", MobCategory::Misc}};
+	_entityTypes.resize(_staticRegistries.at("minecraft:entity_type").entries.size());
+	for (const auto& [name, info] : data.at("types").items()) {
+		int id = getStaticId("minecraft:entity_type", name);
+		if (id < 0) throw std::runtime_error("entity_types.json: unknown entity type " + name);
+		EntityTypeInfo& type	= _entityTypes[id];
+		type.width				= info.at("width").get<float>();
+		type.height				= info.at("height").get<float>();
+		type.eyeHeight			= info.at("eye_height").get<float>();
+		type.fixedSize			= info.value("fixed", false);
+		type.trackingRange		= info.value("tracking_range", 5);
+		type.updateInterval		= info.value("update_interval", 3);
+		type.trackDeltas		= info.value("track_deltas", true);
+		type.fireImmune			= info.value("fire_immune", false);
+		type.summonable			= info.value("summonable", true);
+		type.serializable		= info.value("serializable", true);
+		type.allowedInPeaceful	= info.value("allowed_in_peaceful", true);
+		auto category			= CATEGORIES.find(info.value("category", "misc"));
+		type.category			= category != CATEGORIES.end() ? category->second : MobCategory::Misc;
+		type.lootTable			= info.value("loot_table", "");
+		type.classes			= info.value("classes", std::vector<std::string>());
+		type.living				= type.is("LivingEntity");
+		type.mob				= type.is("Mob");
+		if (info.contains("attributes")) {
+			type.attributes.assign(_attributes.size(), std::nan(""));
+			for (const auto& [attribute, value] : info.at("attributes").items()) {
+				int attributeId = getStaticId("minecraft:attribute", attribute);
+				if (attributeId >= 0) type.attributes[attributeId] = value.get<double>();
+			}
+		}
+		if (info.contains("spawn_egg")) {
+			type.spawnEgg = getStaticId("minecraft:item", info.at("spawn_egg").get<std::string>());
+			if (type.spawnEgg >= 0) _spawnEggTypes[type.spawnEgg] = id;
+		}
+	}
+}
+
+bool GameData::EntityTypeInfo::is(const std::string& javaClass) const { return std::find(classes.begin(), classes.end(), javaClass) != classes.end(); }
+
+const GameData::EntityTypeInfo* GameData::getEntityType(int typeId) const {
+	if (typeId < 0 || static_cast<size_t>(typeId) >= _entityTypes.size()) return nullptr;
+	return &_entityTypes[typeId];
+}
+
+int GameData::getSpawnEggType(int itemId) const {
+	auto it = _spawnEggTypes.find(itemId);
+	return it == _spawnEggTypes.end() ? -1 : it->second;
 }
 
 const GameData::ItemProperties* GameData::getItemProperties(int itemId) const {
