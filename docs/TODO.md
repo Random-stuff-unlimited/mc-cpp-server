@@ -46,14 +46,19 @@ Implémentées : `tp`, `gamemode`/`gm`, `spawn`, `setworldspawn`, `spawnpoint`, 
 
 ## Mobs & IA
 
-- [ ] Ajouter les classes spécifiques manquantes (enderman, slime, skeleton, witch, creeper chargé, golem de fer…)
-- [ ] IA « brain » pour villageois, piglins, axolotls, grenouilles (mentionné dans `MobGoals.cpp`)
-- [ ] Équipement des mobs : `SET_EQUIPMENT`, drops liés (armure/épée des zombies, squelettes avec arc)
-- [ ] Comportements de récolte : golems, iron farms, bredouille, panique
-- [ ] Nuées/groupes (mob cap par chunk), spawn conditionnel par biome/difficulté
-- [ ] Squelette avec arc, creepers chargés (éclair), witch
-- [ ] Drops avancés : XP des mobs, loot aléatoire, tables de butin des mobs (partiel)
-- [ ] Pouvoir le joueur chevaucher / monter les mobs
+Solide : goals (17), pathfinding, équipement (`SET_EQUIPMENT`), élevage (amour/bébés/nourriture), spawn naturel,
+despawn, conversion (`convertTo`), mobs spécifiques zombie/husk/creeper/spider/cow/pig/chicken/sheep.
+
+- [ ] Attaques à distance : entité `Arrow`/projectiles, goal d'attaque à distance, skeleton avec arc, arbalètes
+- [ ] Mobs « brain » : villageois (jobs, horaires, commerce `MERCHANT_OFFERS`), piglins (bartering), axolotls, grenouilles, renards
+- [ ] Mobs volants : `FlyingMoveControl` + navigation volante (ghast, bat, phantom, bee, perroquet)
+- [ ] Mobs aquatiques : navigation sous-marine (squid, poissons, drowned, guardian, dauphin)
+- [ ] Boss : Wither et Ender Dragon (`BOSS_EVENT`, combat multi-segment, invocations, drops)
+- [ ] Mobs emblématiques : skeleton, enderman (téléportation + bloc), slime/magma cube (division, sauts), witch (potions), drowned, zombie piglin, golems fer/neige
+- [ ] Montures/apprivoisement : chevaux, loups, chats, perroquets, selles ; laisses (lead)
+- [ ] Comportements : creeper chargé (foudre), araignées qui grimpent, conversion zombie→villageois, `FollowOwnerGoal`, `CrossbowAttackGoal`, `RangedAttackGoal`
+- [ ] Réglages de spawn : caps par dimension, spawn par biome (tableaux), `SpawnPlacements` étendus, groupes
+- [ ] Sons par type (ambient/hurt/death/step) complets
 
 ## Villageois & commerce
 
