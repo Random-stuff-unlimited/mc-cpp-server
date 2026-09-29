@@ -368,4 +368,25 @@ class HurtByTargetGoal : public TargetGoal {
 	virtual void			 alertOther(Mob& other, Actor& target);
 };
 
+// RangedAttackGoal (vanilla's): a mob keeps its distance from its target and shoots arrows at it, every `interval`
+// ticks while it can see it
+class RangedAttackGoal : public Goal {
+  public:
+	RangedAttackGoal(Mob& mob, double speed, int interval, float range) : _mob(mob), _speed(speed), _interval(interval), _range(range) {
+		setFlags({Flag::Move, Flag::Look});
+	}
+	bool canUse() override;
+	bool canContinueToUse() override { return canUse(); }
+	void start() override { _attackTime = _interval / 2; }
+	void tick() override;
+
+  private:
+	Mob&	_mob;
+	double	_speed;
+	int		_interval;
+	float	_range;
+	int		_attackTime = 0;
+	void	shoot(Actor& target);
+};
+
 #endif

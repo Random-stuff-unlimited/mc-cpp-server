@@ -2,6 +2,7 @@
 #include "world/entity/MobRegistry.hpp"
 #include "world/entity/mobs/Creeper.hpp"
 #include "world/entity/mobs/FarmAnimals.hpp"
+#include "world/entity/mobs/Skeleton.hpp"
 #include "world/entity/mobs/Spider.hpp"
 #include "world/entity/mobs/Zombie.hpp"
 
@@ -21,6 +22,8 @@ void registerVanillaMobs(MobRegistry& registry) {
 	registry.setFactory("minecraft:creeper", factory<Creeper>());
 	registry.setFactory("minecraft:spider", factory<Spider>());
 	registry.setFactory("minecraft:cave_spider", factory<CaveSpider>());
+	registry.setFactory("minecraft:skeleton", factory<Skeleton>());
+	registry.setFactory("minecraft:stray", factory<Stray>());
 	registry.setFactory("minecraft:cow", factory<Cow>());
 	registry.setFactory("minecraft:pig", factory<Pig>());
 	registry.setFactory("minecraft:chicken", factory<Chicken>());

@@ -3,6 +3,7 @@
 #include "data/GameData.hpp"
 #include "player.hpp"
 #include "world/Level.hpp"
+#include "world/entity/Arrow.hpp"
 #include "world/entity/Mob.hpp"
 #include "world/entity/ai/RandomPos.hpp"
 
@@ -684,4 +685,50 @@ void TemptGoal::tick() {
 	} else {
 		_mob.navigation().moveTo(*player, _speedModifier);
 	}
+}
+
+// ===================== RangedAttackGoal =====================
+
+bool RangedAttackGoal::canUse() {
+	Actor* target = _mob.getTarget();
+	return target && target->isAlive() && _mob.distanceToSqr(*target) <= static_cast<double>(_range) * _range;
+}
+
+void RangedAttackGoal::tick() {
+	Actor* target = _mob.getTarget();
+	if (!target) return;
+	double distance = _mob.distanceToSqr(*target);
+	bool   visible  = _mob.sensing().hasLineOfSight(*target);
+	_mob.lookControl().setLookAt(*target, 30.0F, 30.0F);
+	// Keep the distance: closer than half the range, walk away; else toward the target
+	if (distance > static_cast<double>(_range) * _range * 0.5) {
+		_mob.navigation().moveTo(*target, _speed);
+	} else {
+		_mob.navigation().stop();
+	}
+	if (visible && --_attackTime <= 0) {
+		shoot(*target);
+		_attackTime = _interval + _mob.random().nextInt(10);
+	}
+}
+
+void RangedAttackGoal::shoot(Actor& target) {
+	Level& level = _mob.level();
+	// AbstractSkeleton.shootProjectile: aimed at the target's body, raised by 20 % of the horizontal distance to
+	// clear the arc, at 1.6 blocks/tick with a spread by difficulty
+	double dx = target.position().x - _mob.position().x;
+	double dy = target.position().y + 0.5 - (_mob.position().y + _mob.eyeHeight());
+	double dz = target.position().z - _mob.position().z;
+	double d	= std::sqrt(dx * dx + dz * dz);
+	Vec3	dir{dx, dy + d * 0.2, dz};
+	double length = dir.length();
+	if (length <= 1.0E-4) return;
+	dir = dir.scale(1.6 / length);
+	JavaRandom& random = _mob.random();
+	double		 spread = 14 - level.difficulty() * 4;
+	dir = dir + Vec3{random.nextFloat() * spread / 1000.0 - spread / 2000.0, random.nextFloat() * spread / 1000.0 - spread / 2000.0,
+					random.nextFloat() * spread / 1000.0 - spread / 2000.0};
+	level.entities().add(std::make_unique<Arrow>(level, Vec3{_mob.position().x, _mob.position().y + _mob.eyeHeight(), _mob.position().z}, dir, &_mob));
+	level.playSoundAt(nullptr, _mob.position().x, _mob.position().y, _mob.position().z, "minecraft:entity.skeleton.shoot", Level::SoundSource::Hostile, 1.0F,
+					  1.0F / (_mob.random().nextFloat() * 0.4F + 0.8F));
 }
