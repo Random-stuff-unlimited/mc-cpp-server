@@ -46,17 +46,19 @@ Implémentées : `tp`, `gamemode`/`gm`, `spawn`, `setworldspawn`, `spawnpoint`, 
 
 ## Mobs & IA
 
-Solide : goals (17), pathfinding, équipement (`SET_EQUIPMENT`), élevage (amour/bébés/nourriture), spawn naturel,
-despawn, conversion (`convertTo`), mobs spécifiques zombie/husk/creeper/spider/cow/pig/chicken/sheep.
+Solide : goals (19), pathfinding, équipement (`SET_EQUIPMENT`), élevage (amour/bébés/nourriture), spawn naturel,
+despawn, conversion (`convertTo`), combat à distance (flèches), mobs spécifiques zombie/husk/creeper/spider/cow/pig/
+chicken/sheep/skeleton/stray/wolf (apprivoisable).
 
-- [ ] Attaques à distance : entité `Arrow`/projectiles, goal d'attaque à distance, skeleton avec arc, arbalètes
+- [ ] Attaques à distance étendues : flèches qui restent plantées/récupérables, arbalètes, mending/effets des flèches
 - [ ] Mobs « brain » : villageois (jobs, horaires, commerce `MERCHANT_OFFERS`), piglins (bartering), axolotls, grenouilles, renards
 - [ ] Mobs volants : `FlyingMoveControl` + navigation volante (ghast, bat, phantom, bee, perroquet)
 - [ ] Mobs aquatiques : navigation sous-marine (squid, poissons, drowned, guardian, dauphin)
 - [ ] Boss : Wither et Ender Dragon (`BOSS_EVENT`, combat multi-segment, invocations, drops)
-- [ ] Mobs emblématiques : skeleton, enderman (téléportation + bloc), slime/magma cube (division, sauts), witch (potions), drowned, zombie piglin, golems fer/neige
-- [ ] Montures/apprivoisement : chevaux, loups, chats, perroquets, selles ; laisses (lead)
-- [ ] Comportements : creeper chargé (foudre), araignées qui grimpent, conversion zombie→villageois, `FollowOwnerGoal`, `CrossbowAttackGoal`, `RangedAttackGoal`
+- [ ] Mobs emblématiques : enderman (téléportation + bloc), slime/magma cube (division, sauts), witch (potions), drowned, zombie piglin, golems fer/neige
+- [ ] Montures/apprivoisement étendus : chevaux, chats, perroquets, selles ; laisses (lead) ; loup : protéger son maître
+      (`OwnerHurtByTargetGoal`), élevage, changement de couleur du collier
+- [ ] Comportements : creeper chargé (foudre), araignées qui grimpent, conversion zombie→villageois, `CrossbowAttackGoal`
 - [ ] Réglages de spawn : caps par dimension, spawn par biome (tableaux), `SpawnPlacements` étendus, groupes
 - [ ] Sons par type (ambient/hurt/death/step) complets
 
