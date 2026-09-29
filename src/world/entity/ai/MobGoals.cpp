@@ -12,6 +12,7 @@
 #include "world/entity/mobs/Skeleton.hpp"
 #include "world/entity/mobs/Silverfish.hpp"
 #include "world/entity/mobs/Slime.hpp"
+#include "world/entity/mobs/SnowGolem.hpp"
 #include "world/entity/mobs/Spider.hpp"
 #include "world/entity/mobs/Wolf.hpp"
 #include "world/entity/mobs/Zombie.hpp"
@@ -48,6 +49,7 @@ void registerVanillaMobs(MobRegistry& registry) {
 	registry.setFactory("minecraft:polar_bear", factory<PolarBear>());
 	registry.setFactory("minecraft:rabbit", factory<Rabbit>());
 	registry.setFactory("minecraft:slime", factory<Slime>());
+	registry.setFactory("minecraft:snow_golem", factory<SnowGolem>());
 	registry.setFactory("minecraft:silverfish", factory<Silverfish>());
 	registry.setFactory("minecraft:magma_cube", factory<Slime>());
 	registry.setFactory("minecraft:wolf", factory<Wolf>());
