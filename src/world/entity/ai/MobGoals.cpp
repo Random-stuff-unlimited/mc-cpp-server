@@ -8,6 +8,7 @@
 #include "world/entity/mobs/Spider.hpp"
 #include "world/entity/mobs/Wolf.hpp"
 #include "world/entity/mobs/Zombie.hpp"
+#include "world/entity/mobs/ZombifiedPiglin.hpp"
 
 // The vanilla mob classes (src/world/entity/mobs): each type gets its class, which registers its own goals
 // (registerGoals, with vanilla's priorities). Types without a class of their own are plain Mobs (Monsters for the
@@ -28,6 +29,7 @@ void registerVanillaMobs(MobRegistry& registry) {
 	registry.setFactory("minecraft:enderman", factory<Enderman>());
 	registry.setFactory("minecraft:skeleton", factory<Skeleton>());
 	registry.setFactory("minecraft:stray", factory<Stray>());
+	registry.setFactory("minecraft:zombified_piglin", factory<ZombifiedPiglin>());
 	registry.setFactory("minecraft:cow", factory<Cow>());
 	registry.setFactory("minecraft:pig", factory<Pig>());
 	registry.setFactory("minecraft:chicken", factory<Chicken>());
