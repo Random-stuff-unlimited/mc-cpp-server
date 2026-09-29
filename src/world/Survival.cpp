@@ -8,6 +8,7 @@
 #include "player.hpp"
 #include "world/Combat.hpp"
 #include "world/Level.hpp"
+#include "world/blocks/Fire.hpp"
 #include "world/PlayerTracker.hpp"
 #include "world/item/ItemUse.hpp"
 
@@ -18,9 +19,11 @@ namespace {
 	constexpr float MAX_HEALTH			= 20;
 	constexpr int	ENTITY_EVENT_DROWN	= 67; // EntityEvent: bubbles around a drowning entity
 	constexpr int	AIR_DATA_INDEX		= 1;  // Entity.DATA_AIR_SUPPLY_ID
+	constexpr int	POSE_DATA_INDEX		= 6;  // Entity.DATA_POSE_ID
 	constexpr int	LIVING_FLAGS_INDEX	= 8;  // LivingEntity.DATA_LIVING_ENTITY_FLAGS
 	constexpr int	BYTE_SERIALIZER		= 0;  // EntityDataSerializers.BYTE
 	constexpr int	INT_SERIALIZER		= 1;  // EntityDataSerializers.INT
+	constexpr int	POSE_SERIALIZER		= 20; // EntityDataSerializers.POSE
 	constexpr int	HEAD_SLOT			= 5;  // Inventory window slot of the helmet
 
 	bool invulnerable(const Player& player) { return player.getGameMode() == GameMode::Creative || player.getGameMode() == GameMode::Spectator; }
@@ -90,6 +93,14 @@ namespace {
 		SurvivalState& state = player.survival();
 		state.inWater		 = touchesWater(level, boxAt(player, state.pose));
 		if (state.inWater) player.combat().fallDistance = 0; // resetFallDistance
+		// Entity.baseTick: burning, 1 damage a second (not in lava, which hurts on its own)
+		if (state.remainingFireTicks > 0) {
+			if (state.remainingFireTicks % 20 == 0) {
+				bool inLava = level.fluids().isLava(level.getFluidState({Mth::floor(player.getX()), Mth::floor(player.getY()), Mth::floor(player.getZ())}).type);
+				if (!inLava) Combat::damage(level.server(), player, 1.0F, {"minecraft:on_fire", nullptr});
+			}
+			state.remainingFireTicks--;
+		}
 		bool wasEyeInWater = state.eyeInWater;
 		state.eyeInWater   = eyeInWater(level, player);
 		// Entity.updateSwimming (isUnderWater: wasEyeInWater && isInWater)
@@ -135,16 +146,18 @@ namespace {
 		if (tick % 10 == 0 && food.needsFood()) food.setFoodLevel(food.getFoodLevel() + 1);
 	}
 
-	// Player.updatePlayerPose: swimming, crouching (sneaking, not flying) or standing, if the player fits
+	// Player.updatePlayerPose: swimming, crouching (sneaking, not flying) or standing, if the player fits. While
+	// sleeping the sleeping pose is kept
 	void updatePose(Level& level, Player& player) {
 		SurvivalState& state = player.survival();
+		if (state.sleeping) return;
 		auto		   fits	 = [&](Pose pose) { return !level.hasBlockCollision(boxAt(player, pose).deflate(1.0E-7)); };
 		if (!fits(Pose::Swimming)) return;
 		Pose desired = state.swimming ? Pose::Swimming : player.isShiftKeyDown() && !state.flying ? Pose::Crouching : Pose::Standing;
 		if (player.getGameMode() == GameMode::Spectator || fits(desired)) {
-			state.pose = desired;
+			Survival::setPose(player, desired);
 		} else {
-			state.pose = fits(Pose::Crouching) ? Pose::Crouching : Pose::Swimming;
+			Survival::setPose(player, fits(Pose::Crouching) ? Pose::Crouching : Pose::Swimming);
 		}
 	}
 
@@ -157,6 +170,65 @@ namespace {
 		data.writeUByte(LIVING_FLAGS_INDEX);
 		data.writeVarInt(BYTE_SERIALIZER);
 		data.writeUByte(player.survival().livingFlags);
+	}
+	void writeSharedFlags(Buffer& data, const Player& player) {
+		data.writeUByte(0); // Entity.DATA_SHARED_FLAGS_ID
+		data.writeVarInt(BYTE_SERIALIZER);
+		data.writeUByte(player.survival().sharedFlags);
+	}
+	// Entity's shared flags: 1 on fire, 2 crouching, 8 sprinting, 16 swimming
+	uint8_t computeSharedFlags(const Player& player) {
+		const SurvivalState& state = player.survival();
+		return static_cast<uint8_t>((state.remainingFireTicks > 0 && !invulnerable(player) ? 1 : 0) | (state.pose == Pose::Crouching ? 2 : 0) |
+									(const_cast<Player&>(player).isSprinting() ? 8 : 0) | (state.swimming ? 16 : 0));
+	}
+
+	// LivingEntity.applyEffectsFromBlocks for the player: fire and lava burn it, water puts it out (its box moves on its
+	// client: the blocks around its last known position)
+	void applyFireEffectsFromBlocks(Level& level, Player& player) {
+		SurvivalState& state = player.survival();
+		AABB		   box	 = boxAt(player, state.pose).deflate(1.0E-5);
+		float		   fire	 = 0.0F;
+		bool		   lava = false, water = false;
+		Fluids&		   fluids = level.fluids();
+		for (int x = Mth::floor(box.minX); x <= Mth::floor(box.maxX); x++) {
+			for (int y = Mth::floor(box.minY); y <= Mth::floor(box.maxY); y++) {
+				for (int z = Mth::floor(box.minZ); z <= Mth::floor(box.maxZ); z++) {
+					BlockPos   pos{x, y, z};
+					int		   s	 = level.getBlockState(pos);
+					int		   block = level.blocks().blockOf(s);
+					if (block == level.fireBlock()) fire = std::max(fire, 1.0F);
+					if (block == level.soulFireBlock()) fire = std::max(fire, 2.0F);
+					FluidState fluid = fluids.stateOf(s);
+					if (fluid.type == 0 || y + fluids.height(fluid, pos) < box.minY) continue;
+					if (fluids.isLava(fluid.type)) lava = true;
+					if (fluids.isWater(fluid.type)) water = true;
+				}
+			}
+		}
+		if (fire > 0.0F) {
+			BaseFireBlock::fireIgnite(level, player);
+			Combat::damage(level.server(), player, fire, {"minecraft:in_fire", nullptr});
+		}
+		if (lava && !player.combat().dead) {
+			Survival::igniteForTicks(player, 300); // Entity.lavaIgnite: 15 seconds
+			if (Combat::damage(level.server(), player, 4.0F, {"minecraft:lava", nullptr})) {
+				level.playSoundAt(nullptr, player.getX(), player.getY(), player.getZ(), "minecraft:entity.generic.burn", Level::SoundSource::Players, 0.4F,
+								  2.0F + player.random().nextFloat() * 0.4F);
+			}
+		}
+		// In water or in the rain: put out (clearFire)
+		BlockPos feet{Mth::floor(player.getX()), Mth::floor(player.getY()), Mth::floor(player.getZ())};
+		bool	 rain = level.isRainingAt(feet) || level.isRainingAt({feet.x, Mth::floor(box.maxY), feet.z});
+		if (water || rain) state.remainingFireTicks = std::min(0, state.remainingFireTicks);
+		// Out of the fire and not burning anymore: it takes a second in fire again to catch it (getFireImmuneTicks)
+		if (fire <= 0.0F && !lava && state.remainingFireTicks <= 0) state.remainingFireTicks = -20;
+	}
+
+	void writePose(Buffer& data, const Player& player) {
+		data.writeUByte(POSE_DATA_INDEX);
+		data.writeVarInt(POSE_SERIALIZER);
+		data.writeVarInt(static_cast<int>(player.survival().pose));
 	}
 } // namespace
 
@@ -177,6 +249,13 @@ namespace Survival {
 	void heal(Player& player, float amount) {
 		CombatState& combat = player.combat();
 		if (combat.health > 0.0F) combat.health = std::clamp(combat.health + amount, 0.0F, MAX_HEALTH);
+	}
+
+	void setPose(Player& player, Pose pose) {
+		SurvivalState& state = player.survival();
+		if (state.pose == pose) return;
+		state.pose	   = pose;
+		state.dirtyData |= DATA_POSE; // The viewers are told (SET_ENTITY_DATA)
 	}
 
 	bool isHurt(const Player& player) {
@@ -261,13 +340,22 @@ namespace Survival {
 		SurvivalState& state = player.survival();
 		state.tickCount++;
 		if (!player.combat().dead) {
-			// Player.tick: LivingEntity.baseTick, LivingEntity.tick's updatingUsingItem, aiStep's tickRegeneration, the pose
-			baseTick(level, player);
-			if (!player.combat().dead) ItemUse::updatingUsingItem(level, player);
-			if (!player.combat().dead) tickRegeneration(level, player);
-			updatePose(level, player);
+			// A sleeping player just waits: no baseTick, no used item, no regeneration, no pose update
+			if (!state.sleeping) {
+				// Player.tick: LivingEntity.baseTick, LivingEntity.tick's updatingUsingItem, aiStep's tickRegeneration, the pose
+				baseTick(level, player);
+				if (!player.combat().dead) applyFireEffectsFromBlocks(level, player);
+				if (!player.combat().dead) ItemUse::updatingUsingItem(level, player);
+				if (!player.combat().dead) tickRegeneration(level, player);
+				updatePose(level, player);
+			}
 			// ServerPlayer.doTick
 			if (!player.combat().dead) tickFood(level, player);
+		}
+		uint8_t flags = computeSharedFlags(player);
+		if (flags != state.sharedFlags) {
+			state.sharedFlags = flags;
+			state.dirtyData |= DATA_SHARED_FLAGS;
 		}
 		const FoodData& food = player.foodData();
 		if (player.combat().health != state.lastSentHealth || state.lastSentFood != food.getFoodLevel() ||
@@ -296,6 +384,8 @@ namespace Survival {
 		data.writeVarInt(player.getPlayerID());
 		if (state.dirtyData & DATA_AIR_SUPPLY) writeAir(data, player);
 		if (state.dirtyData & DATA_LIVING_FLAGS) writeLivingFlags(data, player);
+		if (state.dirtyData & DATA_POSE) writePose(data, player);
+		if (state.dirtyData & DATA_SHARED_FLAGS) writeSharedFlags(data, player);
 		data.writeUByte(0xFF); // End of the entity data
 		state.dirtyData = 0;
 		// ServerEntity.sendDirtyEntityData: to the viewers and the player itself
@@ -303,20 +393,32 @@ namespace Survival {
 	}
 
 	bool writeNonDefaultData(Buffer& data, const Player& player) {
-		bool air = player.getAirSupply() != MAX_AIR_SUPPLY, flags = player.survival().livingFlags != 0;
-		if (!air && !flags) return false;
+		bool air = player.getAirSupply() != MAX_AIR_SUPPLY, flags = player.survival().livingFlags != 0,
+			 pose = player.survival().pose != Pose::Standing, shared = player.survival().sharedFlags != 0;
+		if (!air && !flags && !pose && !shared) return false;
 		data.writeVarInt(player.getPlayerID());
 		if (air) writeAir(data, player);
 		if (flags) writeLivingFlags(data, player);
+		if (pose) writePose(data, player);
+		if (shared) writeSharedFlags(data, player);
 		data.writeUByte(0xFF);
 		return true;
 	}
 
+	void igniteForTicks(Player& player, int ticks) {
+		if (player.survival().remainingFireTicks < ticks) player.survival().remainingFireTicks = ticks;
+	}
+
+	bool isOnFire(const Player& player) { return player.survival().remainingFireTicks > 0; }
+
 	void reset(Player& player) {
 		SurvivalState& state = player.survival();
+		state.remainingFireTicks = -20;
 		player.foodData()	 = FoodData();
 		player.setAirSupply(MAX_AIR_SUPPLY);
 		ItemUse::stopUsingItem(player);
+		state.sleeping	 = false;
+		state.sleepTimer = 0;
 		state.pose		   = Pose::Standing;
 		state.inWater	   = false;
 		state.eyeInWater   = false;

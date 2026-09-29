@@ -4,6 +4,7 @@
 #include "network/server.hpp"
 #include "player.hpp"
 #include "world/Survival.hpp"
+#include "world/Level.hpp"
 #include "world/World.hpp"
 
 #include <string>
@@ -58,27 +59,32 @@ void setHeldItemPacket(Packet& packet, Server& server) {
 	packet.sendPacket(PacketId::Play::Clientbound::SET_HELD_SLOT, buff, server);
 }
 
-// Part shared by Login (play) and Respawn (CommonPlayerSpawnInfo)
-void writeSpawnInfo(Buffer& buf, Player& player, Server& server) {
-	const World& world = server.getWorld();
-	buf.writeVarInt(server.getGameData().getSyncedId("minecraft:dimension_type", world.getDimensionName())); // Dimension type
-	buf.writeString(world.getDimensionName());							   // Dimension name
-	buf.writeLong(1);													   // Hashed seed (biome noise on the client)
-	buf.writeUByte(static_cast<uint8_t>(player.getGameMode()));			   // Game mode
-	buf.writeByte(static_cast<int8_t>(player.getPreviousGameMode()));	   // Previous game mode, -1 if none
-	buf.writeBool(false);												   // Debug world
-	buf.writeBool(true);												   // Flat world (lower horizon)
+// Part shared by Login (play) and Respawn (CommonPlayerSpawnInfo), for the player entering `level`
+void writeSpawnInfo(Buffer& buf, Player& player, Server& server, Level& level) {
+	const std::string& dimension = level.dimensionName();
+	// The dimension type has the dimension's name in vanilla (overworld, the_nether, the_end)
+	buf.writeVarInt(server.getGameData().getSyncedId("minecraft:dimension_type", dimension)); // Dimension type
+	buf.writeString(dimension);															 // Dimension name
+	buf.writeLong(1);																		 // Hashed seed (biome noise on the client)
+	buf.writeUByte(static_cast<uint8_t>(player.getGameMode()));								 // Game mode
+	buf.writeByte(static_cast<int8_t>(player.getPreviousGameMode()));						 // Previous game mode, -1 if none
+	buf.writeBool(false);																	 // Debug world
+	buf.writeBool(true);																	 // Flat world (lower horizon)
 
 	// Death location, used by the recovery compass
 	const CombatState& combat = player.combat();
 	buf.writeBool(combat.hasDeathLocation);
 	if (combat.hasDeathLocation) {
-		buf.writeString(world.getDimensionName());
+		buf.writeString(combat.deathDimension.empty() ? dimension : combat.deathDimension);
 		buf.writePosition(combat.deathX, combat.deathY, combat.deathZ);
 	}
 
-	buf.writeVarInt(0);	 // Portal cooldown
-	buf.writeVarInt(63); // Sea level
+	buf.writeVarInt(player.portalCooldown()); // Portal cooldown
+	buf.writeVarInt(63);					  // Sea level
+}
+
+void writeSpawnInfo(Buffer& buf, Player& player, Server& server) {
+	writeSpawnInfo(buf, player, server, player.level() ? *player.level() : server.getLevel());
 }
 
 // Login (play) packet: everything the client needs to enter the world

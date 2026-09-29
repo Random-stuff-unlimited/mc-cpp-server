@@ -16,8 +16,16 @@ namespace {
 
 	int type(LevelFixture& f, const char* name) { return f.data.getStaticId("minecraft:entity_type", name); }
 
+	// Without its goals, at night: these tests are about the physics, not the AI (MobAiTest) or sun burning
 	Mob* spawn(LevelFixture& f, const char* name, const BlockPos& pos) {
-		return f.level->mobs().spawn(*f.level, type(f, name), pos, MobRegistry::SpawnReason::Command);
+		f.world->setDayTime(18000);
+		Mob* mob = f.level->mobs().spawn(*f.level, type(f, name), pos, MobRegistry::SpawnReason::Command);
+		if (mob) {
+			mob->setBaby(false); // Zombies are babies 5% of the time
+			mob->goalSelector().removeAllGoals();
+			mob->targetSelector().removeAllGoals();
+		}
+		return mob;
 	}
 
 	// The block's default state
@@ -292,7 +300,9 @@ TEST(mob_idle_cost_per_1000) {
 	int	 cowType = type(f, "minecraft:cow");
 	for (int i = 0; i < 1000; i++) {
 		int x = (i % 40) * 2 - 32, z = (i / 40) * 2 - 32;
-		f.level->mobs().spawn(*f.level, cowType, {x, Y, z}, MobRegistry::SpawnReason::Command);
+		Mob* cow = f.level->mobs().spawn(*f.level, cowType, {x, Y, z}, MobRegistry::SpawnReason::Command);
+		cow->setBaby(false);
+		cow->goalSelector().removeAllGoals(); // The physics alone: no wandering
 	}
 	f.tick(20);
 	int resting = 0;

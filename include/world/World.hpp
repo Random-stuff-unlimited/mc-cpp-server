@@ -5,6 +5,7 @@
 #include "world/Chunk.hpp"
 #include "world/ChunkStorage.hpp"
 #include "world/WorldGenerator.hpp"
+#include "lib/JavaRandom.hpp"
 
 class Buffer;
 
@@ -16,6 +17,7 @@ class Buffer;
 #include <functional>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <thread>
 #include <unordered_map>
 #include <vector>
@@ -58,6 +60,11 @@ class World {
 		std::chrono::seconds	  unloadDelay{30};
 		size_t					  ioThreads = 2;
 		int						  compressionThreshold = 256; // Of the network, for the cached Chunk Data packets
+		// A new world (no level.json yet): its dimension, generator (the default superflat if null) and seed (random if
+		// not set)
+		std::string				  dimension = "minecraft:overworld";
+		nlohmann::json			  generator;
+		std::optional<int64_t>	  seed;
 	};
 	struct Spawn {
 		double x, y, z;
@@ -76,6 +83,11 @@ class World {
 
 	// The chunk if it is loaded, null otherwise (still loading or unloaded). Blocks are changed through Level
 	std::shared_ptr<Chunk> loadedChunk(int chunkX, int chunkZ);
+	// Game thread: the chunk, loaded (or generated) right now on this thread if it isn't (vanilla's getChunk, which
+	// waits too): portals looking for their exit. Without a ticket it unloads after the delay like any other.
+	// null once the world is shut down
+	std::shared_ptr<Chunk> loadChunkNow(int chunkX, int chunkZ);
+	const std::filesystem::path& directory() const { return _settings.directory; }
 	// Called on an I/O thread each time a chunk finishes loading
 	void setChunkLoadListener(ChunkCallback listener) { _loadListener = std::move(listener); }
 
@@ -98,11 +110,40 @@ class World {
 
 	// Unloads idle chunks and autosaves. Call about once per second. True when it autosaved (players are saved too)
 	bool tick();
-	// Game thread, once per tick unless the game is frozen: advances the game time and the time of day
+	// The other dimensions share the overworld's clock and weather flags (vanilla's DerivedLevelData): their time
+	// and weather cycle are the overworld's, only their rain and thunder levels are their own
+	void	setPrimary(World* overworld) { _primary = overworld; }
+	bool	isPrimary() const { return _primary == nullptr; }
+	// Game thread, once per tick unless the game is frozen: advances the game time and the time of day (the
+	// overworld's only: ServerLevel.tickTime is off in the other dimensions)
 	void	tickTime();
-	int64_t getGameTime() const { return _gameTime.load(std::memory_order_relaxed); }
-	int64_t getDayTime() const { return _dayTime; }
-	void	setDayTime(int64_t time) { _dayTime = time; }
+	// One tick of the rain and thunder (ServerLevel.advanceWeatherCycle): in a dimension with a sky, the overworld's
+	// flags toggle when their countdown ends and the levels the clients see ramp toward them. The game events are
+	// sent by Server
+	void tickWeather(bool hasSkyLight);
+	// ServerLevel.resetWeatherCycle: no rain or thunder (after a night skipped in bed), the levels ramp down
+	void resetWeatherCycle();
+	// ServerLevel.setWeatherParameters, for /weather clear, rain or thunder: sets the flags (and for clear, a long
+	// clear time so the weather can't start again before it ends). The clients are told by Server's next tick
+	void setWeather(bool raining, bool thundering);
+	// The weather the clients see (ServerLevel.isRaining / isThundering): the levels, ramping 0..1
+	bool  isRaining() const { return _weather.rainLevel > 0.2F; }
+	// Level.getThunderLevel is the thunder level times the rain level
+	bool  isThundering() const { return _weather.thunderLevel * _weather.rainLevel > 0.9F; }
+	float rainLevel() const { return _weather.rainLevel; }
+	float thunderLevel() const { return _weather.thunderLevel; }
+	// LevelData.isRaining / isThundering: the flags (the levels follow them)
+	bool  rainingFlag() const { return _primary ? _primary->rainingFlag() : _weather.raining; }
+	bool  thunderingFlag() const { return _primary ? _primary->thunderingFlag() : _weather.thundering; }
+	int64_t getGameTime() const { return _primary ? _primary->getGameTime() : _gameTime.load(std::memory_order_relaxed); }
+	int64_t getDayTime() const { return _primary ? _primary->getDayTime() : _dayTime; }
+	void	setDayTime(int64_t time) {
+		   if (_primary) _primary->setDayTime(time);
+		   else _dayTime = time;
+	}
+	int64_t getSeed() const { return _seed; }
+	// The generator's sea level (63 without one)
+	int		getSeaLevel() const;
 	// Saves every modified chunk. The world can't load chunks anymore afterwards
 	void shutdown();
 	// Runs a save job on the I/O threads (at once after shutdown). The jobs queued before shutdown are all run
@@ -155,6 +196,17 @@ class World {
 	std::chrono::steady_clock::time_point	_lastAutosave;
 	std::atomic<int64_t>					_gameTime{0}; // Ticks since the world was created (read when saving)
 	int64_t									_dayTime  = 0; // Time of day: 0 = sunrise, 24000 ticks a day
+	World*									_primary  = nullptr; // The overworld, for the other dimensions
+	int64_t									_seed	  = 0;
+	// Rain and thunder (ServerLevelData + ServerLevel.updateWeather): the raw flags, their countdowns, and the
+	// previous and current levels the clients see (oRainLevel / rainLevel)
+	struct Weather {
+		bool  raining = false, thundering = false;
+		int	  clearWeatherTime = 0, rainTime = 0, thunderTime = 0;
+		float oRainLevel = 0, rainLevel = 0, oThunderLevel = 0, thunderLevel = 0;
+	};
+	Weather		_weather;
+	JavaRandom	_random{0}; // The world's random (seeded with the level's seed): the weather
 
 	void				   loadLevel();
 	// Writes the game time to level.json

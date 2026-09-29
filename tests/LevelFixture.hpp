@@ -3,6 +3,7 @@
 
 #include "data/GameData.hpp"
 #include "network/server.hpp"
+#include "player.hpp"
 #include "world/Level.hpp"
 #include "world/World.hpp"
 #include "world/entity/ItemEntity.hpp"
@@ -47,12 +48,23 @@ struct LevelFixture {
 		for (int i = 0; i < 1000 && lit < wanted; i++) std::this_thread::sleep_for(std::chrono::milliseconds(10));
 		level = std::make_unique<Level>(server, *world, data);
 		level->setRandomTickSpeed(0); // Tests that want random ticks ask for them
+		level->setMobSpawning(false); // Same for natural spawning
+		// The server's chunk load listener attaches them to the level: here, by hand
+		for (int x = -radius - 1; x <= radius + 1; x++) {
+			for (int z = -radius - 1; z <= radius + 1; z++) level->loadedChunk(x, z);
+		}
 	}
 
 	~LevelFixture() {
 		level.reset();
 		world.reset();
 		std::filesystem::remove_all(directory);
+	}
+
+	// The player joins the game in this level (Server::addGamePlayer, with the level set as enterPlay does)
+	void addPlayer(const std::shared_ptr<Player>& player) {
+		player->setLevel(level.get());
+		server.addGamePlayer(player);
 	}
 
 	int state(const std::string& name) const { return data.getBlockStateFromName(name); }

@@ -116,7 +116,7 @@ void sendParticles(Level& level, const char* particle, double x, double y, doubl
 	data.writeFloat(static_cast<float>(speed));
 	data.writeInt(count);
 	data.writeVarInt(id); // A particle type without options
-	for (const auto& player : level.server().getGamePlayers()) {
+	for (const auto& player : level.players()) {
 		double px = std::floor(player->getX()) + 0.5 - x, py = std::floor(player->getY()) + 0.5 - y, pz = std::floor(player->getZ()) + 0.5 - z;
 		if (px * px + py * py + pz * pz < 32.0 * 32.0) Packet::send(player, PacketId::Play::Clientbound::LEVEL_PARTICLES, data, level.server());
 	}

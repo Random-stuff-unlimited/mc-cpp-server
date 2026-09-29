@@ -53,6 +53,12 @@ namespace {
 			state.analogOutput = value != 0;
 		} else if (property == "push_reaction") {
 			state.pushReaction = static_cast<uint8_t>(value);
+		} else if (property == "pathfindable") {
+			state.pathfindable = static_cast<uint8_t>(value);
+		} else if (property == "suffocating") {
+			state.suffocating = value != 0;
+		} else if (property == "valid_spawn") {
+			state.validSpawn = static_cast<uint8_t>(value);
 		} else if (property == "occlusion_shape") {
 			state.occlusionShape = static_cast<uint16_t>(value);
 		} else if (property == "redstone_conductor") {
@@ -219,9 +225,35 @@ void GameData::load(const std::filesystem::path& directory) {
 
 	json dimensions = readJson(directory / "dimensions.json");
 	for (const auto& [name, info] : dimensions.items()) {
-		_dimensions[name] = {info.at("min_y").get<int>(), info.at("height").get<int>()};
+		Dimension& dimension		  = _dimensions[name];
+		dimension.minY				  = info.at("min_y").get<int>();
+		dimension.height			  = info.at("height").get<int>();
+		dimension.logicalHeight		  = info.value("logical_height", dimension.height);
+		dimension.hasSkyLight		  = info.value("has_skylight", true);
+		dimension.hasCeiling		  = info.value("has_ceiling", false);
+		dimension.ultraWarm			  = info.value("ultrawarm", false);
+		dimension.natural			  = info.value("natural", true);
+		dimension.bedWorks			  = info.value("bed_works", true);
+		dimension.respawnAnchorWorks  = info.value("respawn_anchor_works", false);
+		dimension.piglinSafe		  = info.value("piglin_safe", false);
+		dimension.hasRaids			  = info.value("has_raids", true);
+		dimension.coordinateScale	  = info.value("coordinate_scale", 1.0);
+		dimension.ambientLight		  = info.value("ambient_light", 0.0F);
+		if (info.contains("fixed_time")) dimension.fixedTime = info.at("fixed_time").get<int64_t>();
+		const json& light = info.value("monster_spawn_light_level", json(0));
+		if (light.is_number()) {
+			dimension.monsterSpawnLightMin = dimension.monsterSpawnLightMax = light.get<int>();
+		} else {
+			dimension.monsterSpawnLightMin = light.value("min_inclusive", 0);
+			dimension.monsterSpawnLightMax = light.value("max_inclusive", 7);
+		}
+		dimension.monsterSpawnBlockLightLimit = info.value("monster_spawn_block_light_limit", 0);
+		dimension.infiniburn				  = info.value("infiniburn", "");
+		dimension.effects					  = info.value("effects", "");
 	}
 	loadEntityTypes(directory / "entity_types.json");
+	loadBiomes(directory / "biomes.json");
+	if (std::filesystem::exists(directory / "enchantments.json")) _enchantmentData = readJson(directory / "enchantments.json");
 
 	applyOverrides(directory / "overrides.json");
 }
@@ -389,6 +421,42 @@ void GameData::setItemProperty(const std::string& item, const std::string& prope
 			if (rule.contains("correct_for_drops")) parsed.correctForDrops = rule.at("correct_for_drops").get<bool>() ? 1 : 0;
 			props.toolRules.push_back(std::move(parsed));
 		}
+	} else if (property == "attribute_modifiers") {
+		props.attributeModifiers.clear();
+		for (const json& entry : value) {
+			int attribute = getStaticId("minecraft:attribute", entry.at("type").get<std::string>());
+			if (attribute < 0) continue;
+			std::string operation = entry.value("operation", "add_value");
+			props.attributeModifiers.push_back({attribute, entry.value("amount", 0.0), entry.value("id", ""),
+												operation == "add_multiplied_total" ? 2 : operation == "add_multiplied_base" ? 1 : 0, entry.value("slot", "any")});
+		}
+	} else if (property == "max_damage") {
+		props.maxDamage = static_cast<int>(toNumber(value));
+	} else if (property == "enchantable") {
+		props.enchantability = value.value("value", 0);
+	} else if (property == "repairable") {
+		const json& items = value.at("items");
+		props.repairItems = items.is_string() ? items.get<std::string>() : items.dump();
+	} else if (property == "weapon") {
+		props.isWeapon					= true;
+		props.weaponDamagePerAttack		= value.value("item_damage_per_attack", 1);
+		props.disableBlockingForSeconds = value.value("disable_blocking_for_seconds", 0.0F);
+	} else if (property == "use_cooldown") {
+		props.useCooldownSeconds = value.value("seconds", 0.0F);
+		props.useCooldownGroup	 = value.value("cooldown_group", "");
+	} else if (property == "glider") {
+		props.glider = true;
+	} else if (property == "tool") {
+		props.isTool			 = true;
+		props.defaultMiningSpeed = value.value("default_mining_speed", 1.0F);
+		props.toolDamagePerBlock = value.value("damage_per_block", 1);
+		// The rule speeds, in the order of tool_rules (read first)
+		const json& rules = value.value("rules", json::array());
+		for (size_t i = 0; i < rules.size() && i < props.toolRules.size(); i++) {
+			if (rules[i].contains("speed")) props.toolRules[i].speed = rules[i].at("speed").get<float>();
+		}
+	} else if (property == "potion_contents" || property == "charged_projectiles" || property == "fireworks" || property == "death_protection") {
+		props.rawComponents[property] = value;
 	} else {
 		throw std::runtime_error("unknown item property \"" + property + "\"");
 	}
@@ -516,6 +584,49 @@ std::string GameData::getProperty(int stateId, const std::string& property) cons
 int GameData::getBlockStateFromName(const std::string& name) const {
 	auto it = _blockStates.find(name);
 	return it == _blockStates.end() ? -1 : it->second;
+}
+
+void GameData::loadBiomes(const std::filesystem::path& file) {
+	const Registry* registry = nullptr;
+	for (const Registry& synced : _syncedRegistries) {
+		if (synced.name == "minecraft:worldgen/biome") registry = &synced;
+	}
+	if (!registry) return;
+	_biomes.assign(registry->entries.size(), Biome{});
+	if (!std::filesystem::exists(file)) return;
+	static const std::map<std::string, MobCategory> CATEGORIES = {
+			{"monster", MobCategory::Monster},	 {"creature", MobCategory::Creature},
+			{"ambient", MobCategory::Ambient},	 {"axolotls", MobCategory::Axolotls},
+			{"underground_water_creature", MobCategory::UndergroundWaterCreature},
+			{"water_creature", MobCategory::WaterCreature}, {"water_ambient", MobCategory::WaterAmbient},
+			{"misc", MobCategory::Misc}};
+	json biomes = readJson(file);
+	for (const auto& [name, info] : biomes.items()) {
+		auto id = registry->ids.find(name);
+		if (id == registry->ids.end()) continue;
+		Biome& biome				   = _biomes[id->second];
+		biome.temperature			   = info.value("temperature", 0.8F);
+		biome.downfall				   = info.value("downfall", 0.4F);
+		biome.hasPrecipitation		   = info.value("has_precipitation", true);
+		biome.frozenModifier		   = info.value("temperature_modifier", "none") == "frozen";
+		biome.creatureSpawnProbability = info.value("creature_spawn_probability", 0.1F);
+		const json spawners = info.value("spawners", json::object());
+		for (const auto& [category, list] : spawners.items()) {
+			auto found = CATEGORIES.find(category);
+			if (found == CATEGORIES.end()) continue;
+			for (const auto& spawner : list) {
+				int type = getStaticId("minecraft:entity_type", spawner.at("type").get<std::string>());
+				if (type < 0) continue;
+				biome.spawners[static_cast<int>(found->second)].push_back(
+						{type, spawner.value("weight", 1), spawner.value("minCount", 1), spawner.value("maxCount", 1)});
+			}
+		}
+		const json costs = info.value("spawn_costs", json::object());
+		for (const auto& [type, cost] : costs.items()) {
+			int typeId = getStaticId("minecraft:entity_type", type);
+			if (typeId >= 0) biome.spawnCosts[typeId] = {cost.value("energy_budget", 0.0), cost.value("charge", 0.0)};
+		}
+	}
 }
 
 const GameData::Dimension* GameData::getDimension(const std::string& name) const {

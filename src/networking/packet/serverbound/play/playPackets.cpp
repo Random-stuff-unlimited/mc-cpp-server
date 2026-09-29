@@ -37,7 +37,7 @@ void handleContainerClickPacket(Packet& packet, Server& server) {
 	HashedStack carried = HashedStack::read(data);
 
 	Player& player = *packet.getPlayer();
-	Level&	level  = server.getLevel();
+	Level&	level  = server.levelOf(*packet.getPlayer());
 	Menu&	menu   = Menus::current(player, level);
 	if (menu.containerId() != containerId) return;
 	if (player.getGameMode() == GameMode::Spectator) {
@@ -61,7 +61,7 @@ void handleContainerClickPacket(Packet& packet, Server& server) {
 // The client closed its screen (handleContainerClose)
 void handleContainerClosePacket(Packet& packet, Server& server) {
 	packet.getData().readVarInt(); // Container id
-	Menus::doCloseContainer(*packet.getPlayer(), server.getLevel());
+	Menus::doCloseContainer(*packet.getPlayer(), server.levelOf(*packet.getPlayer()));
 }
 
 // A button of the menu (handleContainerButtonClick): a lectern's pages, taking its book...
@@ -70,7 +70,7 @@ void handleContainerButtonClickPacket(Packet& packet, Server& server) {
 	int		containerId = data.readVarInt();
 	int		button		= data.readVarInt();
 	Player& player		= *packet.getPlayer();
-	Menu&	menu		= Menus::current(player, server.getLevel());
+	Menu&	menu		= Menus::current(player, server.levelOf(*packet.getPlayer()));
 	if (menu.containerId() != containerId || player.getGameMode() == GameMode::Spectator || !menu.stillValid()) return;
 	if (menu.clickMenuButton(button)) menu.broadcastChanges();
 }
@@ -82,7 +82,7 @@ void handleContainerSlotStateChangedPacket(Packet& packet, Server& server) {
 	int		containerId = data.readVarInt();
 	bool	enabled		= data.readBool();
 	Player& player		= *packet.getPlayer();
-	Menu&	menu		= Menus::current(player, server.getLevel());
+	Menu&	menu		= Menus::current(player, server.levelOf(*packet.getPlayer()));
 	if (player.getGameMode() == GameMode::Spectator || menu.containerId() != containerId) return;
 	if (auto* crafter = dynamic_cast<CrafterMenu*>(&menu)) crafter->crafter().setSlotState(slot, enabled);
 }
@@ -96,7 +96,7 @@ void sendInitialRecipeBook(Packet& packet, Server& server) {
 	for (bool setting : player.recipeBookSettings()) settings.writeBool(setting);
 	packet.sendPacket(PacketId::Play::Clientbound::RECIPE_BOOK_SETTINGS, settings, server);
 
-	const std::vector<RecipeManager::DisplayInfo>& displays = server.getLevel().recipes().displays();
+	const std::vector<RecipeManager::DisplayInfo>& displays = server.levelOf(*packet.getPlayer()).recipes().displays();
 	Buffer										   add;
 	add.writeVarInt(static_cast<int32_t>(displays.size()));
 	for (const RecipeManager::DisplayInfo& display : displays) {
@@ -114,7 +114,7 @@ void handlePlaceRecipePacket(Packet& packet, Server& server) {
 	int		displayId	= data.readVarInt();
 	bool	useMaxItems = data.readBool();
 	Player& player		= *packet.getPlayer();
-	Level&	level		= server.getLevel();
+	Level&	level		= server.levelOf(*packet.getPlayer());
 	Menu&	menu		= Menus::current(player, level);
 	if (player.getGameMode() == GameMode::Spectator || menu.containerId() != containerId || !menu.stillValid()) return;
 	const RecipeManager::DisplayInfo* display = level.recipes().display(displayId);

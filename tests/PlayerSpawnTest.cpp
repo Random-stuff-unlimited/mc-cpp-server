@@ -8,6 +8,7 @@
 #include "world/entity/Geometry.hpp"
 
 #include <cmath>
+#include <optional>
 
 namespace {
 	constexpr int Y = LevelFixture::SURFACE + 1; // First air layer, on grass
@@ -18,10 +19,11 @@ namespace {
 		player->setOnGround(true);
 		return player;
 	}
-	// A bed at pos (its default state: beds have properties, so getBlockStateFromName wouldn't find it)
+	// A whole bed with its foot at pos, facing north (its default state), the head at z - 1 (placed like the server places both halves)
 	void placeBed(LevelFixture& f, int x, int y, int z) {
 		int state = f.data.getDefaultBlockState("minecraft:red_bed");
 		f.level->setBlock({x, y, z}, state, Level::UPDATE_ALL);
+		f.level->setBlock({x, y, z - 1}, f.data.withProperty(state, "part", "head"), Level::UPDATE_ALL);
 	}
 } // namespace
 
@@ -41,9 +43,10 @@ TEST(bed_sets_respawn_point) {
 	int state = f.level->getBlockState({0, Y, 0});
 	f.level->behavior(state).useWithoutItem(*f.level, {0, Y, 0}, state, *player);
 	CHECK(player->spawn().valid);
+	// The head's position, even at day (vanilla sets it before checking the time)
 	CHECK_EQ(player->spawn().x, 0);
 	CHECK_EQ(player->spawn().y, Y);
-	CHECK_EQ(player->spawn().z, 0);
+	CHECK_EQ(player->spawn().z, -1);
 	CHECK(player->spawn().dimension == "minecraft:overworld");
 	CHECK(!player->spawn().forced);
 }
@@ -62,49 +65,42 @@ TEST(respawn_at_bed) {
 	LevelFixture f;
 	auto		 player = makePlayer(f);
 	placeBed(f, 0, Y, 0);
-	int	 state   = f.level->getBlockState({0, Y, 0});
+	int state = f.level->getBlockState({0, Y, 0});
 	f.level->behavior(state).useWithoutItem(*f.level, {0, Y, 0}, state, *player);
-	bool invalid = false;
-	Vec3 at	   = Combat::respawnPosition(*f.level, {f.world->getSpawn().x, f.world->getSpawn().y, f.world->getSpawn().z}, player->spawn(), invalid);
-	CHECK(!invalid);
-	CHECK_EQ(at.x, 0.5);
-	CHECK_EQ(at.y, Y);
-	CHECK_EQ(at.z, 0.5);
+	// BedBlock.findStandUpPosition: next to the bed (the foot faces north by default: the first spot is to its east)
+	std::optional<Combat::RespawnPos> at = Combat::findRespawnAndUseSpawnBlock(*f.level, player->spawn(), true);
+	CHECK(at.has_value());
+	if (at) {
+		double dx = at->position.x - 0.5, dz = at->position.z - 0.5;
+		CHECK(std::abs(dx) + std::abs(dz) >= 1.0); // Not on the bed itself
+		CHECK_EQ(at->position.y, Y);
+	}
 }
 
-TEST(respawn_at_world_spawn_without_bed) {
+TEST(respawn_without_bed) {
 	LevelFixture f;
 	auto		 player = makePlayer(f);
-	bool		 invalid = false;
-	Vec3		 at		= Combat::respawnPosition(*f.level, {f.world->getSpawn().x, f.world->getSpawn().y, f.world->getSpawn().z}, player->spawn(), invalid);
-	CHECK(!invalid);
-	CHECK_EQ(at.x, f.world->getSpawn().x);
-	CHECK_EQ(at.y, f.world->getSpawn().y);
-	CHECK_EQ(at.z, f.world->getSpawn().z);
+	CHECK(!Combat::findRespawnAndUseSpawnBlock(*f.level, player->spawn(), true).has_value());
 }
 
-TEST(respawn_at_world_spawn_when_bed_missing) {
+TEST(respawn_when_bed_missing) {
 	LevelFixture f;
 	auto		 player = makePlayer(f);
 	player->spawn() = {true, 5, Y, 5, "minecraft:overworld", false}; // A bed that is no longer there
-	bool		 invalid = false;
-	Vec3		 at		= Combat::respawnPosition(*f.level, {f.world->getSpawn().x, f.world->getSpawn().y, f.world->getSpawn().z}, player->spawn(), invalid);
-	CHECK(invalid);
-	CHECK_EQ(at.x, f.world->getSpawn().x);
-	CHECK_EQ(at.y, f.world->getSpawn().y);
-	CHECK_EQ(at.z, f.world->getSpawn().z);
+	CHECK(!Combat::findRespawnAndUseSpawnBlock(*f.level, player->spawn(), true).has_value());
 }
 
-TEST(respawn_at_world_spawn_other_dimension) {
+TEST(respawn_forced_spawnpoint) {
 	LevelFixture f;
 	auto		 player = makePlayer(f);
-	player->spawn() = {true, 5, Y, 5, "minecraft:the_nether", false}; // A dimension the server doesn't load
-	bool		 invalid = false;
-	Vec3		 at		= Combat::respawnPosition(*f.level, {f.world->getSpawn().x, f.world->getSpawn().y, f.world->getSpawn().z}, player->spawn(), invalid);
-	CHECK(!invalid);
-	CHECK_EQ(at.x, f.world->getSpawn().x);
-	CHECK_EQ(at.y, f.world->getSpawn().y);
-	CHECK_EQ(at.z, f.world->getSpawn().z);
+	player->spawn() = {true, 5, Y, 5, "minecraft:overworld", true}; // /spawnpoint: no block needed
+	std::optional<Combat::RespawnPos> at = Combat::findRespawnAndUseSpawnBlock(*f.level, player->spawn(), true);
+	CHECK(at.has_value());
+	if (at) {
+		CHECK_EQ(at->position.x, 5.5);
+		CHECK_EQ(at->position.y, Y + 0.1);
+		CHECK_EQ(at->position.z, 5.5);
+	}
 }
 
 TEST(playerdata_spawn_roundtrip) {

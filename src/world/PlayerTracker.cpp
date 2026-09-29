@@ -31,6 +31,7 @@ PlayerTracker::PlayerTracker(Server& server) : _server(server) {}
 void PlayerTracker::join(const std::shared_ptr<Player>& player, int viewDistance) {
 	Tracked& joined		= _players[player.get()];
 	joined.player		= player;
+	joined.level		= player->level();
 	joined.viewDistance = viewDistance;
 	joined.chunkX		= toChunk(player->getX());
 	joined.chunkZ		= toChunk(player->getZ());
@@ -220,6 +221,7 @@ void PlayerTracker::respawn(Player* player) {
 	tracked.visible.clear();
 
 	removeFromCell(tracked);
+	tracked.level	  = player->level();
 	tracked.chunkX	  = toChunk(player->getX());
 	tracked.chunkZ	  = toChunk(player->getZ());
 	tracked.sentX	  = toFixed(player->getX());
@@ -254,18 +256,20 @@ int64_t PlayerTracker::cellKey(int chunkX, int chunkZ) {
 	return (static_cast<int64_t>(chunkZ >> CELL_SHIFT) << 32) | static_cast<uint32_t>(chunkX >> CELL_SHIFT);
 }
 
-void PlayerTracker::addToCell(const Tracked& tracked) { _cells[cellKey(tracked.chunkX, tracked.chunkZ)].push_back(tracked.player.get()); }
+void PlayerTracker::addToCell(const Tracked& tracked) { _cells[tracked.level][cellKey(tracked.chunkX, tracked.chunkZ)].push_back(tracked.player.get()); }
 
 void PlayerTracker::removeFromCell(const Tracked& tracked) {
-	auto cell = _cells.find(cellKey(tracked.chunkX, tracked.chunkZ));
-	if (cell == _cells.end()) return;
+	auto level = _cells.find(tracked.level);
+	if (level == _cells.end()) return;
+	auto cell = level->second.find(cellKey(tracked.chunkX, tracked.chunkZ));
+	if (cell == level->second.end()) return;
 	std::vector<Player*>& players = cell->second;
 	auto				  it	  = std::find(players.begin(), players.end(), tracked.player.get());
 	if (it != players.end()) {
 		*it = players.back();
 		players.pop_back();
 	}
-	if (players.empty()) _cells.erase(cell);
+	if (players.empty()) level->second.erase(cell);
 }
 
 void PlayerTracker::updateVisibilityAround(Tracked& subject) {
@@ -273,11 +277,12 @@ void PlayerTracker::updateVisibilityAround(Tracked& subject) {
 	std::vector<Player*> candidates(subject.viewers.begin(), subject.viewers.end());
 	candidates.insert(candidates.end(), subject.visible.begin(), subject.visible.end());
 	// Nobody sees further than the largest view distance
-	int radius = _maxViewDistance;
-	for (int cellZ = (subject.chunkZ - radius) >> CELL_SHIFT; cellZ <= (subject.chunkZ + radius) >> CELL_SHIFT; cellZ++) {
+	int	 radius = _maxViewDistance;
+	auto cells	= _cells.find(subject.level);
+	for (int cellZ = (subject.chunkZ - radius) >> CELL_SHIFT; cells != _cells.end() && cellZ <= (subject.chunkZ + radius) >> CELL_SHIFT; cellZ++) {
 		for (int cellX = (subject.chunkX - radius) >> CELL_SHIFT; cellX <= (subject.chunkX + radius) >> CELL_SHIFT; cellX++) {
-			auto cell = _cells.find(cellKey(cellX << CELL_SHIFT, cellZ << CELL_SHIFT));
-			if (cell != _cells.end()) candidates.insert(candidates.end(), cell->second.begin(), cell->second.end());
+			auto cell = cells->second.find(cellKey(cellX << CELL_SHIFT, cellZ << CELL_SHIFT));
+			if (cell != cells->second.end()) candidates.insert(candidates.end(), cell->second.begin(), cell->second.end());
 		}
 	}
 	std::sort(candidates.begin(), candidates.end());
@@ -288,7 +293,7 @@ void PlayerTracker::updateVisibilityAround(Tracked& subject) {
 }
 
 bool PlayerTracker::canSee(const Tracked& viewer, const Tracked& target) const {
-	return std::abs(viewer.chunkX - target.chunkX) <= viewer.viewDistance && std::abs(viewer.chunkZ - target.chunkZ) <= viewer.viewDistance;
+	return viewer.level == target.level && std::abs(viewer.chunkX - target.chunkX) <= viewer.viewDistance && std::abs(viewer.chunkZ - target.chunkZ) <= viewer.viewDistance;
 }
 
 // Shows or hides a and b to each other according to their distance

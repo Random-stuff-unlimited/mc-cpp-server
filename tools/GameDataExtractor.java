@@ -73,7 +73,7 @@ public class GameDataExtractor {
 		// Per block state, computed from the state in an empty world at 0, 0, 0 (the state alone decides, except for the
 		// few blocks with a random offset: bamboo, dripstone...)
 		String[] contextProperties = {"redstone_conductor", "face_sturdy", "collision_shape", "fluid", "fluid_amount", "fluid_falling", "occlusion_shape",
-									  "push_reaction", "outline_shape"};
+									  "push_reaction", "outline_shape", "pathfindable", "suffocating", "valid_spawn"};
 		Method	 pushReaction	   = method(stateBase, "getPistonPushReaction", "");
 		Method	 occlusionShape	   = method(stateBase, "getOcclusionShape", "");
 		String	 getter			   = "net.minecraft.world.level.BlockGetter";
@@ -81,6 +81,18 @@ public class GameDataExtractor {
 		Object	 emptyGetter	   = staticField("net.minecraft.world.level.EmptyBlockGetter", "INSTANCE");
 		Object	 zero			   = staticField(pos, "ZERO");
 		Method	 conductor		   = method(stateBase, "isRedstoneConductor", getter + "," + pos);
+		Method	 pathfindable	   = method(stateBase, "isPathfindable", "net.minecraft.world.level.pathfinder.PathComputationType");
+		Object[] computationTypes  = find("net.minecraft.world.level.pathfinder.PathComputationType").getEnumConstants(); // LAND, WATER, AIR
+		Method	 suffocating	   = method(stateBase, "isSuffocating", getter + "," + pos);
+		Method	 validSpawn		   = method(stateBase, "isValidSpawn", getter + "," + pos + ",net.minecraft.world.entity.EntityType");
+		// BlockState.isValidSpawn for these types: a generic mob, ocelot, parrot, polar bear, a fire immune one (the
+		// blocks' predicates only tell these apart)
+		Object	 entityTypes	   = staticField("net.minecraft.core.registries.BuiltInRegistries", "ENTITY_TYPE");
+		Method	 byKey			   = method("net.minecraft.core.DefaultedRegistry", "getValue", "net.minecraft.resources.ResourceLocation");
+		Method	 parseKey		   = method("net.minecraft.resources.ResourceLocation", "parse", "java.lang.String");
+		Object[] spawnTypes		   = new Object[5];
+		String[] spawnTypeNames	   = {"zombie", "ocelot", "parrot", "polar_bear", "magma_cube"};
+		for (int t = 0; t < spawnTypes.length; t++) spawnTypes[t] = byKey.invoke(entityTypes, parseKey.invoke(null, "minecraft:" + spawnTypeNames[t]));
 		Method	 sturdy			   = method(stateBase, "isFaceSturdy", getter + "," + pos + ",net.minecraft.core.Direction,net.minecraft.world.level.block.SupportType");
 		Object[] directions		   = find("net.minecraft.core.Direction").getEnumConstants();
 		Object[] supportTypes	   = find("net.minecraft.world.level.block.SupportType").getEnumConstants(); // FULL, CENTER, RIGID
@@ -150,6 +162,17 @@ public class GameDataExtractor {
 				values[n++]	 = shapeIds.computeIfAbsent(boxesOf(toAabbs, aabbFields, occlusionShape.invoke(state)), k -> shapeIds.size());
 				values[n++]	 = ((Enum<?>) pushReaction.invoke(state)).ordinal(); // NORMAL, DESTROY, BLOCK, IGNORE, PUSH_ONLY
 				values[n++]	 = outlineShapeIds.computeIfAbsent(boxesOf(toAabbs, aabbFields, outlineShape.invoke(state, emptyGetter, zero)), k -> outlineShapeIds.size());
+				int paths	 = 0; // Bit per PathComputationType (LAND 1, WATER 2, AIR 4)
+				for (int t = 0; t < computationTypes.length; t++) {
+					if ((Boolean) pathfindable.invoke(state, computationTypes[t])) paths |= 1 << t;
+				}
+				values[n++] = paths;
+				values[n++] = suffocating.invoke(state, emptyGetter, zero);
+				int spawns	= 0; // Bit per type of spawnTypes
+				for (int t = 0; t < spawnTypes.length; t++) {
+					if ((Boolean) validSpawn.invoke(state, emptyGetter, zero, spawnTypes[t])) spawns |= 1 << t;
+				}
+				values[n++] = spawns;
 				states.put((Integer) stateId.invoke(null, state), values);
 			}
 		}

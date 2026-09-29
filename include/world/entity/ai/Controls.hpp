@@ -5,14 +5,15 @@
 
 #include <unordered_set>
 
+class Actor;
 class Mob;
 
 // The controls a mob's goals steer it with (vanilla's net.minecraft.world.entity.ai.control), ticked at the end of
 // Mob.serverAiStep in vanilla's order: move, look, jump. Without goals nothing asks them for anything and the mob
 // stands still, its head slowly following its body like vanilla's idle mobs.
 
-// MoveControl: turns a wanted position into the mob's forward/strafe input (zza, xxa) and speed.
-// Only WAIT is ported: MOVE_TO, STRAFE and JUMPING belong with the AI (port MoveControl.tick when adding it)
+// MoveControl: turns a wanted position into the mob's forward/strafe input (zza, xxa) and speed, jumping onto what is
+// in the way
 class MoveControl {
   public:
 	enum class Operation { Wait, MoveTo, Strafe, Jumping };
@@ -24,6 +25,7 @@ class MoveControl {
 	double	  speedModifier() const { return _speedModifier; }
 	void	  setWantedPosition(double x, double y, double z, double speedModifier);
 	void	  strafe(float forwards, float right);
+	void	  setWait() { _operation = Operation::Wait; }
 	Operation operation() const { return _operation; }
 	double	  wantedX() const { return _wantedX; }
 	double	  wantedY() const { return _wantedY; }
@@ -35,6 +37,12 @@ class MoveControl {
 	double	  _wantedX = 0, _wantedY = 0, _wantedZ = 0, _speedModifier = 0;
 	float	  _strafeForwards = 0, _strafeRight = 0;
 	Operation _operation = Operation::Wait;
+
+	// MoveControl.rotlerp: toward `to` by at most `max` degrees, in [0, 360]
+	static float rotlerp(float from, float to, float max);
+
+  private:
+	bool isWalkable(float x, float z);
 };
 
 // LookControl: turns the head toward what a goal wants to look at, else back toward the body (ported)
@@ -45,6 +53,9 @@ class LookControl {
 
 	void setLookAt(double x, double y, double z);
 	void setLookAt(double x, double y, double z, float yMaxRotSpeed, float xMaxRotAngle);
+	// LookControl.setLookAt(Entity...): its eyes (a living one), else the middle of its box
+	void setLookAt(Actor& target);
+	void setLookAt(Actor& target, float yMaxRotSpeed, float xMaxRotAngle);
 	bool isLookingAtTarget() const { return _lookAtCooldown > 0; }
 	virtual void tick();
 
@@ -85,33 +96,19 @@ class BodyRotationControl {
 	float _lastStableYHeadRot = 0;
 };
 
-// PathNavigation (GroundPathNavigation by default): finds a path and walks it through the MoveControl. A stub: no
-// path is ever found, so the mob never moves by itself. Port PathNavigation / PathFinder / WalkNodeEvaluator here
-class PathNavigation {
-  public:
-	explicit PathNavigation(Mob& mob) : _mob(mob) {}
-	virtual ~PathNavigation() = default;
-
-	// moveTo: false when no path could be found (always, for now)
-	virtual bool moveTo(double x, double y, double z, double speedModifier);
-	virtual void stop() {}
-	virtual bool isDone() const { return true; }
-	virtual bool isInProgress() const { return false; }
-	virtual void tick() {}
-
-  protected:
-	Mob& _mob;
-};
-
-// Sensing: the line of sight checks of one tick, cached until the next (hasLineOfSight comes with the AI)
+// Sensing: the line of sight checks of one tick, cached until the next
 class Sensing {
   public:
+	explicit Sensing(Mob& mob) : _mob(mob) {}
 	void tick() {
 		_seen.clear();
 		_unseen.clear();
 	}
+	// Sensing.hasLineOfSight: LivingEntity.hasLineOfSight, once per tick and target
+	bool hasLineOfSight(Actor& target);
 
   private:
+	Mob&					_mob;
 	std::unordered_set<int> _seen, _unseen;
 };
 

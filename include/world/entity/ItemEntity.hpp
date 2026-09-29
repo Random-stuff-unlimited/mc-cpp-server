@@ -30,6 +30,9 @@ class ItemEntity : public Entity {
 	// for the pickup animation, 0 if none
 	int	 playerTouch(Player& player);
 	void writeEntityData(Buffer& buf) const override;
+	// For a copy (dimension travel): not saved with the chunks
+	void save(Buffer& buf) const override;
+	void load(Buffer& buf) override;
 
   protected:
 	BlockPos blockPosBelowAffectingMovement() override { return getOnPos(0.999999f); }

@@ -12,10 +12,12 @@ class World;
 #include "../data/DeathMessages.hpp"
 #include "../data/GameData.hpp"
 #include "../player.hpp"
+#include "../world/World.hpp"
 #include "id_manager.hpp"
 #include "lib/json.hpp"
 
 #include <chrono>
+#include <filesystem>
 #include <memory>
 #include <mutex>
 #include <netinet/in.h>
@@ -39,8 +41,12 @@ class Server {
 	DeathMessages					 _deathMessages;
 	NetworkManager*					 _networkManager;
 	IdManager						 _idManager;
-	std::unique_ptr<World>			 _world;
-	std::unique_ptr<Level>			 _level;
+	// The dimensions: overworld, nether, end (MinecraftServer.levels), each its own World and Level. The overworld
+	// comes first: it ticks first and owns the clock and the weather
+	std::vector<std::unique_ptr<World>> _worlds;
+	std::vector<std::unique_ptr<Level>> _levels;
+	World*							 _world = nullptr; // The overworld
+	Level*							 _level = nullptr;
 	std::unique_ptr<PlayerDataStorage> _playerData;
 	PlayerTracker					 _playerTracker;
 	TickLoop						 _tickLoop;
@@ -49,14 +55,24 @@ class Server {
 	std::vector<std::shared_ptr<Player>>  _gamePlayers;
 	std::chrono::steady_clock::time_point _lastWorldMaintenance;
 
+	// One level's part of the tick (ServerLevel.tick): weather, sleeping, time, scheduled ticks, random ticks, block
+	// events, entities, block entities
+	void tickLevel(Level& level, bool worldRuns);
+
 	void tickKeepAlive();
 	void runGameHandler(Packet* packet, void (*handler)(Packet*, Server&));
 
   public:
+	// Creates a dimension's World and Level (World directory: the overworld's, DIM-1 for the nether, DIM1 for the end).
+	// The overworld first. start_server loads the three; tests load them with loadGameData
+	void loadDimension(const World::Settings& overworldSettings, const std::string& dimension);
+	void loadGameData(const std::filesystem::path& directory) { _gameData.load(directory); }
 	// Disconnects a player with a message (a translation key of the game, e.g. "multiplayer.disconnect.kicked")
 	void kick(Player* player, const std::string& translationKey);
 	// A translated message in the player's own chat (System Chat, in the chat): its language's wording
 	void sendSystemMessage(Player& player, const std::string& translationKey);
+	// The same above the hotbar (Player.displayClientMessage(..., true))
+	void sendActionBar(Player& player, const std::string& translationKey);
 	// Logged-in players (login, configuration or play) with this name, ignoring case
 	std::vector<std::shared_ptr<Player>> findPlayersByName(const std::string& name);
 
@@ -84,9 +100,15 @@ class Server {
 	IdManager& getIdManager() { return (_idManager); }
 
 	NetworkManager& getNetworkManager() { return *_networkManager; }
+	// The overworld
 	World&			getWorld() { return *_world; }
-	// The world for the game logic (game thread)
+	// The overworld for the game logic (game thread)
 	Level&			getLevel() { return *_level; }
+	// The dimension a player is in (the overworld before it entered the game)
+	Level&			levelOf(const Player& player) { return player.level() ? *player.level() : *_level; }
+	// A dimension by name ("minecraft:the_nether"), nullptr if the server doesn't have it
+	Level*			getLevel(const std::string& dimension);
+	const std::vector<std::unique_ptr<Level>>& getLevels() const { return _levels; }
 	PlayerTracker&	getPlayerTracker() { return _playerTracker; }
 	// <world>/playerdata
 	PlayerDataStorage& getPlayerData() { return *_playerData; }
@@ -96,6 +118,23 @@ class Server {
 
 	// One tick of the game. worldRuns is false while the game is frozen (/tick freeze): players still tick
 	void tick(bool worldRuns);
+	// The sleeping players of a level: their timers, and the night skipped once everyone sleeps long enough
+	// (ServerLevel.tick's SleepStatus)
+	void tickSleeping(Level& level);
+	// A sleeping player wakes up: the bed is free, the pose and the wake animation are sent
+	void wakeUp(Player& player);
+	// PlayerList.sendLevelInfo: the world border, the time, the default spawn position, the rain, and the "waiting for
+	// chunks" event, for a player entering a level
+	void sendLevelInfo(const std::shared_ptr<Player>& player, Level& level);
+	// The world spawn (the overworld's), to one player or to everyone when null (Set Default Spawn Position)
+	void sendDefaultSpawn(const std::shared_ptr<Player>& to);
+	// ServerPlayer.teleport(TeleportTransition) to another dimension: the player leaves its level, gets a Respawn
+	// packet (keeping its attributes and entity data), the new level's info, its position, and the chunks and
+	// entities of the new level. keepAllData: what Respawn keeps (1 attributes, 2 entity data)
+	void changeDimension(Player& player, Level& destination, double x, double y, double z, float yaw, float pitch, uint8_t keptData = 3);
+	// ServerPlayer.showEndCredits: the player leaves the end (its level) and watches the credits; it respawns in the
+	// overworld, keeping everything, when its client closes them (CLIENT_COMMAND)
+	void showEndCredits(Player& player);
 	// A Play packet posted by a network thread. Deletes it
 	void handleGamePacket(Packet* packet);
 	// Finish Configuration acknowledged: the player enters the world. Deletes the packet
@@ -109,7 +148,8 @@ class Server {
 	void savePlayers();
 	const std::vector<std::shared_ptr<Player>>& getGamePlayers() const { return _gamePlayers; }
 
-	// Sends a packet to every player that has this chunk, except `except`
+	// Sends a packet to every player of the overworld that has this chunk, except `except` (Level::broadcastToChunk
+	// for the other dimensions)
 	void broadcastToChunk(int chunkX, int chunkZ, int packetId, Buffer& data, const Player* except = nullptr);
 	// Sends a packet to every player in game (encoded once)
 	void broadcastToGame(int packetId, Buffer& data);

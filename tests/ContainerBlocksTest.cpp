@@ -19,7 +19,7 @@ namespace {
 		auto player = std::make_shared<Player>(name, PlayerState::Play, -1, f.server);
 		player->setPosition(x, Y, z);
 		player->setCompressionThreshold(f.server.getConfig().getCompressionThreshold());
-		f.server.addGamePlayer(player);
+		f.addPlayer(player);
 		return player;
 	}
 

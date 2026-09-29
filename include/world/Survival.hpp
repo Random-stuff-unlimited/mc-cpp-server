@@ -1,10 +1,13 @@
 #ifndef SURVIVAL_HPP
 #define SURVIVAL_HPP
 
+#include <cstdint>
+
 class Buffer;
 class Level;
 class Player;
 class Server;
+enum class Pose : uint8_t;
 
 // Hunger, natural regeneration, breathing and the player's own state vanilla keeps in LivingEntity / Player /
 // ServerPlayer: FoodData.tick, LivingEntity.baseTick (air, drowning), the water state of Entity.baseTick, the pose,
@@ -16,6 +19,8 @@ namespace Survival {
 	// Entity data entries sent when they change (SurvivalState.dirtyData bits)
 	constexpr int DATA_AIR_SUPPLY	= 1; // Entity.DATA_AIR_SUPPLY_ID
 	constexpr int DATA_LIVING_FLAGS = 2; // LivingEntity.DATA_LIVING_ENTITY_FLAGS
+	constexpr int DATA_POSE			= 4; // Entity.DATA_POSE_ID
+	constexpr int DATA_SHARED_FLAGS = 8; // Entity.DATA_SHARED_FLAGS_ID
 	constexpr int MAX_AIR_SUPPLY	= 300;
 
 	// The world's difficulty (config "difficulty": peaceful, easy, normal, hard)
@@ -29,6 +34,9 @@ namespace Survival {
 	bool isHurt(const Player& player);
 	// Entity.getEyeHeight of the current pose: 1.62 standing, 1.27 crouching, 0.4 swimming
 	double eyeHeight(const Player& player);
+	// Entity.igniteForTicks: burns at least this long
+	void igniteForTicks(Player& player, int ticks);
+	bool isOnFire(const Player& player);
 
 	// ServerPlayer.jumpFromGround: the exhaustion of a jump
 	void jumpFromGround(Player& player);
@@ -52,6 +60,8 @@ namespace Survival {
 	void sendHealth(Server& server, Player& player);
 	// After a respawn: everything again (ServerPlayer.restoreFrom / reset: lastSentHealth = -1...)
 	void reset(Player& player);
+	// The player's pose, and the entity data to tell the viewers when it changed (sleeping, crouching...)
+	void setPose(Player& player, Pose pose);
 } // namespace Survival
 
 #endif

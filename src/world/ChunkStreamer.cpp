@@ -5,6 +5,7 @@
 #include "network/packet.hpp"
 #include "network/server.hpp"
 #include "player.hpp"
+#include "world/Level.hpp"
 #include "world/World.hpp"
 
 #include <algorithm>
@@ -40,6 +41,8 @@ void ChunkStreamer::start(double x, double z, int viewDistance) {
 	std::vector<int64_t> view;
 	{
 		_active		  = true;
+		_world		  = _player.level() ? &_player.level()->world() : &_server.getWorld();
+		_session++;
 		_centerX	  = toChunk(x);
 		_centerZ	  = toChunk(z);
 		_viewDistance = viewDistance;
@@ -123,6 +126,7 @@ void ChunkStreamer::stop() {
 	{
 		if (!_active) return;
 		_active = false;
+		_session++; // Chunks still lighting for this session are ignored when they arrive
 		keys.assign(_tickets.begin(), _tickets.end());
 		_tickets.clear();
 		_inView.clear();
@@ -136,10 +140,10 @@ bool ChunkStreamer::hasChunk(int chunkX, int chunkZ) const {
 	return _sent.count(Chunk::key(chunkX, chunkZ)) != 0;
 }
 
-void ChunkStreamer::onChunkLoaded(const std::shared_ptr<Chunk>& chunk) {
+void ChunkStreamer::onChunkLoaded(const std::shared_ptr<Chunk>& chunk, uint32_t session) {
 	int64_t key = Chunk::key(chunk->x(), chunk->z());
-	// The player may have moved away while it was loading
-	if (!_active || !_inView.count(key) || _sent.count(key)) return;
+	// The player may have moved away while it was loading, or changed dimension
+	if (!_active || session != _session || !_inView.count(key) || _sent.count(key)) return;
 	_ready[key] = chunk;
 	sendBatches();
 }
@@ -163,7 +167,7 @@ void ChunkStreamer::sendBatches() {
 		for (size_t i = 0; i < count; i++) {
 			int64_t key = byDistance[i].second;
 			auto	it	= _ready.find(key);
-			Packet::sendFrame(player, *_server.getWorld().getChunkPacket(it->second), _server);
+			Packet::sendFrame(player, *_world->getChunkPacket(it->second), _server);
 			_sent.insert(key);
 			_ready.erase(it);
 		}
@@ -175,7 +179,7 @@ void ChunkStreamer::sendBatches() {
 }
 
 void ChunkStreamer::acquire(const std::vector<int64_t>& keys) {
-	for (int64_t key : keys) _server.getWorld().acquireChunk(chunkX(key), chunkZ(key));
+	for (int64_t key : keys) _world->acquireChunk(chunkX(key), chunkZ(key));
 }
 
 // Chunks are sent once lit (their neighbors are loaded then). Lighting finishes on an I/O thread: the chunk is
@@ -183,16 +187,17 @@ void ChunkStreamer::acquire(const std::vector<int64_t>& keys) {
 void ChunkStreamer::waitForLight(const std::vector<int64_t>& keys) {
 	std::weak_ptr<Player> weakPlayer = _player.shared_from_this();
 	TickLoop&			  tickLoop	 = _server.getTickLoop();
+	uint32_t			  session	 = _session;
 	for (int64_t key : keys) {
-		_server.getWorld().whenLit(chunkX(key), chunkZ(key), [weakPlayer, &tickLoop](const std::shared_ptr<Chunk>& chunk) {
-			tickLoop.runOnGameThread([weakPlayer, chunk] {
+		_world->whenLit(chunkX(key), chunkZ(key), [weakPlayer, &tickLoop, session](const std::shared_ptr<Chunk>& chunk) {
+			tickLoop.runOnGameThread([weakPlayer, chunk, session] {
 				std::shared_ptr<Player> player = weakPlayer.lock();
-				if (player && !player->isDisconnected() && player->getChunkStreamer()) player->getChunkStreamer()->onChunkLoaded(chunk);
+				if (player && !player->isDisconnected() && player->getChunkStreamer()) player->getChunkStreamer()->onChunkLoaded(chunk, session);
 			});
 		});
 	}
 }
 
 void ChunkStreamer::release(const std::vector<int64_t>& keys) {
-	for (int64_t key : keys) _server.getWorld().releaseChunk(chunkX(key), chunkZ(key));
+	for (int64_t key : keys) _world->releaseChunk(chunkX(key), chunkZ(key));
 }

@@ -1,5 +1,6 @@
 #include "world/BlockBehavior.hpp"
 
+#include "world/Explosion.hpp"
 #include "world/Level.hpp"
 #include "world/blockentity/BlockEntity.hpp"
 
@@ -27,7 +28,7 @@ bool BlockBehavior::canSurvive(Level&, const BlockPos&, int) const { return true
 void BlockBehavior::setPlacedBy(Level&, const BlockPos&, int) const {}
 bool BlockBehavior::useWithoutItem(Level&, const BlockPos&, int, Player&) const { return false; }
 UseResult BlockBehavior::useItemOn(Level&, const BlockPos&, int, Player&, int, const BlockHit&) const { return UseResult::TryWithEmptyHand; }
-void BlockBehavior::entityInside(Level&, const BlockPos&, int, Entity*) const {}
+void BlockBehavior::entityInside(Level&, const BlockPos&, int, Actor*) const {}
 void BlockBehavior::playerWillDestroy(Level&, const BlockPos&, int, Player&) const {}
 bool BlockBehavior::keepsBlockEntityOf(int) const { return false; }
 std::unique_ptr<BlockEntity> BlockBehavior::newBlockEntity(const BlockPos&, int) const { return nullptr; }
@@ -47,4 +48,18 @@ void BlockBehaviors::setRandomTick(int block, std::unique_ptr<BlockBehavior> beh
 void BlockBehaviors::set(int block, std::unique_ptr<BlockBehavior> behavior) {
 	_byBlock.at(block) = behavior.get();
 	_owned.push_back(std::move(behavior));
+}
+
+void BlockBehavior::onExplosionHit(Level& level, const BlockPos& pos, int state, Explosions::Explosion& explosion,
+								   const std::function<void(ItemStack, const BlockPos&)>& drop) const {
+	if (level.blocks().isAir(state) || explosion.interaction == Explosions::BlockInteraction::TriggerBlock) return;
+	if (dropFromExplosion()) {
+		static const ItemStack NO_TOOL;
+		LootTables::Context context{level, pos, state, &NO_TOOL, explosion.source != nullptr,
+									explosion.interaction == Explosions::BlockInteraction::DestroyWithDecay ? explosion.radius : 0.0F};
+		context.blockEntity = level.getBlockEntity(pos);
+		for (ItemStack& stack : level.loot().blockDrops(context)) drop(std::move(stack), pos);
+	}
+	level.setBlock(pos, level.gameData().getDefaultBlockState("minecraft:air"), Level::UPDATE_ALL);
+	wasExploded(level, pos, explosion);
 }

@@ -34,6 +34,7 @@ class FlatGenerator : public WorldGenerator {
 		chunk.fillBiome(_biome);
 	}
 
+	int seaLevel() const override { return -63; }
 	int spawnHeight() const override {
 		int height = _minY;
 		for (const Layer& layer : _layers) height += layer.height;

@@ -1,10 +1,13 @@
 #include "world/entity/Entity.hpp"
 
+#include "network/buffer.hpp"
+
 #include "data/GameData.hpp"
 #include "network/server.hpp"
 #include "world/Combat.hpp"
 #include "world/Fluids.hpp"
 #include "world/Level.hpp"
+#include "world/Portals.hpp"
 #include "world/Shapes.hpp"
 
 #include <algorithm>
@@ -100,7 +103,37 @@ AABB Entity::boundingBox() const {
 
 void Entity::tick() { baseTick(); }
 
+void Entity::saveBase(Buffer& buf) const {
+	buf.writeUUID(_uuid);
+	for (double v : {_position.x, _position.y, _position.z, _delta.x, _delta.y, _delta.z}) buf.writeDouble(v);
+	buf.writeFloat(_yRot);
+	buf.writeFloat(_xRot);
+	buf.writeBool(_onGround);
+	buf.writeDouble(_fallDistance);
+	buf.writeShort(static_cast<int16_t>(std::clamp(_remainingFireTicks, -32768, 32767)));
+	buf.writeVarInt(portal.cooldown);
+}
+
+void Entity::loadBase(Buffer& buf) {
+	_uuid		= buf.readUUID();
+	_position.x = buf.readDouble();
+	_position.y = buf.readDouble();
+	_position.z = buf.readDouble();
+	_delta.x	= buf.readDouble();
+	_delta.y	= buf.readDouble();
+	_delta.z	= buf.readDouble();
+	_yRot		= buf.readFloat();
+	_xRot		= buf.readFloat();
+	_onGround	= buf.readBool();
+	_fallDistance		= buf.readDouble();
+	_remainingFireTicks = buf.readShort();
+	portal.cooldown		= buf.readVarInt();
+	_oldPosition		= _position;
+}
+
 void Entity::baseTick() {
+	Portals::handlePortal(_level, *this); // May replace it by its copy in another dimension
+	if (_removed) return;
 	if (!_skipFluidUpdate) updateInWaterStateAndDoFluidPushing();
 	// Burning: 1 damage a second, not in lava (lava hurts on its own)
 	if (_remainingFireTicks > 0) {

@@ -3,7 +3,9 @@
 
 #include "lib/JavaRandom.hpp"
 #include "lib/UUID.hpp"
+#include "world/BlockPos.hpp"
 #include "world/FoodData.hpp"
+#include "world/entity/Actor.hpp"
 #include "world/item/PlayerInventory.hpp"
 
 #include <algorithm>
@@ -14,6 +16,7 @@
 #include <memory>
 #include <string>
 #include <vector>
+class Level;
 class Menu;
 class Server;
 namespace nbt {
@@ -49,8 +52,9 @@ struct CombatState {
 	std::string lastAttacker;
 	int64_t		lastAttackedAt = 0;
 
-	bool hasDeathLocation = false; // Where the player last died (recovery compass)
-	int	 deathX = 0, deathY = 0, deathZ = 0;
+	bool		hasDeathLocation = false; // Where the player last died (recovery compass)
+	int			deathX = 0, deathY = 0, deathZ = 0;
+	std::string deathDimension;
 };
 
 // Encoded packets waiting to be written to the socket. Filled by any thread (Packet::send), emptied by the network
@@ -86,6 +90,16 @@ struct SurvivalState {
 	float lastSentHealth		 = -1.0E8F;
 	int	  lastSentFood			 = -99999999;
 	bool  lastFoodSaturationZero = true;
+
+	// Entity.remainingFireTicks: burning while > 0; -20 (Player.getFireImmuneTicks) once out of the fire
+	int		remainingFireTicks = -20;
+	uint8_t sharedFlags		   = 0; // Entity.DATA_SHARED_FLAGS_ID as last sent (on fire, crouching, sprinting...)
+
+	// Sleeping in a bed (Player.SleepTimer / LivingEntity.sleeping): the pose is Sleeping, the timer counts to 100,
+	// then the night is skipped (Server::tickSleeping). sleepingPos: the bed it sleeps in
+	bool	 sleeping	= false;
+	int	 sleepTimer	= 0;
+	BlockPos sleepingPos;
 };
 
 class PlayerConfig {
@@ -124,7 +138,7 @@ class PlayerConfig {
 	void setServerListings(bool serverListings) { _allowServerListings = serverListings; }
 };
 
-class Player : public std::enable_shared_from_this<Player> {
+class Player : public Actor, public std::enable_shared_from_this<Player> {
   private:
 	std::string				 _name;
 	mutable std::mutex		 _nameMutex; // The name is set at login while other logins look for duplicates
@@ -139,9 +153,15 @@ class Player : public std::enable_shared_from_this<Player> {
 	std::unique_ptr<ChunkStreamer> _chunkStreamer;
 
 	// Game state. Only used on the game thread (see TickLoop)
+	Level*					_level	  = nullptr; // The dimension the player is in, once in game
 	GameMode				_gameMode = GameMode::Survival;
 	int						_previousGameMode = -1; // ServerPlayerGameMode.previousGameModeForPlayer, -1 = none
-	double					_posX = 0, _posY = 0, _posZ = 0;
+	// The experience bar (vanilla's XpBar): the total points, the level and the progress toward the next
+	int		_xpTotal	= 0;
+	int		_xpLevel	= 0;
+	float	_xpProgress = 0.0F;
+	int		_xpSeed		= 0; // XpSeed: the random for the enchanting table's offers
+	Vec3					_pos;
 	float					_yaw	  = 0; // Degrees, 0 = looking south (+z), 90 = west
 	float					_pitch	  = 0; // Degrees, -90 = looking up
 	bool					_onGround = false;
@@ -164,6 +184,8 @@ class Player : public std::enable_shared_from_this<Player> {
 	std::array<ItemStack, 27> _enderChest;
 	std::unique_ptr<Menu> _inventoryMenu, _openMenu;
 	int					  _containerCounter = 0;
+	bool				  _seenCredits		 = false;
+	bool				  _wonGame			 = false;
 	int					  _teleportId		 = 0; // Teleport id of the last Synchronize Player Position, echoed by Accept Teleportation
 	std::array<bool, 8>	  _recipeBookSettings{}; // RecipeBookSettings: open and filtering, for crafting, furnace, blast furnace, smoker
 	// The playerdata file this player was loaded from: written back with our values over it, so what the server
@@ -201,20 +223,50 @@ class Player : public std::enable_shared_from_this<Player> {
 	int	 getCompressionThreshold() const { return _compressionThreshold.load(); }
 	void setCompressionThreshold(int threshold) { _compressionThreshold.store(threshold); }
 
+	// The dimension the player is in (null before it enters the game). Changed by Server::changeDimension
+	Level*	 level() const { return _level; }
+	void	 setLevel(Level* level) { _level = level; }
+
 	GameMode getGameMode() const { return _gameMode; }
 	void	 setGameMode(GameMode mode) { _gameMode = mode; }
 	// Protocol id of the game mode before the last change, -1 if none
 	int		 getPreviousGameMode() const { return _previousGameMode; }
 	void	 setPreviousGameMode(int mode) { _previousGameMode = mode; }
 
-	void   setPosition(double x, double y, double z) {
-		  _posX = x;
-		  _posY = y;
-		  _posZ = z;
-	}
-	double getX() const { return _posX; }
-	double getY() const { return _posY; }
-	double getZ() const { return _posZ; }
+	// The experience bar (XpBar): the total points, the level and the progress toward the next
+	int	 getXpTotal() const { return _xpTotal; }
+	void setXpTotal(int total) { _xpTotal = total; }
+	int	 getXpLevel() const { return _xpLevel; }
+	void setXpLevel(int level) { _xpLevel = level; }
+	float getXpProgress() const { return _xpProgress; }
+	void  setXpProgress(float progress) { _xpProgress = progress; }
+	int	 getXpSeed() const { return _xpSeed; }
+	void setXpSeed(int seed) { _xpSeed = seed; }
+
+	void   setPosition(double x, double y, double z) { _pos = {x, y, z}; }
+	double getX() const { return _pos.x; }
+	double getY() const { return _pos.y; }
+	double getZ() const { return _pos.z; }
+
+	// ----- Actor -----
+	int			id() const override { return _playerId; }
+	const UUID& uuid() const override { return _uuid; }
+	int			typeId() const override;
+	Level*		actorLevel() const override { return _level; }
+	const Vec3& position() const override { return _pos; }
+	// Its box for its current pose (standing, crouching, swimming, sleeping)
+	AABB		boundingBox() const override;
+	double		eyeY() const override;
+	bool		isAlive() const override { return !_combat.dead && !isDisconnected(); }
+	bool		isSpectator() const override { return _gameMode == GameMode::Spectator; }
+	bool		isCreative() const { return _gameMode == GameMode::Creative; }
+	// Combat::damage
+	bool		hurtServer(const Combat::DamageSource& source, float amount) override;
+	// The client moves the player: it is told its new movement (SET_ENTITY_MOTION, to it and its viewers)
+	void		pushMotion(const Vec3& impulse) override;
+	void		igniteForTicks(int ticks) override;
+	float		yRot() const override { return _yaw; }
+	Player*		asPlayer() override { return this; }
 	float  getYaw() const { return _yaw; }
 	// Sneak key held (Player Input packet): isSecondaryUseActive
 	bool   isShiftKeyDown() const { return _shiftKeyDown; }
@@ -235,6 +287,14 @@ class Player : public std::enable_shared_from_this<Player> {
 	std::unique_ptr<Menu>&	openMenuSlot() { return _openMenu; }
 	// ServerPlayer.nextContainerCounter: 1 to 100
 	int						nextContainerCounter() { return _containerCounter = _containerCounter % 100 + 1; }
+	int	 portalCooldown() const { return portal.cooldown; }
+	// ServerPlayer.seenCredits / wonGame: the end credits were shown once; they are showing now (the player left its
+	// level and respawns in the overworld when the client closes them)
+	bool seenCredits() const { return _seenCredits; }
+	void setSeenCredits(bool seen) { _seenCredits = seen; }
+	bool wonGame() const { return _wonGame; }
+	void setWonGame(bool won) { _wonGame = won; }
+	int	 dimensionChangingDelay() const override { return 10; }
 	// A new teleport id for the next Synchronize Player Position
 	int						nextTeleportId() { return ++_teleportId; }
 	std::array<bool, 8>&	recipeBookSettings() { return _recipeBookSettings; }

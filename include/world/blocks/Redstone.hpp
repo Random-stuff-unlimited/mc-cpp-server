@@ -213,7 +213,7 @@ class PressurePlateBlock : public RedstoneBehavior {
 	bool canSurvive(Level& level, const BlockPos& pos, int state) const override;
 	int	 updateShape(Level& level, const BlockPos& pos, int state, Direction direction, const BlockPos& neighborPos, int neighborState) const override;
 	void tick(Level& level, const BlockPos& pos, int state) const override;
-	void entityInside(Level& level, const BlockPos& pos, int state, Entity* entity) const override;
+	void entityInside(Level& level, const BlockPos& pos, int state, Actor* actor) const override;
 	void affectNeighborsAfterRemoval(Level& level, const BlockPos& pos, int state, bool movedByPiston) const override;
 	bool isSignalSource(int) const override { return true; }
 	int	 getSignal(Level& level, const BlockPos& pos, int state, Direction direction) const override;

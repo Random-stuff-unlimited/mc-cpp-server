@@ -58,6 +58,10 @@ namespace Mth {
 	// Mth.atan2: vanilla's table approximation (not std::atan2), for rotations computed from positions
 	double atan2(double y, double x);
 	inline float clamp(float value, float min, float max) { return value < min ? min : (value > max ? max : value); }
+	inline float  lerp(float delta, float from, float to) { return from + delta * (to - from); }
+	inline double lerp(double delta, double from, double to) { return from + delta * (to - from); }
+	// Mth.nextInt: between min and max, both included
+	template <typename R> int nextInt(R& random, int min, int max) { return min >= max ? min : random.nextInt(max - min + 1) + min; }
 	// Mth.wrapDegrees: in [-180, 180)
 	inline float wrapDegrees(float degrees) {
 		float wrapped = std::fmod(degrees, 360.0f);

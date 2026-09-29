@@ -1,14 +1,28 @@
 #include "world/entity/Mob.hpp"
 #include "world/entity/MobRegistry.hpp"
+#include "world/entity/mobs/Creeper.hpp"
+#include "world/entity/mobs/FarmAnimals.hpp"
+#include "world/entity/mobs/Spider.hpp"
+#include "world/entity/mobs/Zombie.hpp"
 
-// The AI of each vanilla mob type, registered here once goals are ported (see MobRegistry for the pattern):
-// vanilla's registerGoals of each class, with the same priorities and in the same order. For instance, Cow:
-//   registry.addGoals("minecraft:cow", [](Mob& mob) {
-//       mob.goalSelector().addGoal(0, std::make_unique<FloatGoal>(mob));
-//       mob.goalSelector().addGoal(1, std::make_unique<PanicGoal>(mob, 2.0));
-//       ...
-//   });
-// Brain-based mobs (villagers, piglins, axolotls, frogs...) get a factory making their own Mob subclass instead,
-// which ticks its Brain in customServerAiStep.
-// No goal is registered yet: every mob stands still, falls, takes damage and dies like vanilla's without its AI.
-void registerVanillaMobs(MobRegistry& registry) { (void)registry; }
+// The vanilla mob classes (src/world/entity/mobs): each type gets its class, which registers its own goals
+// (registerGoals, with vanilla's priorities). Types without a class of their own are plain Mobs (Monsters for the
+// hostile ones, see MobRegistry::create) without goals: they stand still, fall, take damage and die like vanilla's.
+// Brain-based mobs (villagers, piglins, axolotls, frogs...) will tick their Brain in customServerAiStep.
+namespace {
+	template <typename T> MobRegistry::Factory factory() {
+		return [](Level& level, int typeId) -> std::unique_ptr<Mob> { return std::make_unique<T>(level, typeId); };
+	}
+} // namespace
+
+void registerVanillaMobs(MobRegistry& registry) {
+	registry.setFactory("minecraft:zombie", factory<Zombie>());
+	registry.setFactory("minecraft:husk", factory<Husk>());
+	registry.setFactory("minecraft:creeper", factory<Creeper>());
+	registry.setFactory("minecraft:spider", factory<Spider>());
+	registry.setFactory("minecraft:cave_spider", factory<CaveSpider>());
+	registry.setFactory("minecraft:cow", factory<Cow>());
+	registry.setFactory("minecraft:pig", factory<Pig>());
+	registry.setFactory("minecraft:chicken", factory<Chicken>());
+	registry.setFactory("minecraft:sheep", factory<Sheep>());
+}

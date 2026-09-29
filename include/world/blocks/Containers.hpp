@@ -99,7 +99,7 @@ class HopperBlock : public ContainerBlock {
 	void onPlace(Level& level, const BlockPos& pos, int state, int oldState, bool movedByPiston) const override;
 	void neighborChanged(Level& level, const BlockPos& pos, int state, int sourceBlock, bool movedByPiston) const override;
 	bool useWithoutItem(Level& level, const BlockPos& pos, int state, Player& player) const override;
-	void entityInside(Level& level, const BlockPos& pos, int state, Entity* entity) const override;
+	void entityInside(Level& level, const BlockPos& pos, int state, Actor* actor) const override;
 
   private:
 	void checkPoweredState(Level& level, const BlockPos& pos, int state) const;
@@ -107,6 +107,20 @@ class HopperBlock : public ContainerBlock {
 
 // CraftingTableBlock: opens a 3x3 crafting grid (the crafting itself isn't there yet)
 class CraftingTableBlock : public RedstoneBehavior {
+  public:
+	using RedstoneBehavior::RedstoneBehavior;
+	bool useWithoutItem(Level& level, const BlockPos& pos, int state, Player& player) const override;
+};
+
+// EnchantingTableBlock: opens the enchanting table's menu (EnchantmentMenu)
+class EnchantingTableBlock : public RedstoneBehavior {
+  public:
+	using RedstoneBehavior::RedstoneBehavior;
+	bool useWithoutItem(Level& level, const BlockPos& pos, int state, Player& player) const override;
+};
+
+// AnvilBlock: opens the anvil's menu (AnvilMenu), whatever its damage (anvil, chipped or damaged)
+class AnvilBlock : public RedstoneBehavior {
   public:
 	using RedstoneBehavior::RedstoneBehavior;
 	bool useWithoutItem(Level& level, const BlockPos& pos, int state, Player& player) const override;

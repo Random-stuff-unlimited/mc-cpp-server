@@ -3,14 +3,21 @@
 
 #include "world/BlockPos.hpp"
 
+#include "world/item/ItemStack.hpp"
+
+#include <functional>
 #include <memory>
 #include <vector>
 
 class BlockEntity;
+class Actor;
 class Entity;
 class Level;
 class Player;
 struct PlaceContext;
+namespace Explosions {
+	struct Explosion;
+}
 
 // BlockBehavior::getStateForPlacement when the block has no placement rule of its own yet: the server's generic
 // placement (axis, facing, two-block shapes) decides
@@ -84,13 +91,24 @@ class BlockBehavior {
 	// Right-clicked holding the stack of that hand (BlockBehaviour.useItemOn): a disc into a jukebox, a book on a
 	// lectern... TryWithEmptyHand by default
 	virtual UseResult useItemOn(Level& level, const BlockPos& pos, int state, Player& player, int hand, const BlockHit& hit) const;
-	// An entity is in its cell (pressure plates, hoppers...); nullptr for a player
-	virtual void entityInside(Level& level, const BlockPos& pos, int state, Entity* entity) const;
+	// An entity or a player is in its cell (pressure plates, hoppers, fire, portals...)
+	virtual void entityInside(Level& level, const BlockPos& pos, int state, Actor* actor) const;
 	// A player is about to break it (Block.playerWillDestroy)
 	virtual void playerWillDestroy(Level& level, const BlockPos& pos, int state, Player& player) const;
 	// shouldChangedStateKeepBlockEntity: this block keeps the block entity of the one it replaces (copper chests
 	// oxidizing)
 	virtual bool keepsBlockEntityOf(int oldState) const;
+	// ----- Explosions -----
+
+	// Block.dropFromExplosion: whether an explosion makes it drop its loot (not TNT: it primes)
+	virtual bool dropFromExplosion() const { return true; }
+	// BlockBehaviour.onExplosionHit: by default its loot goes to `drop` (with the explosion's decay), it turns into air
+	// and wasExploded runs
+	virtual void onExplosionHit(Level& level, const BlockPos& pos, int state, Explosions::Explosion& explosion,
+								const std::function<void(ItemStack, const BlockPos&)>& drop) const;
+	// Block.wasExploded
+	virtual void wasExploded(Level&, const BlockPos&, Explosions::Explosion&) const {}
+
 	// EntityBlock.newBlockEntity: the block entity that comes with the block, nullptr if none
 	virtual std::unique_ptr<BlockEntity> newBlockEntity(const BlockPos& pos, int state) const;
 };

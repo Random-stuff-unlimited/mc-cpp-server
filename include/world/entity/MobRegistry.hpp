@@ -30,7 +30,11 @@ class MobRegistry {
 	using Factory		= std::function<std::unique_ptr<Mob>(Level&, int typeId)>;
 	using GoalRegistrar = std::function<void(Mob&)>;
 	// EntitySpawnReason, the ones used so far
-	enum class SpawnReason { SpawnItemUse, Spawner, Command, Natural, Load };
+	enum class SpawnReason { SpawnItemUse, Spawner, Command, Natural, Load, Structure, DimensionTravel, Breeding, Reinforcement, Conversion, Triggered,
+							 TrialSpawner, ChunkGeneration, Jockey, Patrol, MobSummoned, Event };
+	// EntitySpawnReason.isSpawner and ignoresLightRequirements
+	static bool isSpawner(SpawnReason r) { return r == SpawnReason::Spawner || r == SpawnReason::TrialSpawner; }
+	static bool ignoresLightRequirements(SpawnReason r) { return r == SpawnReason::TrialSpawner; }
 
 	explicit MobRegistry(const GameData& gameData) : _gameData(gameData) {}
 

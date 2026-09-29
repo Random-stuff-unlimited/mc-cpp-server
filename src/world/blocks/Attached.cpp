@@ -1,9 +1,15 @@
 #include "world/blocks/Attached.hpp"
 
+#include "PacketIds.hpp"
+#include "network/buffer.hpp"
+#include "network/packet.hpp"
 #include "network/server.hpp"
 #include "player.hpp"
 #include "world/Level.hpp"
 #include "world/Shapes.hpp"
+#include "world/Survival.hpp"
+#include "world/Explosion.hpp"
+#include "world/entity/LivingEntity.hpp"
 
 // ----- Torches -----
 
@@ -206,16 +212,94 @@ int BedBlock::updateShape(Level&, const BlockPos&, int state, Direction directio
 	return _air;
 }
 
-// The player sets its respawn point here (Player.startSleepInBed's setRespawnPosition). Lying down and skipping the
-// night aren't ported yet: the bed only records where the player respawns
-bool BedBlock::useWithoutItem(Level& level, const BlockPos& pos, int state, Player& player) const {
-	// BedBlock.isObstructed: a solid block above stops sleeping
-	if (level.isRedstoneConductor(level.getBlockState(pos.above()))) {
-		level.server().sendSystemMessage(player, "block.minecraft.bed.obstructed");
+// BedBlock.useWithoutItem: the bed explodes where beds don't work (nether, end); else the player sleeps
+// (ServerPlayer.startSleepInBed): its respawn point is set first, then it lies down if it is night (or a
+// thunderstorm) and no monster is near. Once everyone sleeps the night is skipped (Server::tickSleeping)
+bool BedBlock::useWithoutItem(Level& level, const BlockPos& clicked, int clickedState, Player& player) const {
+	const BlockContext& c	  = *_context;
+	BlockPos			pos	  = clicked;
+	int					state = clickedState;
+	int					block = c.blocks.blockOf(state);
+	// The head is the bed's position
+	if (c.blocks.get(state, c.part) != c.head) {
+		pos	  = pos.relative(c.direction(state, c.facing));
+		state = level.getBlockState(pos);
+		if (c.blocks.blockOf(state) != block) return true;
+	}
+	Direction facing = c.direction(state, c.facing);
+	if (!level.dimensionType().bedWorks) {
+		level.removeBlock(pos, false);
+		BlockPos foot = pos.relative(Directions::opposite(facing));
+		if (c.blocks.blockOf(level.getBlockState(foot)) == block) level.removeBlock(foot, false);
+		Vec3 center{pos.x + 0.5, pos.y + 0.5, pos.z + 0.5};
+		Explosions::explode(level, nullptr, Combat::DamageSource{"minecraft:bad_respawn_point", nullptr, nullptr, center}, nullptr, center, 5.0F, true,
+							Explosions::Interaction::Block);
 		return true;
 	}
-	player.spawn() = {true, pos.x, pos.y, pos.z, level.dimensionName(), false};
-	level.server().sendSystemMessage(player, "block.minecraft.set_spawn");
-	level.playSound(&player, pos, "minecraft:entity.player.sleep", Level::SoundSource::Players);
+	if (c.blocks.getBool(state, c.occupied)) {
+		// kickVillagerOutOfBed: no sleeping villagers yet
+		level.server().sendActionBar(player, "block.minecraft.bed.occupied");
+		return true;
+	}
+	// ServerPlayer.startSleepInBed
+	if (player.survival().sleeping || !player.isAlive()) return true;
+	if (!level.dimensionType().natural) return true;
+	auto reachable = [&](const BlockPos& at) {
+		return std::abs(player.getX() - (at.x + 0.5)) <= 3.0 && std::abs(player.getY() - at.y) <= 2.0 && std::abs(player.getZ() - (at.z + 0.5)) <= 3.0;
+	};
+	BlockPos foot = pos.relative(Directions::opposite(facing));
+	if (!reachable(pos) && !reachable(foot)) {
+		level.server().sendActionBar(player, "block.minecraft.bed.too_far_away");
+		return true;
+	}
+	// bedBlocked: a block above either half the player would suffocate in
+	auto suffocating = [&](const BlockPos& at) { return level.isRedstoneConductor(level.getBlockState(at)); };
+	if (suffocating(pos.above()) || suffocating(foot.above())) {
+		level.server().sendActionBar(player, "block.minecraft.bed.obstructed");
+		return true;
+	}
+	PlayerSpawn home{true, pos.x, pos.y, pos.z, level.dimensionName(), false};
+	PlayerSpawn& current = player.spawn();
+	bool same = current.valid && current.x == home.x && current.y == home.y && current.z == home.z && current.dimension == home.dimension;
+	current	  = home;
+	if (!same) level.server().sendSystemMessage(player, "block.minecraft.set_spawn");
+	if (level.isBrightOutside()) {
+		level.server().sendActionBar(player, "block.minecraft.bed.no_sleep");
+		return true;
+	}
+	if (!player.isCreative()) {
+		// A monster within 8 blocks (5 up or down) of the bed keeps the player awake
+		AABB around{pos.x + 0.5 - 8.0, pos.y - 5.0, pos.z + 0.5 - 8.0, pos.x + 0.5 + 8.0, pos.y + 5.0, pos.z + 0.5 + 8.0};
+		bool unsafe = false;
+		level.entities().forEachIn(around, [&](Entity& entity) {
+			if (LivingEntity* living = entity.asLiving(); living && living->isAlive() && living->isPreventingPlayerRest(player)) unsafe = true;
+		});
+		if (unsafe) {
+			level.server().sendActionBar(player, "block.minecraft.bed.not_safe");
+			return true;
+		}
+	}
+	// LivingEntity.startSleeping: the bed is taken, the player lies on it
+	level.setBlock(pos, c.blocks.withBool(state, c.occupied, true), Level::UPDATE_ALL);
+	SurvivalState& survival = player.survival();
+	survival.sleeping		= true;
+	survival.sleepTimer		= 0;
+	survival.sleepingPos	= pos;
+	Survival::setPose(player, Pose::Sleeping);
+	player.setPosition(pos.x + 0.5, pos.y + 0.6875, pos.z + 0.5);
+	player.setOnGround(true);
+	Buffer teleport;
+	teleport.writeVarInt(player.nextTeleportId());
+	teleport.writeDouble(player.getX());
+	teleport.writeDouble(player.getY());
+	teleport.writeDouble(player.getZ());
+	teleport.writeDouble(0); // Velocity
+	teleport.writeDouble(0);
+	teleport.writeDouble(0);
+	teleport.writeFloat(player.getYaw());
+	teleport.writeFloat(player.getPitch());
+	teleport.writeInt(0); // Flags: absolute position
+	Packet::send(player.shared_from_this(), PacketId::Play::Clientbound::PLAYER_POSITION, teleport, level.server());
+	level.server().getPlayerTracker().move(&player);
 	return true;
 }

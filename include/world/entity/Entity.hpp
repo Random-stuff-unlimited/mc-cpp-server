@@ -4,6 +4,7 @@
 #include "lib/JavaRandom.hpp"
 #include "lib/UUID.hpp"
 #include "world/BlockPos.hpp"
+#include "world/entity/Actor.hpp"
 #include "world/entity/Geometry.hpp"
 
 #include <algorithm>
@@ -18,25 +19,33 @@ namespace Combat {
 
 // An entity other than a player, on the game thread (vanilla's Entity): position, movement and collisions with
 // blocks, fluids pushing it. Ported from vanilla's Entity.move, collide and updateFluidHeightAndDoFluidPushing
-class Entity {
+class Entity : public Actor {
   public:
 	Entity(Level& level, int typeId, float width, float height);
 	virtual ~Entity();
 	Entity(const Entity&)			 = delete;
 	Entity& operator=(const Entity&) = delete;
 
-	int			id() const { return _id; }
+	int			id() const override { return _id; }
+	// Entity.getFluidHeight(WATER / LAVA) as of the last fluid update, and whether it is in lava
+	double		waterHeight() const { return _waterHeight; }
+	bool		isInLavaNow() const { return isInLava(); }
+	// Entity.getFluidJumpThreshold
+	double		fluidJumpThreshold() const { return const_cast<Entity*>(this)->eyeHeight() < 0.4 ? 0.0 : 0.4; }
+	// The entity's own random (Entity.random)
+	JavaRandom& random() { return _random; }
 	Level&		level() const { return _level; }
-	const UUID& uuid() const { return _uuid; }
-	int			typeId() const { return _typeId; }
-	const Vec3& position() const { return _position; }
+	Level*		actorLevel() const override { return &_level; }
+	const UUID& uuid() const override { return _uuid; }
+	int			typeId() const override { return _typeId; }
+	const Vec3& position() const override { return _position; }
 	const Vec3& deltaMovement() const { return _delta; }
 	void		setDeltaMovement(const Vec3& delta) { _delta = delta; }
 	void		setPos(const Vec3& position) { _position = position; }
 	bool		onGround() const { return _onGround; }
 	void		setOnGround(bool onGround) { _onGround = onGround; }
 	// Rotations in degrees (vanilla's yRot / xRot, the head's for living entities)
-	float		yRot() const { return _yRot; }
+	float		yRot() const override { return _yRot; }
 	float		xRot() const { return _xRot; }
 	void		setYRot(float yRot) { _yRot = yRot; }
 	void		setXRot(float xRot) { _xRot = xRot; }
@@ -49,7 +58,11 @@ class Entity {
 	double		fallDistance() const { return _fallDistance; }
 	void		resetFallDistance() { _fallDistance = 0.0; }
 	int			remainingFireTicks() const { return _remainingFireTicks; }
+	virtual void setRemainingFireTicks(int ticks) { _remainingFireTicks = ticks; }
 	bool		isOnFire() const { return _remainingFireTicks > 0; }
+	void		igniteForTicks(int ticks) override {
+		   if (_remainingFireTicks < ticks) setRemainingFireTicks(ticks);
+	}
 	float		width() const { return _width; }
 	float		height() const { return _height; }
 	// Entity.move(PISTON): a push by a piston, at most 0.51 per axis per tick (limitPistonMovement)
@@ -60,7 +73,15 @@ class Entity {
 	void		discard() { _removed = true; }
 	int			tickCount() const { return _tickCount; }
 	void		tickCountIncrement() { _tickCount++; } // Before each tick (ServerLevel.tickNonPassenger)
-	AABB		boundingBox() const;
+	AABB		boundingBox() const override;
+	// Entity.getEyeY: from its type's eye height (85% of its height by default)
+	double		eyeY() const override { return _position.y + eyeHeight(); }
+	virtual float eyeHeight() const { return _height * 0.85F; }
+	bool		isAlive() const override { return !_removed; }
+	void		pushMotion(const Vec3& impulse) override { push(impulse.x, impulse.y, impulse.z); }
+	Entity*		asEntity() override { return this; }
+	// TraceableEntity.getOwner: who shot, threw or lit it (projectiles, primed TNT), null if none or gone
+	virtual Actor* owner() const { return nullptr; }
 	BlockPos	blockPosition() const { return {Mth::floor(_position.x), Mth::floor(_position.y), Mth::floor(_position.z)}; }
 
 	// Entity.tick; subclasses add their own logic around baseTick
@@ -68,7 +89,7 @@ class Entity {
 	// Entity.checkDespawn: every tick before the entity ticks (even outside ticking chunks)
 	virtual void checkDespawn() {}
 	// Entity.hurtServer: damage from a source. Returns whether it hurt (non-living entities ignore it here)
-	virtual bool hurtServer(const Combat::DamageSource&, float) { return false; }
+	bool hurtServer(const Combat::DamageSource&, float) override { return false; }
 	virtual bool isLiving() const { return false; }
 	// Entity.push(Entity) needs it: pushed by the entities it touches
 	virtual bool isPushable() const { return false; }
@@ -85,6 +106,10 @@ class Entity {
 	// The entity's own data (after its type, written by EntityManager); load reads what save wrote
 	virtual void save(Buffer&) const {}
 	virtual void load(Buffer&) {}
+	// What every entity saves (Entity.saveWithoutId): UUID, position, movement, rotation, fire, fall distance, portal
+	// cooldown. For the entities that aren't living (their own data follows)
+	void		 saveBase(Buffer& buf) const;
+	void		 loadBase(Buffer& buf);
 	void		 setUuid(const UUID& uuid) { _uuid = uuid; }
 	// Shapes.collide(Y) against the collision boxes of the blocks touching `area`: how far `box` can move down (desired
 	// is negative)
@@ -92,6 +117,8 @@ class Entity {
 
 	// Networking: the entity's synced data (Set Entity Data entries, without the 0xFF end), empty if none
 	virtual void writeEntityData(Buffer&) const {}
+	// The value of the Spawn Entity packet's data field (Entity.getData): the XP value of an experience orb, 0 else
+	virtual int entityData() const { return 0; }
 	// Changed synced data only (Set Entity Data after a change). Defaults to everything
 	virtual void writeDirtyEntityData(Buffer& buf) const { writeEntityData(buf); }
 	virtual void clearDirtyEntityData() {}

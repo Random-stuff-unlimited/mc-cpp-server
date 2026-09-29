@@ -50,7 +50,7 @@ Entity* EntityManager::add(std::unique_ptr<Entity> entity) {
 	tracked->chunk		  = chunkKeyOf(tracked->entity->position());
 	index(*tracked);
 	_byId[tracked->entity->id()] = tracked.get();
-	for (const auto& player : _level.server().getGamePlayers()) updateViewer(*tracked, *player);
+	for (const auto& player : _level.players()) updateViewer(*tracked, *player);
 	Entity* added = tracked->entity.get();
 	_entities.push_back(std::move(tracked));
 	return added;
@@ -174,7 +174,7 @@ void EntityManager::unloadChunk(int64_t key) {
 void EntityManager::tick() {
 	processPendingLoads();
 	// Players first: they pick up the items they touch (Player.aiStep)
-	for (const auto& player : _level.server().getGamePlayers()) {
+	for (const auto& player : _level.players()) {
 		if (!player->isDisconnected() && !player->combat().dead && player->getGameMode() != GameMode::Spectator) pickUpItems(*player);
 	}
 	for (size_t i = 0; i < _entities.size(); i++) {
@@ -247,7 +247,7 @@ void EntityManager::spawnFor(Tracked& tracked, Player& player) {
 	spawn.writeUByte(static_cast<uint8_t>(tracked.lastXRot));
 	spawn.writeUByte(static_cast<uint8_t>(tracked.lastYRot));
 	spawn.writeUByte(static_cast<uint8_t>(tracked.lastYHeadRot));
-	spawn.writeVarInt(0); // Entity-specific data
+	spawn.writeVarInt(entity.entityData()); // Entity-specific data (an experience orb's value, 0 otherwise)
 	Packet::send(self, PacketId::Play::Clientbound::ADD_ENTITY, spawn, _level.server());
 
 	// ServerEntity.sendPairingData: the values that aren't the client's defaults, then the attributes it is told about
@@ -268,6 +268,9 @@ void EntityManager::spawnFor(Tracked& tracked, Player& player) {
 			tracked.living->attributes().writeSyncable(attributes, false);
 			Packet::send(self, PacketId::Play::Clientbound::UPDATE_ATTRIBUTES, attributes, _level.server());
 		}
+		// Its equipment (armor, what it holds)
+		Buffer equipment;
+		if (tracked.living->writeEquipment(equipment)) Packet::send(self, PacketId::Play::Clientbound::SET_EQUIPMENT, equipment, _level.server());
 	}
 }
 
@@ -291,7 +294,7 @@ void EntityManager::forgetPlayer(Player* player) {
 
 // Players that changed chunk see the entities around them again (vanilla updates the players that moved)
 void EntityManager::updatePlayerChunks() {
-	for (const auto& player : _level.server().getGamePlayers()) {
+	for (const auto& player : _level.players()) {
 		int64_t chunk = chunkKeyOf({player->getX(), 0, player->getZ()});
 		auto	it	  = _playerChunks.find(player.get());
 		if (it != _playerChunks.end() && it->second == chunk) continue;
@@ -312,7 +315,7 @@ void EntityManager::updatePlayerChunks() {
 	}
 	// Forget the players that left
 	for (auto it = _playerChunks.begin(); it != _playerChunks.end();) {
-		bool present = std::any_of(_level.server().getGamePlayers().begin(), _level.server().getGamePlayers().end(),
+		bool present = std::any_of(_level.players().begin(), _level.players().end(),
 								   [&](const auto& p) { return p.get() == it->first; });
 		if (present) {
 			++it;
@@ -335,7 +338,7 @@ void EntityManager::sendChanges() {
 			unindex(tracked);
 			tracked.chunk = chunk;
 			index(tracked);
-			for (const auto& player : _level.server().getGamePlayers()) updateViewer(tracked, *player);
+			for (const auto& player : _level.players()) updateViewer(tracked, *player);
 		}
 		sendUpdates(tracked);
 	}

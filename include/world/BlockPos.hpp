@@ -20,6 +20,47 @@ namespace Directions {
 	constexpr int OFFSETS[6][3] = {{0, -1, 0}, {0, 1, 0}, {0, 0, -1}, {0, 0, 1}, {-1, 0, 0}, {1, 0, 0}};
 
 	constexpr Direction opposite(Direction direction) { return static_cast<Direction>(static_cast<uint8_t>(direction) ^ 1); }
+	constexpr int		stepX(Direction direction) { return OFFSETS[static_cast<int>(direction)][0]; }
+	constexpr int		stepY(Direction direction) { return OFFSETS[static_cast<int>(direction)][1]; }
+	constexpr int		stepZ(Direction direction) { return OFFSETS[static_cast<int>(direction)][2]; }
+	// Direction.getClockWise / getCounterClockWise around the y axis (horizontal directions only)
+	constexpr Direction clockWise(Direction direction) {
+		switch (direction) {
+		case Direction::North: return Direction::East;
+		case Direction::East: return Direction::South;
+		case Direction::South: return Direction::West;
+		case Direction::West: return Direction::North;
+		default: return direction;
+		}
+	}
+	constexpr Direction counterClockWise(Direction direction) {
+		switch (direction) {
+		case Direction::North: return Direction::West;
+		case Direction::West: return Direction::South;
+		case Direction::South: return Direction::East;
+		case Direction::East: return Direction::North;
+		default: return direction;
+		}
+	}
+	// Direction.get2DDataValue: south 0, west 1, north 2, east 3 (-1 for up and down)
+	constexpr int to2DDataValue(Direction direction) {
+		switch (direction) {
+		case Direction::South: return 0;
+		case Direction::West: return 1;
+		case Direction::North: return 2;
+		case Direction::East: return 3;
+		default: return -1;
+		}
+	}
+	// Direction.from2DDataValue
+	constexpr Direction from2DDataValue(int value) {
+		constexpr Direction BY_2D[4] = {Direction::South, Direction::West, Direction::North, Direction::East};
+		return BY_2D[((value % 4) + 4) % 4];
+	}
+	// Direction.getAxis: 0 x, 1 y, 2 z
+	constexpr int axis(Direction direction) { return direction == Direction::West || direction == Direction::East ? 0 : direction == Direction::Down || direction == Direction::Up ? 1 : 2; }
+	// Direction.toYRot: south 0, west 90, north 180, east 270
+	constexpr float toYRot(Direction direction) { return static_cast<float>((to2DDataValue(direction) & 3) * 90); }
 } // namespace Directions
 
 struct BlockPos {

@@ -150,7 +150,7 @@ void PressurePlateBlock::tick(Level& level, const BlockPos& pos, int state) cons
 	if (signal > 0) checkPressed(level, pos, state, signal);
 }
 
-void PressurePlateBlock::entityInside(Level& level, const BlockPos& pos, int state, Entity*) const {
+void PressurePlateBlock::entityInside(Level& level, const BlockPos& pos, int state, Actor*) const {
 	int signal = signalForState(state);
 	if (signal == 0) checkPressed(level, pos, state, signal);
 }

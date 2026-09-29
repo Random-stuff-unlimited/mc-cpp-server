@@ -6,8 +6,11 @@
 #include "player.hpp"
 #include "world/Chunk.hpp"
 #include "world/Combat.hpp"
+#include "world/Clip.hpp"
 #include "world/Level.hpp"
 #include "world/entity/ItemEntity.hpp"
+#include "world/entity/ExperienceOrb.hpp"
+#include "world/Xp.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -74,12 +77,123 @@ void LivingEntity::setRemainingFireTicks(int ticks) { _remainingFireTicks = tick
 
 bool LivingEntity::isPushable() const { return isAlive() && !const_cast<LivingEntity*>(this)->onClimbable(); }
 
+// ----- Equipment -----
+
+void LivingEntity::applyItemModifiers(const ItemStack& stack, EquipmentSlot slot, bool add) {
+	if (stack.isEmpty()) return;
+	const GameData::ItemProperties* item = _level.gameData().getItemProperties(stack.item);
+	if (!item) return;
+	for (const auto& entry : item->attributeModifiers) {
+		if (!EquipmentSlots::groupContains(entry.slot, slot)) continue;
+		AttributeInstance* instance = _attributes.getInstance(entry.attribute);
+		if (!instance) continue;
+		if (add) {
+			instance->removeModifier(entry.id);
+			instance->addModifier({entry.id, entry.amount, static_cast<AttributeModifier::Operation>(entry.operation)}, false);
+		} else {
+			instance->removeModifier(entry.id);
+		}
+	}
+}
+
+void LivingEntity::detectEquipmentUpdates() {
+	Buffer changes;
+	int	   count = 0;
+	std::vector<int> changed;
+	for (int i = 0; i < EQUIPMENT_SLOT_COUNT; i++) {
+		const ItemStack& now = _equipment[i];
+		const ItemStack& before = _lastEquipment[i];
+		if (now.item == before.item && now.count == before.count && now.components == before.components) continue;
+		EquipmentSlot slot = static_cast<EquipmentSlot>(i);
+		applyItemModifiers(before, slot, false);
+		applyItemModifiers(now, slot, true);
+		_lastEquipment[i] = now;
+		changed.push_back(i);
+	}
+	if (changed.empty()) return;
+	// ClientboundSetEquipmentPacket: the entries, each slot flagged when another follows
+	changes.writeVarInt(_id);
+	for (size_t i = 0; i < changed.size(); i++) {
+		changes.writeUByte(static_cast<uint8_t>(changed[i] | (i + 1 < changed.size() ? 0x80 : 0)));
+		_equipment[changed[i]].write(changes);
+		count++;
+	}
+	_level.entities().broadcast(*this, PacketId::Play::Clientbound::SET_EQUIPMENT, changes);
+}
+
+bool LivingEntity::writeEquipment(Buffer& buf) const {
+	std::vector<int> slots;
+	for (int i = 0; i < EQUIPMENT_SLOT_COUNT; i++) {
+		if (!_equipment[i].isEmpty()) slots.push_back(i);
+	}
+	if (slots.empty()) return false;
+	buf.writeVarInt(_id);
+	for (size_t i = 0; i < slots.size(); i++) {
+		buf.writeUByte(static_cast<uint8_t>(slots[i] | (i + 1 < slots.size() ? 0x80 : 0)));
+		_equipment[slots[i]].write(buf);
+	}
+	return true;
+}
+
+std::string LivingEntity::getLastDamageType() const {
+	if (_lastDamageType.empty() || _level.getGameTime() - _lastDamageStamp > 40) return "";
+	return _lastDamageType;
+}
+
+void LivingEntity::swing(int hand) {
+	Buffer animate;
+	animate.writeVarInt(_id);
+	animate.writeUByte(hand == 0 ? 0 : 3); // SWING_MAIN_HAND, SWING_OFF_HAND
+	_level.entities().broadcast(*this, PacketId::Play::Clientbound::ANIMATE, animate);
+}
+
+bool LivingEntity::isInvertedHealAndHarm() const {
+	return _level.gameData().isInTag("minecraft:entity_type", "minecraft:inverted_healing_and_harm", _typeId);
+}
+
+// ----- Combat memory -----
+
+Actor* LivingEntity::getLastHurtByMob() {
+	if (!_lastHurtByMob.isSet()) return nullptr;
+	Actor* actor = _level.actorByRef(_lastHurtByMob);
+	if (!actor) _lastHurtByMob.clear();
+	return actor;
+}
+
+void LivingEntity::setLastHurtByMob(Actor* attacker) {
+	if (attacker) {
+		_lastHurtByMob			= EntityRef(*attacker);
+		_lastHurtByMobTimestamp = _tickCount;
+	} else {
+		_lastHurtByMob.clear();
+	}
+}
+
+Actor* LivingEntity::getLastHurtMob() { return _lastHurtMob.isSet() ? _level.actorByRef(_lastHurtMob) : nullptr; }
+
+void LivingEntity::setLastHurtMob(Actor* target) {
+	if (target) {
+		_lastHurtMob		  = EntityRef(*target);
+		_lastHurtMobTimestamp = _tickCount;
+	}
+}
+
+bool LivingEntity::hasLineOfSight(Actor& target) {
+	if (target.actorLevel() != &_level) return false;
+	Vec3 from{_position.x, eyeY(), _position.z};
+	Vec3 to{target.position().x, target.eyeY(), target.position().z};
+	if ((to - from).length() > 128.0) return false;
+	return !Clip::clip(_level, from, to, Clip::BlockMode::Collider, Clip::FluidMode::None).hit;
+}
+
 // ----- Tick -----
 
 void LivingEntity::tick() {
 	_resting		 = _rest.valid && restStillHolds();
 	_skipFluidUpdate = _resting;
 	livingBaseTick();
+	if (isRemoved()) return;
+	detectEquipmentUpdates();
 	if (!isRemoved()) aiStep();
 
 	// The body turns toward where it moved
@@ -122,6 +236,8 @@ void LivingEntity::livingBaseTick() {
 	} else {
 		_lastHurtByPlayer = -1;
 	}
+	// The attacker is forgotten after 100 ticks, or when it is gone
+	if (_lastHurtByMob.isSet() && (_tickCount - _lastHurtByMobTimestamp > 100 || !getLastHurtByMob())) _lastHurtByMob.clear();
 }
 
 // Entity.updateFluidOnEyes: water above the eyes, and whether it is a bubble column (air comes from it)
@@ -440,7 +556,7 @@ void LivingEntity::pushEntities() {
 		});
 	}
 	// Players it touches push it (their Player.push(this) is the half that concerns it)
-	for (const auto& player : _level.server().getGamePlayers()) {
+	for (const auto& player : _level.players()) {
 		if (player->isDisconnected() || player->getGameMode() == GameMode::Spectator || player->combat().dead) continue;
 		double half = Player::BB_WIDTH / 2.0;
 		AABB   playerBox{player->getX() - half, player->getY(), player->getZ() - half, player->getX() + half, player->getY() + Player::BB_HEIGHT,
@@ -483,9 +599,14 @@ bool LivingEntity::hurtServer(const Combat::DamageSource& source, float amount) 
 		_hurtDuration = 10;
 		_hurtTime	  = _hurtDuration;
 	}
-	if (source.attacker) {
+	// resolveMobResponsibleForDamage: a living attacker (a player too) is remembered, for 100 ticks
+	if (source.causing && (source.causing->asLiving() || source.causing->isPlayer()) &&
+		!data.isInTag("minecraft:damage_type", "minecraft:no_anger", damageType)) {
+		setLastHurtByMob(source.causing);
+	}
+	if (Player* player = source.attackerPlayer()) {
 		// resolvePlayerResponsibleForDamage
-		_lastHurtByPlayer			= source.attacker->getPlayerID();
+		_lastHurtByPlayer			= player->getPlayerID();
 		_lastHurtByPlayerMemoryTime = PLAYER_MEMORY_TICKS;
 	}
 	if (fullHit) {
@@ -493,20 +614,27 @@ bool LivingEntity::hurtServer(const Combat::DamageSource& source, float amount) 
 		Buffer event;
 		event.writeVarInt(_id);
 		event.writeVarInt(damageType);
-		event.writeVarInt(source.attacker ? source.attacker->getPlayerID() + 1 : 0);
-		event.writeVarInt(source.attacker ? source.attacker->getPlayerID() + 1 : 0);
-		event.writeBool(false); // No source position (sources from entities have none)
+		event.writeVarInt(source.causing ? source.causing->id() + 1 : 0);
+		event.writeVarInt(source.directEntity() ? source.directEntity()->id() + 1 : 0);
+		event.writeBool(source.position.has_value()); // sourcePositionRaw
+		if (source.position) {
+			event.writeDouble(source.position->x);
+			event.writeDouble(source.position->y);
+			event.writeDouble(source.position->z);
+		}
 		_level.entities().broadcast(*this, PacketId::Play::Clientbound::DAMAGE_EVENT, event);
 		if (!tagged("minecraft:no_impact")) hurtMarked = true; // markHurt
 		if (!tagged("minecraft:no_knockback")) {
 			double dx = 0.0, dz = 0.0;
-			if (source.attacker) {
-				dx = source.attacker->getX() - _position.x;
-				dz = source.attacker->getZ() - _position.z;
+			if (std::optional<Vec3> from = source.sourcePosition()) {
+				dx = from->x - _position.x;
+				dz = from->z - _position.z;
 			}
 			knockback(0.4F, dx, dz);
 		}
 	}
+	_lastDamageType	 = source.type;
+	_lastDamageStamp = _level.getGameTime();
 	if (isDeadOrDying()) {
 		if (fullHit) playSound(typeSound("death", "minecraft:entity.generic.death"), 1.0F, voicePitch());
 		die(source);
@@ -569,6 +697,23 @@ void LivingEntity::dropAllDeathLoot(const Combat::DamageSource& source) {
 		item->setPickupDelay(DEFAULT_PICKUP_DELAY);
 		_level.entities().add(std::move(item));
 	}
+	// Its XP, when a player killed it (LivingEntity.dropExperience): split into orbs
+	if (context.killedByPlayer) {
+		int xp = Xp::mobXp(_level.gameData(), _typeId);
+		while (xp > 0) {
+			int split = std::min(20, xp);
+			xp -= split;
+			if (auto orb = ExperienceOrb::create(_level, _position, split)) _level.entities().add(std::move(orb));
+		}
+	}
+}
+
+std::vector<ItemStack> LivingEntity::rollLootTable(const std::string& table, const ItemStack* tool) {
+	LootTables::Context context{_level, blockPosition(), 0};
+	context.hasEntity = true;
+	context.entity	  = this;
+	context.tool	  = tool;
+	return _level.loot().entityDrops(table, context);
 }
 
 // ----- Sounds and events -----
@@ -622,6 +767,27 @@ void LivingEntity::writeData(Buffer& buf, uint32_t mask, bool onlyNonDefault) co
 		buf.writeVarInt(SERIALIZER_FLOAT);
 		buf.writeFloat(_health);
 	}
+}
+
+void LivingEntity::writeByteData(Buffer& buf, int id, uint8_t value) {
+	buf.writeUByte(static_cast<uint8_t>(id));
+	buf.writeVarInt(SERIALIZER_BYTE);
+	buf.writeUByte(value);
+}
+void LivingEntity::writeIntData(Buffer& buf, int id, int value) {
+	buf.writeUByte(static_cast<uint8_t>(id));
+	buf.writeVarInt(SERIALIZER_INT);
+	buf.writeVarInt(value);
+}
+void LivingEntity::writeBoolData(Buffer& buf, int id, bool value) {
+	buf.writeUByte(static_cast<uint8_t>(id));
+	buf.writeVarInt(SERIALIZER_BOOLEAN);
+	buf.writeBool(value);
+}
+void LivingEntity::writeFloatData(Buffer& buf, int id, float value) {
+	buf.writeUByte(static_cast<uint8_t>(id));
+	buf.writeVarInt(SERIALIZER_FLOAT);
+	buf.writeFloat(value);
 }
 
 // ----- Saving -----

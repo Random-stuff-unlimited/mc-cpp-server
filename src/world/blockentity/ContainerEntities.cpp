@@ -138,7 +138,7 @@ int OpenersCounter::playersWithContainerOpen(Level& level, const BlockPos& pos, 
 	double reach = _maxInteractionRange + 4.0;
 	AABB   area{pos.x - reach, pos.y - reach, pos.z - reach, pos.x + 1.0 + reach, pos.y + 1.0 + reach, pos.z + 1.0 + reach};
 	int	   count = 0;
-	for (const auto& player : level.server().getGamePlayers()) {
+	for (const auto& player : level.players()) {
 		if (player->isDisconnected() || player->getGameMode() == GameMode::Spectator) continue;
 		double half = Player::BB_WIDTH / 2.0;
 		AABB   box{player->getX() - half, player->getY(), player->getZ() - half, player->getX() + half, player->getY() + Player::BB_HEIGHT, player->getZ() + half};

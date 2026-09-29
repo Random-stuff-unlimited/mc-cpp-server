@@ -2,6 +2,7 @@
 #define ITEM_USE_HPP
 
 #include "world/BlockPos.hpp"
+#include "world/Clip.hpp"
 #include "world/entity/Geometry.hpp"
 #include "world/item/ItemStack.hpp"
 
@@ -27,6 +28,9 @@ namespace ItemUse {
 
 	// ServerboundUseItemPacket: hand (0 main, 1 offhand), after the rotation was applied
 	Result useItem(Level& level, Player& player, int hand);
+	// ItemUtils.createFilledResult: one of `stack` becomes `result` (a bucket milked), the rest stays in hand; returns
+	// what the hand holds then
+	ItemStack filledResult(Level& level, Player& player, ItemStack stack, ItemStack result);
 	// ServerboundPlayerActionPacket RELEASE_USE_ITEM
 	void releaseUsingItem(Level& level, Player& player);
 	// Every tick, in LivingEntity.tick: the used item's tick, completed when its time is over
@@ -42,12 +46,7 @@ namespace ItemUse {
 	int getUseDuration(const GameData& gameData, const ItemStack& stack);
 
 	// BlockHitResult of a ray cast (Level.clip with ClipContext.Block.OUTLINE)
-	struct HitResult {
-		bool	  hit = false; // Type.BLOCK, else MISS
-		BlockPos  pos;
-		Direction face = Direction::North;
-		Vec3	  location;
-	};
+	using HitResult = Clip::HitResult;
 	// Level.clip from `from` to `to` through the outline shapes, and the fluid sources if sourceFluids
 	// (ClipContext.Fluid.SOURCE_ONLY, else NONE)
 	HitResult clip(Level& level, const Vec3& from, const Vec3& to, bool sourceFluids);

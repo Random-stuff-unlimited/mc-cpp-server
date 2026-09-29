@@ -9,13 +9,14 @@
 #include <vector>
 
 class Buffer;
+class Level;
 class Player;
 class Server;
 
 // Makes players see each other: the tab list (everyone in game) and the player entities within view distance.
 //
-// A player is shown to another when it is in a chunk the other one has in view (square view distance, like the
-// chunks). Visibility is only recomputed when a player changes chunk.
+// A player is shown to another when both are in the same dimension and it is in a chunk the other one has in view
+// (square view distance, like the chunks). Visibility is only recomputed when a player changes chunk or dimension.
 //
 // Like vanilla, movements aren't forwarded as they arrive: every UPDATE_INTERVAL ticks, each player that moved is
 // encoded once (small relative moves when possible), and each viewer receives the movements of all the players it
@@ -35,7 +36,8 @@ class PlayerTracker {
 	void move(Player* player);
 	// Every tick: visibility of the players that changed chunk, and every UPDATE_INTERVAL ticks their movements
 	void tick(int64_t tickCount);
-	// Removes and spawns the player again for the others, at its current position (after respawning)
+	// Removes and spawns the player again for the others, at its current position and in its current dimension
+	// (after respawning or changing dimension)
 	void respawn(Player* player);
 
 	// The player with this entity id, if `viewer` can see it (attacks can only target visible players)
@@ -49,6 +51,7 @@ class PlayerTracker {
   private:
 	struct Tracked {
 		std::shared_ptr<Player>		player;
+		const Level*				level = nullptr; // Its dimension when it was last indexed
 		int							viewDistance;
 		int							chunkX, chunkZ;
 		std::unordered_set<Player*> viewers;			  // Players this one is shown to
@@ -67,7 +70,8 @@ class PlayerTracker {
 
 	Server&											  _server;
 	std::unordered_map<Player*, Tracked>			  _players;
-	std::unordered_map<int64_t, std::vector<Player*>> _cells; // Players by cell
+	// Players by dimension, then by cell
+	std::unordered_map<const Level*, std::unordered_map<int64_t, std::vector<Player*>>> _cells;
 	std::unordered_map<int, Player*>				  _byEntityId;
 	int												  _maxViewDistance = 0; // Of all the players that joined
 	std::vector<Player*>							  _moved;				// Since the last update

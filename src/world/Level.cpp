@@ -1,4 +1,5 @@
 #include "world/Level.hpp"
+#include "world/NaturalSpawner.hpp"
 
 #include "PacketIds.hpp"
 #include "data/GameData.hpp"
@@ -7,14 +8,19 @@
 #include "network/server.hpp"
 #include "player.hpp"
 #include "world/Chunk.hpp"
+#include "world/PoiManager.hpp"
+#include "world/entity/ai/Pathfinder.hpp"
 #include "world/Shapes.hpp"
+#include "world/Survival.hpp"
 #include "world/ChunkStreamer.hpp"
+#include "world/blocks/BlockContext.hpp"
 #include "world/blocks/VanillaBlocks.hpp"
 #include "world/entity/ItemEntity.hpp"
 #include "world/item/FuelValues.hpp"
 #include "world/item/PotionBrewing.hpp"
 
 #include <algorithm>
+#include <fstream>
 #include <chrono>
 #include <cmath>
 
@@ -61,11 +67,15 @@ Level::Level(Server& server, World& world, const GameData& gameData)
 	_waterlogged	= _blocks.property("waterlogged");
 	_simpleWaterlogged.assign(gameData.getBlockCount(), false);
 	for (int id = 0; id < static_cast<int>(gameData.getBlockCount()); id++) _simpleWaterlogged[id] = gameData.isInstanceOf(id, "SimpleWaterloggedBlock");
-	_ultraWarm		   = world.getDimensionName() == "minecraft:the_nether";
+	_blockContext  = std::make_shared<const BlockContext>(gameData);
+	_dimensionType = gameData.getDimension(world.getDimensionName());
+	if (!_dimensionType) throw std::runtime_error("Unknown dimension type " + world.getDimensionName());
+	_ultraWarm		   = _dimensionType->ultraWarm;
+	_poi			   = std::make_unique<PoiManager>(gameData, world.directory() / "poi.dat");
+	_pathTypeCache	   = std::make_unique<PathTypeCache>();
 	_slimeBlock		   = block("minecraft:slime_block");
 	_waterBlockId	   = block("minecraft:water");
 	_bubbleColumnBlock = block("minecraft:bubble_column");
-	_recipes.load(gameData.getDirectory() / "recipes.json", gameData.getDirectory().parent_path() / "recipes", gameData);
 	_cactusBlock	   = block("minecraft:cactus");
 	_loot.load(gameData.getDirectory() / "block_loot_tables.json", gameData);
 	_loot.loadEntities(gameData.getDirectory() / "entity_loot_tables.json");
@@ -85,6 +95,170 @@ Level::Level(Server& server, World& world, const GameData& gameData)
 		_randomTicks[state] = (properties.randomTicking ? RANDOM_BLOCK : 0) | (_fluids->isLava(_fluids->stateOf(static_cast<int>(state)).type) ? RANDOM_FLUID : 0);
 	}
 }
+
+Chunk* Level::loadChunkNow(int chunkX, int chunkZ) {
+	if (Chunk* chunk = chunkAt(chunkX, chunkZ)) return chunk;
+	std::shared_ptr<Chunk> chunk = _world.loadChunkNow(chunkX, chunkZ);
+	if (!chunk) return nullptr;
+	attach(chunk);
+	return chunk.get();
+}
+
+void Level::savePoi() {
+	if (!_poi->isDirty()) return;
+	_poi->setDirty(false);
+	auto				  bytes = std::make_shared<std::vector<uint8_t>>(_poi->encode());
+	std::filesystem::path file	= _poi->file();
+	_world.submitSave([bytes, file] {
+		std::filesystem::path temporary = file;
+		temporary += ".tmp";
+		{
+			std::ofstream out(temporary, std::ios::binary);
+			out.write(reinterpret_cast<const char*>(bytes->data()), static_cast<std::streamsize>(bytes->size()));
+		}
+		std::error_code error;
+		std::filesystem::rename(temporary, file, error);
+	});
+}
+
+void Level::globalLevelEvent(int type, const BlockPos& pos, int eventData) {
+	Vec3 center{pos.x + 0.5, pos.y + 0.5, pos.z + 0.5};
+	for (const auto& player : _server.getGamePlayers()) {
+		if (player->isDisconnected()) continue;
+		Vec3 at = player->position();
+		if (player->level() == this) {
+			// Heard from its direction, 32 blocks away at most
+			if ((center - at).lengthSqr() < 32.0 * 32.0) {
+				at = center;
+			} else {
+				at = at + (center - at).normalize().scale(32.0);
+			}
+		}
+		Buffer data;
+		data.writeInt(type);
+		data.writePosition(Mth::floor(at.x), Mth::floor(at.y), Mth::floor(at.z));
+		data.writeInt(eventData);
+		data.writeBool(true); // Global: no distance attenuation
+		Packet::send(player, PacketId::Play::Clientbound::LEVEL_EVENT, data, _server);
+	}
+}
+
+// ----- Columns, biomes, weather -----
+
+int Level::getHeight(Heightmap type, int x, int z) {
+	Chunk* chunk = chunkAt(x >> 4, z >> 4);
+	if (!chunk) return _minY;
+	static const GameData* cachedData = nullptr;
+	static std::vector<bool> leaves;
+	if (cachedData != &_gameData) {
+		cachedData = &_gameData;
+		leaves	   = _gameData.blockTag("minecraft:leaves");
+	}
+	const auto& sections = chunk->sections();
+	int			column	 = (z & 15) << 4 | (x & 15);
+	for (int s = static_cast<int>(sections.size()) - 1; s >= 0; s--) {
+		const PalettedContainer& blocks = sections[s].blocks;
+		if (blocks.isSingleValue() && _blocks.isAir(static_cast<int>(blocks.singleValue()))) continue;
+		for (int y = 15; y >= 0; y--) {
+			int state = static_cast<int>(blocks.get((y << 8) | column));
+			if (_blocks.isAir(state)) continue;
+			const GameData::StateProperties& props = _gameData.getStateProperties(state);
+			bool counts;
+			switch (type) {
+			case Heightmap::WorldSurface: counts = true; break;
+			case Heightmap::MotionBlocking: counts = props.blocksMotion || props.fluid != 0; break;
+			case Heightmap::MotionBlockingNoLeaves: counts = (props.blocksMotion || props.fluid != 0) && !leaves[_blocks.blockOf(state)]; break;
+			case Heightmap::OceanFloor: counts = props.blocksMotion; break;
+			}
+			if (counts) return _minY + s * 16 + y + 1;
+		}
+	}
+	return _minY;
+}
+
+int Level::getBiomeId(const BlockPos& pos) {
+	Chunk* chunk = chunkAt(pos.chunkX(), pos.chunkZ());
+	if (!chunk) return 0;
+	int y = std::clamp(pos.y, _minY, _maxY - 1);
+	return static_cast<int>(chunk->getBiome(pos.x & 15, y, pos.z & 15));
+}
+
+const GameData::Biome& Level::getBiome(const BlockPos& pos) {
+	static const GameData::Biome PLAINS;
+	const GameData::Biome* biome = _gameData.getBiome(getBiomeId(pos));
+	return biome ? *biome : PLAINS;
+}
+
+bool Level::isRainingAt(const BlockPos& pos) {
+	if (!isRaining() || !canSeeSky(pos)) return false;
+	if (getHeight(Heightmap::MotionBlocking, pos.x, pos.z) > pos.y) return false;
+	// Biome.getPrecipitationAt: rain where it isn't cold enough to snow (the height adjustment of the temperature
+	// isn't ported: the biome's own temperature decides)
+	const GameData::Biome& biome = getBiome(pos);
+	return biome.hasPrecipitation && biome.temperature >= 0.15F;
+}
+
+bool Level::anyPlayerCloseEnoughForSpawning(const BlockPos& pos) {
+	double centerX = (pos.x >> 4) * 16 + 8, centerZ = (pos.z >> 4) * 16 + 8;
+	for (const auto& player : _players) {
+		if (player->isDisconnected() || player->isSpectator()) continue;
+		double dx = player->getX() - centerX, dz = player->getZ() - centerZ;
+		if (dx * dx + dz * dz < 128.0 * 128.0) return true;
+	}
+	return false;
+}
+
+int Level::difficulty() const { return static_cast<int>(Survival::difficulty(_server)); }
+
+float Level::getMoonBrightness() const {
+	static constexpr float PER_PHASE[8] = {1.0F, 0.75F, 0.5F, 0.25F, 0.0F, 0.25F, 0.5F, 0.75F};
+	int64_t				   day		   = _world.getDayTime();
+	return PER_PHASE[static_cast<int>((day / 24000 % 8 + 8) % 8)];
+}
+
+DifficultyInstance Level::getCurrentDifficultyAt(const BlockPos& pos) {
+	int64_t inhabited = 0;
+	float	moon	  = 0.0F;
+	if (Chunk* chunk = chunkAt(pos.chunkX(), pos.chunkZ())) {
+		moon	  = getMoonBrightness();
+		inhabited = chunk->inhabitedTime();
+	}
+	return DifficultyInstance(difficulty(), _world.getDayTime(), inhabited, moon);
+}
+
+// ----- Players -----
+
+void Level::addPlayer(const std::shared_ptr<Player>& player) {
+	if (std::find(_players.begin(), _players.end(), player) == _players.end()) _players.push_back(player);
+}
+
+void Level::removePlayer(Player* player) {
+	auto it = std::find_if(_players.begin(), _players.end(), [player](const auto& p) { return p.get() == player; });
+	if (it == _players.end()) return;
+	_players.erase(it); // Keeps the order: the players tick in the order they joined
+	_entities.forgetPlayer(player);
+}
+
+void Level::broadcastToChunk(int chunkX, int chunkZ, int packetId, Buffer& data, const Player* except) {
+	std::vector<uint8_t> frame;
+	for (const auto& player : _players) {
+		if (player.get() == except || player->isDisconnected()) continue;
+		ChunkStreamer* streamer = player->getChunkStreamer();
+		if (!streamer || !streamer->hasChunk(chunkX, chunkZ)) continue;
+		if (frame.empty()) frame = Packet::buildFrame(packetId, data.getData(), _server.getConfig().getCompressionThreshold());
+		Packet::sendFrame(player, frame, _server);
+	}
+}
+
+void Level::broadcastToLevel(int packetId, Buffer& data) {
+	if (_players.empty()) return;
+	std::vector<uint8_t> frame = Packet::buildFrame(packetId, data.getData(), _server.getConfig().getCompressionThreshold());
+	for (const auto& player : _players) {
+		if (!player->isDisconnected()) Packet::sendFrame(player, frame, _server);
+	}
+}
+
+Level::~Level() = default;
 
 // ----- Chunks -----
 
@@ -117,6 +291,7 @@ void Level::attach(const std::shared_ptr<Chunk>& chunk) {
 		if (it->second == chunk) return;
 		detach(key);
 	}
+	_poi->onChunkLoaded(*chunk); // Its points of interest checked against its blocks
 	chunk->blockTicks().unpack(getGameTime());
 	chunk->fluidTicks().unpack(getGameTime());
 	_blockTicks.addContainer(key, &chunk->blockTicks());
@@ -217,6 +392,12 @@ int Level::lightAt(const BlockPos& pos, bool sky) {
 
 int Level::getRawBrightness(const BlockPos& pos, int skyDarken) { return std::max(lightAt(pos, true) - skyDarken, lightAt(pos, false)); }
 
+float Level::getLightLevelDependentMagicValue(const BlockPos& pos) {
+	float f = getMaxLocalRawBrightness(pos) / 15.0F;
+	float g = f / (4.0F - 3.0F * f);
+	return Mth::lerp(dimensionType().ambientLight, g, 1.0F);
+}
+
 bool Level::shouldTickBlocksAt(const BlockPos& pos) {
 	Chunk* chunk = chunkAt(pos.chunkX(), pos.chunkZ());
 	return chunk && chunk->isTicking();
@@ -258,6 +439,8 @@ int Level::setBlockInChunk(Chunk& chunk, const BlockPos& pos, int state, int fla
 		if (old == state) return -1;
 		chunk.setBlock(pos.x & 15, pos.y, pos.z & 15, static_cast<uint32_t>(state)); // Marks it for saving
 	}
+	_poi->onBlockChanged(pos, old, state); // ServerLevel.onBlockStateChange
+	_pathTypeCache->invalidate(pos);
 	std::vector<uint16_t>& counts = chunk.randomTickingCounts();
 	if (!counts.empty()) {
 		uint16_t& count = counts[(pos.y - _minY) >> 4];
@@ -345,6 +528,16 @@ void Level::dropFromPlayer(Player& player, ItemStack stack, bool) {
 	lift -= _random.nextFloat();
 	item->setDeltaMovement({-sinYaw * cosPitch * 0.3f + std::cos(angle) * spread, -sinPitch * 0.3f + 0.1f + lift * 0.1f,
 							cosYaw * cosPitch * 0.3f + std::sin(angle) * spread});
+	_entities.add(std::move(item));
+}
+
+void Level::dropRandomlyFromPlayer(Player& player, ItemStack stack) {
+	if (stack.isEmpty()) return;
+	auto item = ItemEntity::create(*this, {player.getX(), player.getY() + 1.62 - 0.3f, player.getZ()}, std::move(stack));
+	item->setPickupDelay(40);
+	float speed = _random.nextFloat() * 0.5F;
+	float angle = _random.nextFloat() * (static_cast<float>(M_PI) * 2.0f);
+	item->setDeltaMovement({-Mth::sin(angle) * speed, 0.2F, Mth::cos(angle) * speed});
 	_entities.add(std::move(item));
 }
 
@@ -585,7 +778,7 @@ void Level::playSoundAt(Player* except, double x, double y, double z, const std:
 	// PlayerList.broadcast: 16 blocks, more for louder sounds
 	double				 range = volume > 1.0F ? 16.0 * volume : 16.0;
 	std::vector<uint8_t> frame;
-	for (const auto& player : _server.getGamePlayers()) {
+	for (const auto& player : _players) {
 		if (player.get() == except) continue;
 		double dx = x - player->getX(), dy = y - player->getY(), dz = z - player->getZ();
 		if (dx * dx + dy * dy + dz * dz >= range * range) continue;
@@ -594,9 +787,46 @@ void Level::playSoundAt(Player* except, double x, double y, double z, const std:
 	}
 }
 
+std::vector<Actor*> Level::actorsIn(const AABB& box, const Actor* except) {
+	std::vector<Actor*> found;
+	_entities.forEachIn(box, [&](Entity& entity) {
+		if (&entity != except) found.push_back(&entity);
+	});
+	for (const auto& player : _players) {
+		if (player.get() == except || player->isDisconnected()) continue;
+		if (player->boundingBox().intersects(box)) found.push_back(player.get());
+	}
+	return found;
+}
+
+Actor* Level::actorById(int id) {
+	if (Entity* entity = _entities.byId(id)) return entity;
+	for (const auto& player : _players) {
+		if (player->getPlayerID() == id && !player->isDisconnected()) return player.get();
+	}
+	return nullptr;
+}
+
+Actor* Level::actorByRef(const EntityRef& ref) {
+	if (!ref.isSet()) return nullptr;
+	if (ref.id >= 0) {
+		Actor* actor = actorById(ref.id);
+		return actor && actor->uuid() == ref.uuid ? actor : nullptr;
+	}
+	// Known by its UUID only (loaded from a save)
+	Actor* result = nullptr;
+	_entities.forEach([&](Entity& entity) {
+		if (!result && !entity.isRemoved() && entity.uuid() == ref.uuid) result = &entity;
+	});
+	for (const auto& player : _players) {
+		if (!result && player->uuid() == ref.uuid && !player->isDisconnected()) result = player.get();
+	}
+	return result;
+}
+
 int Level::countEntities(const AABB& box, bool livingOnly) {
 	int count = 0;
-	for (const auto& player : _server.getGamePlayers()) {
+	for (const auto& player : _players) {
 		if (player->isDisconnected() || player->getGameMode() == GameMode::Spectator || player->combat().dead) continue;
 		double half = Player::BB_WIDTH / 2.0;
 		AABB   playerBox{player->getX() - half, player->getY(), player->getZ() - half, player->getX() + half, player->getY() + Player::BB_HEIGHT,
@@ -620,7 +850,7 @@ bool Level::hasBlockCollision(const AABB& box) {
 	return false;
 }
 
-void Level::checkInsideBlocks(const AABB& box, Entity* entity) {
+void Level::checkInsideBlocks(const AABB& box, Actor* entity) {
 	AABB inside = box.deflate(1.0E-5);
 	for (int x = Mth::floor(inside.minX); x <= Mth::floor(inside.maxX); x++) {
 		for (int y = Mth::floor(inside.minY); y <= Mth::floor(inside.maxY); y++) {
@@ -681,16 +911,17 @@ void Level::tickScheduled() {
 
 void Level::updateSkyBrightness() {
 	// DimensionType.timeOfDay: the nether and the end have a fixed time
-	int64_t time = _world.getDayTime();
-	if (_world.getDimensionName() == "minecraft:the_nether") time = 18000;
-	if (_world.getDimensionName() == "minecraft:the_end") time = 6000;
+	int64_t time = _dimensionType->fixedTime ? *_dimensionType->fixedTime : _world.getDayTime();
 	double frac		 = time / 24000.0 - 0.25;
 	frac			-= std::floor(frac);
 	double eased	 = 0.5 - std::cos(frac * M_PI) / 2.0;
 	float  timeOfDay = static_cast<float>(frac * 2.0 + eased) / 3.0F;
-	// No weather yet: rain and thunder levels are 0
-	double light = 0.5 + 2.0 * std::clamp(static_cast<double>(Mth::cos(timeOfDay * static_cast<float>(M_PI * 2))), -0.25, 0.25);
-	_skyDarken	 = static_cast<int>((1.0 - light) * 11.0);
+	// Rain and thunder darken the sky (getThunderLevel is the thunder level times the rain level)
+	float  rainLevel = _world.rainLevel();
+	double rain		 = 1.0 - rainLevel * 5.0F / 16.0;
+	double thunder	 = 1.0 - _world.thunderLevel() * rainLevel * 5.0F / 16.0;
+	double light	 = 0.5 + 2.0 * std::clamp(static_cast<double>(Mth::cos(timeOfDay * static_cast<float>(M_PI * 2))), -0.25, 0.25);
+	_skyDarken		 = static_cast<int>((1.0 - light * rain * thunder) * 11.0);
 }
 
 BlockPos Level::getBlockRandomPos(int x, int y, int z, int yMask) {
@@ -714,9 +945,23 @@ int Level::getLightBlockInto(int from, int to, Direction direction, int lightBlo
 }
 
 void Level::tickChunks() {
+	// ServerChunkCache.tickChunks: the chunks near a player count the time spent there (local difficulty)
+	for (const auto& [key, chunk] : _chunks) {
+		if (!chunk->isUnloaded() && chunk->isTicking() && anyPlayerCloseEnoughForSpawning({chunk->x() * 16, 0, chunk->z() * 16})) {
+			chunk->incrementInhabitedTime(1);
+		}
+	}
+	// NaturalSpawner, before the random ticks (ServerChunkCache.tickChunks): monsters unless peaceful
+	if (_mobSpawning && !_players.empty()) NaturalSpawner::tick(*this, true, difficulty() != 0);
 	if (_randomTickSpeed <= 0) return;
 	for (const auto& [key, chunk] : _chunks) {
 		if (!chunk->isUnloaded() && chunk->isTicking()) tickChunk(*chunk, _randomTickSpeed);
+	}
+}
+
+void Level::forEachTickingChunk(const std::function<void(Chunk&)>& f) {
+	for (const auto& [key, chunk] : _chunks) {
+		if (!chunk->isUnloaded() && chunk->isTicking()) f(*chunk);
 	}
 }
 
@@ -787,7 +1032,7 @@ void Level::sendBlockEvent(const BlockEvent& event) {
 	data.writeUByte(static_cast<uint8_t>(event.data));
 	data.writeVarInt(event.block);
 	std::vector<uint8_t> frame;
-	for (const auto& player : _server.getGamePlayers()) {
+	for (const auto& player : _players) {
 		if (!withinEventRadius(*player, event.pos)) continue;
 		if (frame.empty()) frame = Packet::buildFrame(PacketId::Play::Clientbound::BLOCK_EVENT, data.getData(), _server.getConfig().getCompressionThreshold());
 		Packet::sendFrame(player, frame, _server);
@@ -801,7 +1046,7 @@ void Level::levelEvent(Player* except, int type, const BlockPos& pos, int eventD
 	data.writeInt(eventData);
 	data.writeBool(false); // Not global
 	std::vector<uint8_t> frame;
-	for (const auto& player : _server.getGamePlayers()) {
+	for (const auto& player : _players) {
 		if (player.get() == except || !withinEventRadius(*player, pos)) continue;
 		if (frame.empty()) frame = Packet::buildFrame(PacketId::Play::Clientbound::LEVEL_EVENT, data.getData(), _server.getConfig().getCompressionThreshold());
 		Packet::sendFrame(player, frame, _server);
@@ -824,7 +1069,7 @@ void Level::sendChanges() {
 			Chunk* chunk  = chunkAt(chunkX, chunkZ);
 			if (!chunk) continue;
 			Buffer packet(_world.lightUpdatePacket(*chunk, change));
-			_server.broadcastToChunk(chunkX, chunkZ, PacketId::Play::Clientbound::LIGHT_UPDATE, packet);
+			broadcastToChunk(chunkX, chunkZ, PacketId::Play::Clientbound::LIGHT_UPDATE, packet);
 		}
 	}
 
@@ -848,7 +1093,7 @@ void Level::sendChanges() {
 			for (uint16_t local : positions) packet.writeVarLong(static_cast<int64_t>(stateAt(local)) << 12 | local);
 			packetId = PacketId::Play::Clientbound::SECTION_BLOCKS_UPDATE;
 		}
-		_server.broadcastToChunk(sectionX, sectionZ, packetId, packet);
+		broadcastToChunk(sectionX, sectionZ, packetId, packet);
 		// ChunkHolder.broadcastBlockEntityIfNeeded: the changed blocks' block entities that have an update packet
 		for (uint16_t local : positions) {
 			BlockPos	 at{sectionX * 16 + (local >> 8), sectionY * 16 + (local & 15), sectionZ * 16 + ((local >> 4) & 15)};
@@ -860,7 +1105,7 @@ void Level::sendChanges() {
 			std::vector<uint8_t> tag;
 			entity->writeUpdateTag(tag);
 			data.writeBytes(tag);
-			_server.broadcastToChunk(sectionX, sectionZ, PacketId::Play::Clientbound::BLOCK_ENTITY_DATA, data);
+			broadcastToChunk(sectionX, sectionZ, PacketId::Play::Clientbound::BLOCK_ENTITY_DATA, data);
 		}
 	}
 	_changedSections.clear();

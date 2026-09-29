@@ -115,6 +115,28 @@ void LootTables::createItems(const json& entry, const json& pool, Context& conte
 		return;
 	}
 	// ----- End of container-like blocks -----
+	if (entry.value("type", "") == "minecraft:loot_table") {
+		// NestedLootTable: another table by name (or inline), its items getting this entry's functions and the pool's
+		const json& value = entry["value"];
+		const json* table = nullptr;
+		if (value.is_string()) {
+			auto it = _entityTables.find(value.get<std::string>());
+			if (it != _entityTables.end()) table = &it->second;
+		} else {
+			table = &value;
+		}
+		if (!table) return;
+		for (ItemStack stack : drops(*table, context)) {
+			for (const json* functions : {&entry, &pool}) {
+				if (!functions->contains("functions")) continue;
+				for (const json& function : (*functions)["functions"]) {
+					if (conditionsPass(function, context)) applyFunction(function, stack, context);
+				}
+			}
+			out.push_back(std::move(stack));
+		}
+		return;
+	}
 	if (entry.value("type", "") != "minecraft:item") return;
 	int item = _gameData->getStaticId("minecraft:item", entry.value("name", ""));
 	if (item <= 0) return;
@@ -267,27 +289,24 @@ bool LootTables::condition(const json& c, Context& context) const {
 }
 
 bool LootTables::entityMatches(const json& predicate, const std::string& which, Context& context) const {
-	// Attackers are players (the only ones that can hurt entities yet): "attacker" and "direct_attacker" have no
-	// equipment or type the tables ask about
-	if (which != "this") {
-		if (!context.damage || !context.damage->attacker) return false;
-		for (const auto& [key, value] : predicate.items()) {
-			if (key != "type") return false;
-			std::string type = value.get<std::string>();
-			int			player = _gameData->getStaticId("minecraft:entity_type", "minecraft:player");
-			if (type.rfind('#', 0) == 0 ? !_gameData->isInTag("minecraft:entity_type", type.substr(1), player) : type != "minecraft:player") return false;
-		}
-		return true;
+	// LootContext.EntityTarget: "this" (the entity that died), "attacker" (the one responsible), "direct_attacker"
+	const Actor* actor = nullptr;
+	if (which == "this") {
+		actor = context.entity;
+	} else if (context.damage) {
+		actor = which == "attacker" ? context.damage->causing : context.damage->directEntity();
 	}
-	const LivingEntity& entity = *context.entity;
+	if (!actor) return false;
+	const LivingEntity* living = actor->asLiving();
 	for (const auto& [key, value] : predicate.items()) {
 		if (key == "flags") {
 			for (const auto& [flag, expected] : value.items()) {
 				bool actual;
 				if (flag == "is_on_fire") {
-					actual = entity.isOnFire();
+					if (!living) return false;
+					actual = living->isOnFire();
 				} else if (flag == "is_baby") {
-					actual = false; // No babies yet
+					actual = living && living->isBaby();
 				} else {
 					return false;
 				}
@@ -295,12 +314,20 @@ bool LootTables::entityMatches(const json& predicate, const std::string& which, 
 			}
 		} else if (key == "type") {
 			std::string type = value.get<std::string>();
-			if (type.rfind('#', 0) == 0 ? !_gameData->isInTag("minecraft:entity_type", type.substr(1), entity.typeId())
-										: _gameData->getStaticId("minecraft:entity_type", type) != entity.typeId()) {
+			if (type.rfind('#', 0) == 0 ? !_gameData->isInTag("minecraft:entity_type", type.substr(1), actor->typeId())
+										: _gameData->getStaticId("minecraft:entity_type", type) != actor->typeId()) {
 				return false;
 			}
+		} else if (key == "components") {
+			// The entity's components (a sheep's color, a chicken's variant): exactly these values
+			if (!living) return false;
+			for (const auto& [component, expected] : value.items()) {
+				if (!expected.is_string() || living->lootComponent(component) != expected.get<std::string>()) return false;
+			}
+		} else if (key == "type_specific") {
+			if (!living || !living->lootTypeSpecific(value)) return false;
 		} else {
-			return false; // Vehicles, components, type-specific data: not ported
+			return false; // Vehicles and the rest: not ported
 		}
 	}
 	return true;

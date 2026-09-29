@@ -3,7 +3,13 @@
 
 #include "lib/UUID.hpp"
 #include "network/server.hpp"
+#include "PacketIds.hpp"
+#include "network/buffer.hpp"
+#include "network/packet.hpp"
 #include "world/ChunkStreamer.hpp"
+#include "world/Combat.hpp"
+#include "world/Level.hpp"
+#include "world/Survival.hpp"
 
 #include <chrono>
 #include <string>
@@ -73,3 +79,41 @@ PlayerConfig::PlayerConfig()
 	  _allowServerListings(true) {}
 
 PlayerConfig::~PlayerConfig() {}
+
+// ----- Actor -----
+
+int Player::typeId() const {
+	static int playerType = -2;
+	if (playerType == -2 && _level) playerType = _level->gameData().getStaticId("minecraft:entity_type", "minecraft:player");
+	return playerType < 0 ? -1 : playerType;
+}
+
+AABB Player::boundingBox() const {
+	// Avatar.POSES: the size of each pose
+	double width = BB_WIDTH, height = BB_HEIGHT;
+	switch (_survival.pose) {
+	case Pose::Crouching: height = 1.5F; break;
+	case Pose::Swimming:
+	case Pose::FallFlying:
+	case Pose::SpinAttack: height = 0.6F; break;
+	case Pose::Sleeping:
+	case Pose::Dying: width = height = 0.2F; break;
+	default: break;
+	}
+	double half = width / 2.0;
+	return {_pos.x - half, _pos.y, _pos.z - half, _pos.x + half, _pos.y + height, _pos.z + half};
+}
+
+double Player::eyeY() const { return _pos.y + Survival::eyeHeight(*this); }
+
+bool Player::hurtServer(const Combat::DamageSource& source, float amount) { return Combat::damage(_server, *this, amount, source); }
+
+void Player::igniteForTicks(int ticks) { Survival::igniteForTicks(*this, ticks); }
+
+void Player::pushMotion(const Vec3& impulse) {
+	if (isDisconnected()) return;
+	Buffer motion;
+	motion.writeVarInt(_playerId);
+	motion.writeLpVec3(impulse.x, impulse.y, impulse.z);
+	_server.getPlayerTracker().broadcast(this, PacketId::Play::Clientbound::SET_ENTITY_MOTION, motion, true);
+}

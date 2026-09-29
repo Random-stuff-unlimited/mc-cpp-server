@@ -23,6 +23,8 @@ class UUID {
 	void	 setLeastSigBits(uint64_t val);
 
 	std::string toString() const;
+	bool		operator==(const UUID& other) const { return _mostSigBits == other._mostSigBits && _leastSigBits == other._leastSigBits; }
+	bool		operator!=(const UUID& other) const { return !(*this == other); }
 
 	void		readFromBuffer(Buffer& buf);
 	void		writeToBuffer(Buffer& buf) const;

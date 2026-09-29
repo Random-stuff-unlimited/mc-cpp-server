@@ -12,7 +12,9 @@ class Buffer;
 // Ids (minecraft:attribute registry) of the attributes the game logic reads (vanilla's Attributes holders)
 struct AttributeIds {
 	int armor, armorToughness, attackDamage, attackKnockback, fallDamageMultiplier, followRange, gravity, jumpStrength, knockbackResistance,
-			maxHealth, movementEfficiency, movementSpeed, oxygenBonus, safeFallDistance, scale, stepHeight, waterMovementEfficiency;
+			maxHealth, movementEfficiency, movementSpeed, oxygenBonus, safeFallDistance, scale, stepHeight, waterMovementEfficiency,
+			explosionKnockbackResistance, attackSpeed, flyingSpeed, luck, spawnReinforcements, temptRange, burningTime, sweepingDamageRatio,
+			miningEfficiency, blockBreakSpeed, submergedMiningSpeed, sneakingSpeed;
 
 	// Resolved once from the game data
 	static const AttributeIds& get(const GameData& gameData);

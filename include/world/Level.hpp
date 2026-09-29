@@ -2,10 +2,12 @@
 #define LEVEL_HPP
 
 #include "data/BlockRegistry.hpp"
+#include "data/GameData.hpp"
 #include "lib/JavaRandom.hpp"
 #include "world/BlockBehavior.hpp"
 #include "world/Fluids.hpp"
 #include "world/BlockPos.hpp"
+#include "world/DifficultyInstance.hpp"
 #include "world/LevelTicks.hpp"
 #include "world/NeighborUpdater.hpp"
 #include "world/entity/EntityManager.hpp"
@@ -24,6 +26,10 @@
 #include <unordered_set>
 #include <vector>
 
+class Buffer;
+class PathTypeCache;
+class PoiManager;
+struct BlockContext;
 class Chunk;
 class FuelValues;
 class GameData;
@@ -57,8 +63,12 @@ class Level : public NeighborUpdateTarget {
 	static constexpr int MAX_TICKS_PER_TICK					 = 65536;
 
 	Level(Server& server, World& world, const GameData& gameData);
+	~Level() override;
 
 	const BlockRegistry& blocks() const { return _blocks; }
+	// The property and value ids the block behaviors share, and their common questions (direction of a state...)
+	const BlockContext&	 blockContext() const { return *_blockContext; }
+	std::shared_ptr<const BlockContext> blockContextShared() const { return _blockContext; }
 	BlockBehaviors&		 behaviors() { return _behaviors; }
 	// gamedata/recipes.json, then the recipes/ folder beside gamedata/
 	const RecipeManager& recipes() const { return _recipes; }
@@ -66,6 +76,29 @@ class Level : public NeighborUpdateTarget {
 	int64_t				 getGameTime() const { return _world.getGameTime(); }
 	// The dimension this level is: the world's name ("minecraft:overworld")
 	const std::string& dimensionName() const { return _world.getDimensionName(); }
+	// Its dimension type (DimensionType): sky light, ceiling, fixed time, beds, respawn anchors...
+	const GameData::Dimension& dimensionType() const { return *_dimensionType; }
+	World&				 world() { return _world; }
+	int64_t				 getDayTime() const { return _world.getDayTime(); }
+	// Level.isBrightOutside: daytime in a dimension whose time moves
+	bool				 isBrightOutside() const { return !_dimensionType->fixedTime && _skyDarken < 4; }
+	bool				 isDarkOutside() const { return !isBrightOutside(); }
+	// The weather here (Level.isRaining / isThundering): its rain and thunder levels
+	bool				 isRaining() const { return _world.isRaining(); }
+	bool				 isThundering() const { return _world.isThundering(); }
+	float				 getRainLevel() const { return _world.rainLevel(); }
+	float				 getThunderLevel() const { return _world.thunderLevel(); }
+
+	// ----- Players (game thread) -----
+
+	// The players in this dimension (ServerLevel.players), kept by Server as they join, leave or change dimension
+	const std::vector<std::shared_ptr<Player>>& players() const { return _players; }
+	void addPlayer(const std::shared_ptr<Player>& player);
+	void removePlayer(Player* player);
+	// Sends a packet to every player of this level that has this chunk, except `except`
+	void broadcastToChunk(int chunkX, int chunkZ, int packetId, Buffer& data, const Player* except = nullptr);
+	// Sends a packet to every player of this level (PlayerList.broadcastAll(packet, dimension))
+	void broadcastToLevel(int packetId, Buffer& data);
 	Server&				 server() { return _server; }
 	const GameData&		 gameData() const { return _gameData; }
 	EntityManager&		 entities() { return _entities; }
@@ -76,6 +109,8 @@ class Level : public NeighborUpdateTarget {
 	// Level.addFreshEntity: the entity joins the level and the players around see it
 	Entity*				 addFreshEntity(std::unique_ptr<Entity> entity) { return _entities.add(std::move(entity)); }
 	int					 minY() const { return _minY; }
+	// Level.getSeaLevel
+	int					 seaLevel() { return _world.getSeaLevel(); }
 	int					 maxY() const { return _maxY; } // Exclusive
 	// Nether-like dimension: lava flows faster and further
 	bool isUltraWarm() const { return _ultraWarm; }
@@ -105,9 +140,36 @@ class Level : public NeighborUpdateTarget {
 	int	 getRawBrightness(const BlockPos& pos, int skyDarken = 0);
 	// Block light alone (getBrightness(LightLayer.BLOCK))
 	int	 getBlockLight(const BlockPos& pos) { return lightAt(pos, false); }
+	// Sky light alone, not darkened (getBrightness(LightLayer.SKY))
+	int	 getSkyLight(const BlockPos& pos) { return lightAt(pos, true); }
 	// Full sky light here (LevelReader.canSeeSky)
 	bool canSeeSky(const BlockPos& pos) { return lightAt(pos, true) >= 15; }
+	// Heightmap.Types: which blocks count for the height of a column
+	enum class Heightmap { WorldSurface, MotionBlocking, MotionBlockingNoLeaves, OceanFloor };
+	// Level.getHeight(type, x, z): one above the highest block of the column that counts, minY if none (or unloaded)
+	int	 getHeight(Heightmap type, int x, int z);
+	// The biome at a position (minecraft:worldgen/biome synced id): the chunk's noise biome of that 4x4x4 cell
+	int	 getBiomeId(const BlockPos& pos);
+	const GameData::Biome& getBiome(const BlockPos& pos);
+	// Level.isRainingAt: rain falls on this block (raining, open sky, nothing above, a biome where it rains)
+	bool isRainingAt(const BlockPos& pos);
+	// ChunkMap.anyPlayerCloseEnoughForSpawning: a player (not a spectator) within 128 blocks of the chunk's center
+	bool anyPlayerCloseEnoughForSpawning(const BlockPos& pos);
+	// The world's difficulty (0 peaceful, 1 easy, 2 normal, 3 hard)
+	int	 difficulty() const;
+	// Level.getCurrentDifficultyAt: the local difficulty
+	DifficultyInstance getCurrentDifficultyAt(const BlockPos& pos);
+	// Level.getMoonBrightness: 1 at full moon, 0 at new moon
+	float getMoonBrightness() const;
 	bool hasChunkAt(const BlockPos& pos) { return chunkAt(pos.chunkX(), pos.chunkZ()) != nullptr; }
+	// The chunk, loaded right now if it isn't (World::loadChunkNow); nullptr only once the world is shut down
+	Chunk* loadChunkNow(int chunkX, int chunkZ);
+	// ServerLevel.getPathTypeCache: the path type of block positions, for the mobs' pathfinding
+	PathTypeCache& pathTypeCache() { return *_pathTypeCache; }
+	// The points of interest of this dimension (nether portals, beds, job sites...)
+	PoiManager& poi() { return *_poi; }
+	// Saves poi.dat on the I/O threads when it changed (with the autosave)
+	void savePoi();
 	// The chunk at these chunk coordinates if it is loaded, nullptr otherwise
 	Chunk* loadedChunk(int chunkX, int chunkZ) { return chunkAt(chunkX, chunkZ); }
 	bool isOutsideBuildHeight(int y) const { return y < _minY || y >= _maxY; }
@@ -117,6 +179,10 @@ class Level : public NeighborUpdateTarget {
 	int	 skyDarken() const { return _skyDarken; }
 	// LevelReader.getMaxLocalRawBrightness: the light with the sky darkened by the time of day
 	int	 getMaxLocalRawBrightness(const BlockPos& pos) { return getRawBrightness(pos, _skyDarken); }
+	// LevelReader.getLightLevelDependentMagicValue: that light made a 0-1 value, raised by the dimension's ambient light
+	float getLightLevelDependentMagicValue(const BlockPos& pos);
+	// LevelReader.getPathfindingCostFromLightLevels
+	float getPathfindingCostFromLightLevels(const BlockPos& pos) { return getLightLevelDependentMagicValue(pos) - 0.5F; }
 	// LightEngine.getLightBlockInto: light absorbed going from `from` into `to` (its neighbor in `direction`), 16 if
 	// their shapes close the face between them
 	int	 getLightBlockInto(int from, int to, Direction direction, int lightBlock) const;
@@ -145,6 +211,8 @@ class Level : public NeighborUpdateTarget {
 	void popResource(const BlockPos& pos, ItemStack stack);
 	// LivingEntity.drop: an item thrown from the player's eyes, forward
 	void dropFromPlayer(Player& player, ItemStack stack, bool traceable);
+	// Player.drop(stack, true, ...): the same from the player's eyes in a random direction (its items when it dies)
+	void dropRandomlyFromPlayer(Player& player, ItemStack stack);
 	// Entity phase of the tick (items...), and their changes to the players at the end of it
 	void tickEntities() { _entities.tick(); }
 	void sendEntityChanges() { _entities.sendChanges(); }
@@ -221,10 +289,16 @@ class Level : public NeighborUpdateTarget {
 	}
 	void playSoundAt(Player* except, double x, double y, double z, const std::string& sound, SoundSource source, float volume = 1.0F,
 					 float pitch = 1.0F);
+	// Level.getEntities(except, box): the entities and players of this level touching the box, but `except`
+	std::vector<Actor*> actorsIn(const AABB& box, const Actor* except = nullptr);
+	// The entity or player with this id in this level, nullptr if none
+	Actor*				actorById(int id);
+	// An EntityRef resolved: the same entity (same UUID) if it is still in this level
+	Actor*				actorByRef(const EntityRef& ref);
 	// Entities touching the box (EntitySelector.NO_SPECTATORS): players and the other entities, or living ones only
 	int	 countEntities(const AABB& box, bool livingOnly);
 	// Entity.checkInsideBlocks: the blocks whose cell the box touches learn it (pressure plates)
-	void checkInsideBlocks(const AABB& box, Entity* entity);
+	void checkInsideBlocks(const AABB& box, Actor* actor);
 	// Level.noCollision (blocks only): whether a block's collision shape overlaps the box
 	bool hasBlockCollision(const AABB& box);
 
@@ -240,6 +314,8 @@ class Level : public NeighborUpdateTarget {
 	void blockEvent(const BlockPos& pos, int block, int type, int data);
 	// Particles and sounds (Level Event packet) for the players within 64 blocks, except `except`
 	void levelEvent(Player* except, int type, const BlockPos& pos, int data);
+	// ServerLevel.globalLevelEvent: heard by every player of the server, from the direction of pos in this level
+	void globalLevelEvent(int type, const BlockPos& pos, int data);
 
 	// ----- Tick phases, in vanilla's order (see Server::tick) -----
 
@@ -248,6 +324,11 @@ class Level : public NeighborUpdateTarget {
 	void tickScheduled(); // Block ticks, then fluid ticks
 	// Random ticks of the ticking chunks (ServerChunkCache.tickChunks / ServerLevel.tickChunk)
 	void tickChunks();
+	// The chunks that tick (loaded, lit, with a ticket), in no particular order
+	void forEachTickingChunk(const std::function<void(Chunk&)>& f);
+	// The doMobSpawning game rule
+	bool mobSpawning() const { return _mobSpawning; }
+	void setMobSpawning(bool spawning) { _mobSpawning = spawning; }
 	void runBlockEvents();
 	// Light and block changes of this tick to the players that have the chunks
 	void sendChanges();
@@ -282,6 +363,11 @@ class Level : public NeighborUpdateTarget {
 	Server&				 _server;
 	World&				 _world;
 	const GameData&		 _gameData;
+	const GameData::Dimension* _dimensionType;
+	std::shared_ptr<const BlockContext> _blockContext;
+	std::unique_ptr<PoiManager>		 _poi;
+	std::unique_ptr<PathTypeCache>	 _pathTypeCache;
+	std::vector<std::shared_ptr<Player>> _players;
 	const BlockRegistry& _blocks;
 	BlockBehaviors		 _behaviors;
 	RecipeManager		 _recipes;
@@ -293,6 +379,7 @@ class Level : public NeighborUpdateTarget {
 
 	// Loaded chunks as seen by the game thread, with the last one used (most reads are near each other)
 	std::unordered_map<int64_t, std::shared_ptr<Chunk>> _chunks;
+	bool												_mobSpawning = true;
 	int64_t												_lastKey   = 0;
 	Chunk*												_lastChunk = nullptr;
 

@@ -14,8 +14,11 @@
 #include "world/inventory/Menu.hpp"
 #include "world/item/Components.hpp"
 #include "world/item/ItemUse.hpp"
+#include "world/item/ItemUseOn.hpp"
 #include "world/Survival.hpp"
 #include "world/item/SpawnEggItem.hpp"
+#include "world/entity/ExperienceOrb.hpp"
+#include "world/Xp.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -116,7 +119,7 @@ namespace {
 
 	// Returns false if the block can't be broken (then nothing changed). Like vanilla's ServerPlayerGameMode.destroyBlock
 	bool breakBlock(Player& player, Server& server, int x, int y, int z) {
-		Level&			level	 = server.getLevel();
+		Level&			level	 = server.levelOf(player);
 		const GameData& gameData = server.getGameData();
 		BlockPos		pos{x, y, z};
 		if (!level.hasChunkAt(pos)) return false;
@@ -142,6 +145,11 @@ namespace {
 		if (removed && !creative && canHarvest) {
 			Survival::causeFoodExhaustion(player, FoodData::EXHAUSTION_MINE); // Block.playerDestroy
 			level.dropResources(state, pos, &player, &tool);
+			// The block's XP (ores...), as an orb at its top (ExperienceOrb.award)
+			int xp = Xp::blockXp(gameData, level.blocks().blockOf(state));
+			if (xp > 0) {
+				if (auto orb = ExperienceOrb::create(level, {pos.x + 0.5, pos.y + 0.5, pos.z + 0.5}, xp)) level.entities().add(std::move(orb));
+			}
 			// IceBlock.playerDestroy: water stays, over something solid or liquid (silk touch isn't known yet)
 			if (gameData.isInstanceOf(level.blocks().blockOf(state), "IceBlock") && !level.isUltraWarm()) {
 				const GameData::StateProperties& below = gameData.getStateProperties(level.getBlockState(pos.below()));
@@ -161,7 +169,7 @@ void handlePlayerActionPacket(Packet& packet, Server& server) {
 	int		 sequence = data.readVarInt();
 	Player&	 player	  = *packet.getPlayer();
 	auto	 self	  = player.shared_from_this();
-	Level&	 level	  = server.getLevel();
+	Level&	 level	  = server.levelOf(*packet.getPlayer());
 
 	// Actions that aren't about a block: no acknowledgment
 	if (status == DROP_ITEM || status == DROP_ALL_ITEMS) {
@@ -238,7 +246,7 @@ void handleUseItemOnPacket(Packet& packet, Server& server) {
 	Player&			player	 = *packet.getPlayer();
 	auto			self	 = player.shared_from_this();
 	const GameData& gameData = server.getGameData();
-	Level&			level	 = server.getLevel();
+	Level&			level	 = server.levelOf(*packet.getPlayer());
 	BlockPos		hit{x, y, z};
 	if (face < 0 || face > 5 || player.getGameMode() == GameMode::Spectator || !level.hasChunkAt(hit) || !inReach(player, x, y, z)) {
 		player.acknowledgeBlockChanges(sequence);
@@ -269,6 +277,15 @@ void handleUseItemOnPacket(Packet& packet, Server& server) {
 		}
 		player.acknowledgeBlockChanges(sequence);
 		return;
+	}
+
+	// Item.useOn: flint and steel, fire charges, ender eyes... (adventure mode can't use items on blocks)
+	if (player.getGameMode() != GameMode::Adventure && item != 0) {
+		BlockHit blockHit{hit, static_cast<Direction>(face), x + cursorX, y + static_cast<double>(cursorY), z + static_cast<double>(cursorZ)};
+		if (ItemUse::useOn(level, player, hand, blockHit) != ItemUse::Result::Pass) {
+			player.acknowledgeBlockChanges(sequence);
+			return;
+		}
 	}
 
 	// BlockItem.place, only in survival and creative (adventure mode can't build)
@@ -355,7 +372,7 @@ void handleUseItemPacket(Packet& packet, Server& server) {
 		return wrapped;
 	};
 	player.setRotation(wrap(yaw), wrap(pitch));
-	ItemUse::useItem(server.getLevel(), player, hand);
+	ItemUse::useItem(server.levelOf(*packet.getPlayer()), player, hand);
 }
 
 void handleSetCarriedItemPacket(Packet& packet, Server& server) {
@@ -378,12 +395,12 @@ void handleSetCreativeModeSlotPacket(Packet& packet, Server& server) {
 	bool							validSize = stack.isEmpty() || (item && stack.count <= item->maxStackSize);
 	if (slot >= 1 && slot <= 45 && validSize) {
 		// The client has it already
-		Menu& menu = Menus::inventory(player, server.getLevel());
+		Menu& menu = Menus::inventory(player, server.levelOf(*packet.getPlayer()));
 		menu.slots()[slot].set(stack);
 		menu.setRemoteSlot(slot, stack);
 		menu.broadcastChanges();
 	} else if (slot < 0 && validSize && !stack.isEmpty()) {
-		server.getLevel().dropFromPlayer(player, std::move(stack), true);
+		server.levelOf(*packet.getPlayer()).dropFromPlayer(player, std::move(stack), true);
 	}
 }
 
@@ -417,7 +434,7 @@ void handlePickItemFromBlock(Packet& packet, Server& server) {
 	data.readPosition(pos.x, pos.y, pos.z);
 	bool includeData = data.readBool();
 
-	Level&			level  = server.getLevel();
+	Level&			level  = server.levelOf(*packet.getPlayer());
 	const GameData& gd	   = level.gameData();
 	Player&			player = *packet.getPlayer();
 	bool			infinite = player.getGameMode() == GameMode::Creative; // hasInfiniteMaterials

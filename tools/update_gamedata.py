@@ -11,7 +11,11 @@ and writes compact JSON files the server loads at startup:
     resources/gamedata/synced_registries.json  registries sent in Registry Data: entry names in send order (the order defines the ids)
     resources/gamedata/tags.json               tags of every registry the client receives, as entry names
     resources/gamedata/blocks.json             block states: default state id and id of every property combination
-    resources/gamedata/dimensions.json         min_y and height of every dimension type
+    resources/gamedata/dimensions.json         every dimension type, as in the game's data (min_y, height, has_skylight, ultrawarm...)
+    resources/gamedata/biomes.json             per biome: climate (temperature, downfall, has_precipitation, temperature_modifier) and
+                                               mob spawning (spawners, spawn_costs, creature_spawn_probability), as in the game's data
+    resources/gamedata/enchantments.json       enchantments and enchantment providers, as in the game's data
+    resources/gamedata/entity_variants.json    per mob variant registry (cow_variant...): [name, spawn_conditions] in id order
     resources/gamedata/block_items.json        item -> block it places ("minecraft:redstone" -> "minecraft:redstone_wire")
     resources/gamedata/block_states.json       per block state (index = state id): light_emission, requires_correct_tool, occludes,
                                                light_block (light absorbed, 0-15), propagates_skylight_down, blocks_motion,
@@ -19,7 +23,9 @@ and writes compact JSON files the server loads at startup:
                                                ignited_by_lava, analog_output (comparators read it), occlusion_shape (index in collision_shapes.json), redstone_conductor, face_sturdy (bit
                                                direction * 3 + support type FULL/CENTER/RIGID), collision_shape (index in
                                                collision_shapes.json), fluid (minecraft:fluid id), fluid_amount, fluid_falling, push_reaction
-                                               (piston: 0 normal, 1 destroy, 2 block, 3 ignore, 4 push only)
+                                               (piston: 0 normal, 1 destroy, 2 block, 3 ignore, 4 push only), pathfindable (bits:
+                                               land 1, water 2, air 4: BlockState.isPathfindable), suffocating, valid_spawn (bits: BlockState.isValidSpawn
+                                               for a zombie 1, ocelot 2, parrot 4, polar bear 8, magma cube 16)
     resources/gamedata/collision_shapes.json   collision shapes: lists of boxes [minX, minY, minZ, maxX, maxY, maxZ]
     resources/gamedata/outline_shapes.json     outline shapes (BlockState.getShape, what the cursor and ray casts hit):
                                                {"states": [index in shapes per state id], "shapes": [lists of boxes]}
@@ -119,7 +125,7 @@ def extract_from_code(cache, mappings, version):
     out = cache / "extracted.json"
     if out.exists():
         cached = json.load(open(out))
-        if "outline_shapes" in cached and "entity_types" in cached:  # Else made by an older extractor: run again
+        if "outline_shapes" in cached and "entity_types" in cached and "valid_spawn" in cached.get("states", {}):  # Else older: run again
             return cached
     jars = [cache / "versions" / version / f"server-{version}.jar"] + sorted((cache / "libraries").rglob("*.jar"))
     print("Extracting values from the game code...")
@@ -207,9 +213,20 @@ def item_properties(components):
     # Shields: used (raised) until released
     if "minecraft:blocks_attacks" in components:
         props["blocks_attacks"] = True
+    # Durability, enchanting and weapon use: the components as they are
+    for component in ("max_damage", "enchantable", "repairable", "weapon", "potion_contents", "charged_projectiles", "fireworks",
+                      "death_protection", "use_cooldown", "glider"):
+        if "minecraft:" + component in components:
+            props[component] = components["minecraft:" + component]
+    if tool:
+        props["tool"] = {k: v for k, v in tool.items() if k != "can_destroy_blocks_in_creative"}
     # Survives fire and lava as an item entity (netherite...)
     if "minecraft:damage_resistant" in components:
         props["fire_resistant"] = True
+    # Every attribute modifier as it is (ItemAttributeModifiers), for mobs' and players' equipment
+    if components.get("minecraft:attribute_modifiers"):
+        props["attribute_modifiers"] = [{k: v for k, v in m.items() if k in ("type", "amount", "id", "operation", "slot")}
+                                        for m in components["minecraft:attribute_modifiers"]]
     for modifier in components.get("minecraft:attribute_modifiers", []):
         name = ITEM_ATTRIBUTES.get(modifier["type"])
         if name and modifier["operation"] == "add_value" and modifier.get("slot") in (slot, "any", "hand", "armor"):
@@ -253,16 +270,17 @@ def write_packet_ids(packets, version_name):
 
 def write_entity_data(extracted, data, reports):
     """entity_types.json (attributes, then per entity type: size, tracking, classes, default attributes, spawn egg) and
-    entity_loot_tables.json (data/minecraft/loot_table/entities/, by table name)"""
+    entity_loot_tables.json (data/minecraft/loot_table/ but blocks/: entities, shearing, gameplay (chicken eggs, fishing,
+    gifts), chests, equipment..., by table name: "minecraft:entities/cow")"""
     types = extracted["entity_types"]
     for name, content in json.load(open(reports / "items.json")).items():
         entity = content["components"].get("minecraft:entity_data", {}).get("id")
         if name.endswith("_spawn_egg") and entity in types:
             types[entity]["spawn_egg"] = name
     write("entity_types.json", {"attributes": extracted["attributes"], "types": types})
-    folder = data / "loot_table" / "entities"
-    loot = {"minecraft:entities/" + f.relative_to(folder).with_suffix("").as_posix(): json.load(open(f))
-            for f in sorted(folder.rglob("*.json"))}
+    folder = data / "loot_table"
+    loot = {"minecraft:" + f.relative_to(folder).with_suffix("").as_posix(): json.load(open(f))
+            for f in sorted(folder.rglob("*.json")) if f.relative_to(folder).parts[0] != "blocks"}
     write("entity_loot_tables.json", loot)
 
 
@@ -319,7 +337,7 @@ def main():
     dimensions = {}
     for f in sorted((data / "dimension_type").glob("*.json")):
         content = json.load(open(f))
-        dimensions["minecraft:" + f.stem] = {"min_y": content["min_y"], "height": content["height"]}
+        dimensions["minecraft:" + f.stem] = content
 
     OUT_DIR.mkdir(exist_ok=True)
     write("version.json", {"name": info["name"], "protocol": info["protocol_version"], "data_version": info["world_version"]})
@@ -328,6 +346,27 @@ def main():
     write("tags.json", tags)
     write("blocks.json", blocks)
     write("dimensions.json", dimensions)
+    # Biomes: their climate and which mobs spawn there (the placed features and carvers stay with world generation)
+    biomes = {}
+    for f in sorted((data / "worldgen" / "biome").glob("*.json")):
+        content = json.load(open(f))
+        biomes["minecraft:" + f.stem] = {k: v for k, v in content.items()
+                                         if k in ("temperature", "downfall", "has_precipitation", "temperature_modifier", "spawners",
+                                                  "spawn_costs", "creature_spawn_probability")}
+    write("biomes.json", biomes)
+    # Mob variants (cow, pig, chicken, cat, frog, wolf): their spawn conditions, in synced registry order
+    variants = {}
+    for registry in ("cat_variant", "chicken_variant", "cow_variant", "frog_variant", "pig_variant", "wolf_variant"):
+        names = synced.get("minecraft:" + registry, [])
+        variants["minecraft:" + registry] = [[name, json.load(open(data / registry / (name.split(":")[1] + ".json"))).get("spawn_conditions", [])]
+                                            for name in names]
+    write("entity_variants.json", variants)
+    # Enchantments (their effects are data) and the providers that pick them for mob equipment
+    enchantments = {"enchantments": {"minecraft:" + f.relative_to(data / "enchantment").with_suffix("").as_posix(): json.load(open(f))
+                                     for f in sorted((data / "enchantment").rglob("*.json"))},
+                    "providers": {"minecraft:" + f.relative_to(data / "enchantment_provider").with_suffix("").as_posix(): json.load(open(f))
+                                  for f in sorted((data / "enchantment_provider").rglob("*.json"))}}
+    write("enchantments.json", enchantments)
     write("block_items.json", extracted["block_items"])
     items = {name: item_properties(content["components"]) for name, content in json.load(open(reports / "items.json")).items()}
     for name, remainder in extracted.get("crafting_remainders", {}).items():

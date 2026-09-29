@@ -3,6 +3,7 @@
 #include "data/GameData.hpp"
 #include "player.hpp"
 #include "world/Level.hpp"
+#include "world/Xp.hpp"
 #include "world/item/FuelValues.hpp"
 #include "world/item/PotionBrewing.hpp"
 
@@ -240,8 +241,13 @@ int AbstractFurnaceBlockEntity::experienceToAward(Level& level) const {
 }
 
 // Vanilla gives the recipes (every player knows them all here), pops the experience and forgets the recipes used.
-// Without experience orbs, the recipes used are kept so that the experience isn't lost
-void AbstractFurnaceBlockEntity::awardUsedRecipesAndPopExperience(Player&) {}
+// FurnaceResultSlot.checkTakeAchievements: the smelted XP goes to the player taking the result
+void AbstractFurnaceBlockEntity::awardUsedRecipesAndPopExperience(Player& player) {
+	if (!level()) return;
+	if (int xp = experienceToAward(*level()); xp > 0) Xp::addExperience(level()->server(), player, xp);
+	recipesUsed.clear();
+	markChanged();
+}
 
 void AbstractFurnaceBlockEntity::preRemoveSideEffects(Level& level) {
 	ContainerBlockEntity::preRemoveSideEffects(level);

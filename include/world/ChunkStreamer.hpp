@@ -10,6 +10,7 @@
 class Chunk;
 class Player;
 class Server;
+class World;
 
 // Sends a player the chunks around them and keeps them loaded while they are in view.
 //
@@ -26,10 +27,11 @@ class ChunkStreamer {
 	ChunkStreamer(Server& server, Player& player);
 	~ChunkStreamer();
 
+	// Streams the chunks of the player's dimension around x, z
 	void start(double x, double z, int viewDistance);
 	void onPlayerMove(double x, double z);
 	void onBatchReceived(float chunksPerTick);
-	// Releases every chunk. Called when the player disconnects
+	// Releases every chunk. Called when the player disconnects or leaves the dimension
 	void stop();
 	// Whether the client has this chunk, so it must be told when it changes
 	bool hasChunk(int chunkX, int chunkZ) const;
@@ -42,6 +44,8 @@ class ChunkStreamer {
 
 	Server& _server;
 	Player& _player;
+	World*	_world = nullptr; // The dimension streamed, set by start
+	uint32_t _session = 0;	  // Changes at each start and stop: chunks lit for an earlier one are dropped
 
 	bool													 _active		  = false;
 	int														 _centerX		  = 0;
@@ -54,7 +58,7 @@ class ChunkStreamer {
 	std::unordered_map<int64_t, std::shared_ptr<Chunk>> _ready;	 // Loaded, not sent yet
 	std::unordered_set<int64_t>								 _sent;
 
-	void onChunkLoaded(const std::shared_ptr<Chunk>& chunk);
+	void onChunkLoaded(const std::shared_ptr<Chunk>& chunk, uint32_t session);
 	void sendBatches();
 	void acquire(const std::vector<int64_t>& keys);
 	void release(const std::vector<int64_t>& keys);

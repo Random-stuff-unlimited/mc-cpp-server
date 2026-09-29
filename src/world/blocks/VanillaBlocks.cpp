@@ -4,6 +4,10 @@
 #include "world/Level.hpp"
 #include "world/blocks/Attached.hpp"
 #include "world/blocks/BlockContext.hpp"
+#include "world/blocks/Fire.hpp"
+#include "world/blocks/RespawnAnchor.hpp"
+#include "world/Explosion.hpp"
+#include "world/Portals.hpp"
 #include "world/blocks/Growth.hpp"
 #include "world/blocks/Containers.hpp"
 #include "world/blocks/Dispensers.hpp"
@@ -47,7 +51,7 @@ namespace {
 } // namespace
 
 void registerVanillaBlocks(Level& level, const GameData& gameData) {
-	auto context = std::make_shared<const BlockContext>(gameData);
+	std::shared_ptr<const BlockContext> context = level.blockContextShared();
 	auto ids	 = std::make_shared<const RedstoneIds>(*context);
 	auto name	 = [&gameData](int block) { return gameData.getStaticName("minecraft:block", block); };
 	auto pistons = std::make_shared<const PistonIds>(*context);
@@ -58,6 +62,14 @@ void registerVanillaBlocks(Level& level, const GameData& gameData) {
 	// Vanilla class -> behavior. A block takes the first class it is an instance of: subclasses come first
 	std::vector<std::pair<std::string, Factory>> classes = {
 			{"LiquidBlock", [](int) { return std::make_unique<LiquidBlock>(); }},
+
+			// Fire, portals, TNT
+			{"SoulFireBlock", make<SoulFireBlock>(context)},
+			{"FireBlock", make<FireBlock>(context)},
+			{"NetherPortalBlock", make<NetherPortalBlock>(context)},
+			{"EndPortalBlock", [](int) { return std::make_unique<EndPortalBlock>(); }},
+			{"TntBlock", make<TntBlock>(context)},
+			{"RespawnAnchorBlock", make<RespawnAnchorBlock>(context)},
 
 			// Plants
 			{"AttachedStemBlock",
@@ -174,6 +186,8 @@ void registerVanillaBlocks(Level& level, const GameData& gameData) {
 			{"BarrelBlock", [context, ids](int) { return std::make_unique<BarrelBlock>(context, ids); }},
 			{"FletchingTableBlock", nullptr}, // A CraftingTableBlock that opens nothing
 			{"CraftingTableBlock", [context, ids](int) { return std::make_unique<CraftingTableBlock>(context, ids); }},
+			{"EnchantingTableBlock", [context, ids](int) { return std::make_unique<EnchantingTableBlock>(context, ids); }},
+			{"AnvilBlock", [context, ids](int) { return std::make_unique<AnvilBlock>(context, ids); }},
 			{"ShulkerBoxBlock", [context, ids](int) { return std::make_unique<ShulkerBoxBlock>(context, ids); }},
 			{"EnderChestBlock", [context, ids](int) { return std::make_unique<EnderChestBlock>(context, ids); }},
 			{"HopperBlock", [context, ids](int) { return std::make_unique<HopperBlock>(context, ids); }},

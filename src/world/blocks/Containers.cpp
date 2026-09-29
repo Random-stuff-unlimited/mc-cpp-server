@@ -6,6 +6,8 @@
 #include "world/PlaceContext.hpp"
 #include "world/Shapes.hpp"
 #include "world/entity/ItemEntity.hpp"
+#include "world/inventory/AnvilMenu.hpp"
+#include "world/inventory/EnchantmentMenu.hpp"
 #include "world/inventory/Menu.hpp"
 #include "world/item/Components.hpp"
 #include "network/buffer.hpp"
@@ -288,6 +290,20 @@ bool CraftingTableBlock::useWithoutItem(Level& level, const BlockPos& pos, int, 
 	return true;
 }
 
+// ===== Enchanting table =====
+
+bool EnchantingTableBlock::useWithoutItem(Level& level, const BlockPos& pos, int, Player& player) const {
+	Menus::openEnchanting(player, level, pos);
+	return true;
+}
+
+// ===== Anvil =====
+
+bool AnvilBlock::useWithoutItem(Level& level, const BlockPos& pos, int, Player& player) const {
+	Menus::openAnvil(player, level, pos);
+	return true;
+}
+
 // ===== Hopper =====
 
 int HopperBlock::getStateForPlacement(Level&, const PlaceContext& context) const {
@@ -317,7 +333,8 @@ bool HopperBlock::useWithoutItem(Level& level, const BlockPos& pos, int, Player&
 	return true;
 }
 
-void HopperBlock::entityInside(Level& level, const BlockPos& pos, int, Entity* entity) const {
+void HopperBlock::entityInside(Level& level, const BlockPos& pos, int, Actor* actor) const {
+	Entity* entity = actor ? actor->asEntity() : nullptr;
 	auto* item	 = dynamic_cast<ItemEntity*>(entity);
 	auto* hopper = level.getBlockEntity<HopperBlockEntity>(pos);
 	if (item && hopper && !item->isRemoved()) hopper->entityInside(level, *item);

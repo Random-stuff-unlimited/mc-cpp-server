@@ -118,11 +118,12 @@ void World::loadLevel() {
 	} else {
 		std::random_device random;
 		level = {{"format", 1},
-				 {"dimension", "minecraft:overworld"},
-				 {"seed", (static_cast<int64_t>(random()) << 32) | random()},
-				 {"generator", defaultGenerator()}};
+				 {"dimension", _settings.dimension},
+				 {"seed", _settings.seed ? *_settings.seed : (static_cast<int64_t>(random()) << 32) | random()},
+				 {"generator", _settings.generator.is_null() ? defaultGenerator() : _settings.generator}};
 		levelChanged = true;
 	}
+	_seed = level.value("seed", int64_t(0));
 
 	_dimensionName							= level.value("dimension", "minecraft:overworld");
 	const GameData::Dimension* dimension	= _gameData.getDimension(_dimensionName);
@@ -178,6 +179,7 @@ void World::loadLevel() {
 	_generatorOptions = level.value("generator", defaultGenerator());
 	GeneratorSettings generatorSettings(_generatorOptions, _gameData, _layout.minY, dimension->height, level.value("seed", int64_t(0)));
 	_generator = createGenerator(generatorSettings);
+	_random	   = JavaRandom(level.value("seed", int64_t(0)));
 
 	if (level.contains("spawn")) {
 		_spawn = {level["spawn"].value("x", 0.0), level["spawn"].value("y", 64.0), level["spawn"].value("z", 0.0)};
@@ -227,8 +229,80 @@ void World::setSpawn(double x, double y, double z) {
 }
 
 void World::tickTime() {
+	if (_primary) return; // Only the overworld's clock runs (ServerLevel.tickTime)
 	_gameTime.fetch_add(1, std::memory_order_relaxed);
 	_dayTime++;
+}
+
+void World::tickWeather(bool hasSkyLight) {
+	if (!hasSkyLight) return;
+	// The flags toggle when their countdown ends (ServerLevel.advanceWeatherCycle). The other dimensions share the
+	// overworld's flags (DerivedLevelData): their cycle is the overworld's
+	if (!_primary) {
+		Weather& w = _weather;
+		if (w.clearWeatherTime > 0) {
+			// Set by /weather clear: nothing happens until it ends
+			w.clearWeatherTime--;
+			w.thunderTime = w.thundering ? 0 : 1;
+			w.rainTime	  = w.raining ? 0 : 1;
+			w.thundering  = false;
+			w.raining	  = false;
+		} else {
+			if (w.thunderTime > 0) {
+				if (--w.thunderTime == 0) w.thundering = !w.thundering;
+			} else if (w.thundering) {
+				w.thunderTime = _random.nextInt(12001) + 3600; // THUNDER_DURATION: 3 to 13 minutes
+			} else {
+				w.thunderTime = _random.nextInt(168001) + 12000; // THUNDER_DELAY: 10 minutes to 3 hours
+			}
+			if (w.rainTime > 0) {
+				if (--w.rainTime == 0) w.raining = !w.raining;
+			} else if (w.raining) {
+				w.rainTime = _random.nextInt(12001) + 12000; // RAIN_DURATION: 10 to 20 minutes
+			} else {
+				w.rainTime = _random.nextInt(168001) + 12000; // RAIN_DELAY: 10 minutes to 3 hours
+			}
+		}
+	}
+	// The levels the clients see ramp toward the flags, 0.01 per tick (a full transition takes 100 ticks)
+	Weather& w		= _weather;
+	w.oThunderLevel = w.thunderLevel;
+	w.thunderLevel	= std::clamp(w.thunderLevel + (thunderingFlag() ? 0.01F : -0.01F), 0.0F, 1.0F);
+	w.oRainLevel	= w.rainLevel;
+	w.rainLevel		= std::clamp(w.rainLevel + (rainingFlag() ? 0.01F : -0.01F), 0.0F, 1.0F);
+}
+
+void World::resetWeatherCycle() {
+	// ServerLevel.resetWeatherCycle: the levels ramp down over the next 100 ticks
+	if (_primary) {
+		_primary->resetWeatherCycle();
+		return;
+	}
+	_weather.raining	 = false;
+	_weather.thundering	 = false;
+	_weather.rainTime	 = 0;
+	_weather.thunderTime = 0;
+}
+
+void World::setWeather(bool raining, bool thundering) {
+	if (_primary) {
+		_primary->setWeather(raining, thundering);
+		return;
+	}
+	Weather& w = _weather;
+	if (raining) {
+		// /weather rain and thunder: it can change again once the countdown ends (a random duration)
+		w.clearWeatherTime = 0;
+		w.raining		   = true;
+		w.rainTime		   = 0;
+	} else {
+		// /weather clear: the countdown keeps the weather from starting again (vanilla /weather clear's 5 minutes)
+		w.clearWeatherTime = 6000;
+		w.raining		   = false;
+		w.rainTime		   = 0;
+	}
+	w.thundering   = thundering;
+	w.thunderTime  = 0;
 }
 
 bool World::isAir(uint32_t state) const { return std::find(_airStates.begin(), _airStates.end(), state) != _airStates.end(); }
@@ -323,6 +397,27 @@ std::shared_ptr<Chunk> World::loadOrGenerateBlocks(int x, int z) {
 	_generator->generate(builder);
 	// Generators are deterministic: an unmodified generated chunk isn't worth saving
 	chunk->setDirty(false);
+	return chunk;
+}
+
+std::shared_ptr<Chunk> World::loadChunkNow(int x, int z) {
+	int64_t key = Chunk::key(x, z);
+	while (true) {
+		{
+			std::lock_guard<std::mutex> lock(_chunksMutex);
+			if (_stopped) return nullptr;
+			Entry& entry = _chunks[key];
+			if (entry.chunk) return entry.chunk;
+			if (!entry.loading) {
+				entry.loading = true;
+				break;
+			}
+		}
+		// An I/O thread is loading it: wait for it
+		std::this_thread::sleep_for(std::chrono::milliseconds(1));
+	}
+	std::shared_ptr<Chunk> chunk = loadOrGenerate(x, z);
+	finishLoad(x, z, chunk);
 	return chunk;
 }
 
@@ -768,3 +863,5 @@ void World::writeLightData(Buffer& buf, const ChunkLight& light, int sectionCoun
 		}
 	}
 }
+
+int World::getSeaLevel() const { return _generator ? _generator->seaLevel() : 63; }

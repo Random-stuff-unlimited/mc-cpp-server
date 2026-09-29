@@ -1,6 +1,7 @@
 #ifndef GAME_DATA_HPP
 #define GAME_DATA_HPP
 
+#include <array>
 #include <cstdint>
 #include <filesystem>
 
@@ -79,6 +80,11 @@ class GameData {
 		uint8_t	 fluidAmount		   = 0;		// "fluid_amount": 1-8, 8 for sources
 		bool	 fluidFalling		   = false; // "fluid_falling"
 		uint8_t	 pushReaction		   = 0;		// "push_reaction": a PushReaction
+		uint8_t	 pathfindable		   = 0;		// "pathfindable": BlockState.isPathfindable, bit 1 land, 2 water, 4 air
+		bool	 suffocating		   = false; // "suffocating": BlockState.isSuffocating
+		// "valid_spawn": BlockState.isValidSpawn, a bit per kind of mob: VALID_SPAWN_*
+		uint8_t	 validSpawn			   = 0;
+		static constexpr uint8_t VALID_SPAWN_MOB = 1, VALID_SPAWN_OCELOT = 2, VALID_SPAWN_PARROT = 4, VALID_SPAWN_POLAR_BEAR = 8, VALID_SPAWN_FIRE_IMMUNE = 16;
 	};
 	// What a piston does to a block (PushReaction)
 	enum class PushReaction : uint8_t { Normal = 0, Destroy = 1, Block = 2, Ignore = 3, PushOnly = 4 };
@@ -137,15 +143,75 @@ class GameData {
 		bool		  blocksAttacks = false; // "blocks_attacks": used (raised) until released, like shields
 		// "tool_rules": the first rule matching a block with correct_for_drops set decides whether it drops
 		struct ToolRule {
-			std::vector<bool> blocks; // By block id
-			int				  correctForDrops = -1; // 1, 0, or -1 when the rule doesn't say
+			std::vector<bool>	 blocks; // By block id
+			int					 correctForDrops = -1; // 1, 0, or -1 when the rule doesn't say
+			std::optional<float> speed;				   // Mining speed on these blocks, if the rule sets it
 		};
 		std::vector<ToolRule> toolRules;
+		// "tool": Tool.defaultMiningSpeed and damagePerBlock (durability lost per block mined)
+		float defaultMiningSpeed = 1.0F;
+		int	  toolDamagePerBlock = 1;
+		bool  isTool			 = false;
+		int	  maxDamage		   = 0; // "max_damage": durability, 0 if it can't be damaged
+		int	  enchantability   = 0; // "enchantable": its value, 0 if it can't be enchanted at a table
+		std::string repairItems;	// "repairable": an item or #tag that repairs it in an anvil, "" if none
+		// "weapon": durability lost per attack and how long it disables a shield (Weapon)
+		bool  isWeapon				   = false;
+		int	  weaponDamagePerAttack	   = 1;
+		float disableBlockingForSeconds = 0.0F;
+		// "use_cooldown": seconds and cooldown group ("" for the item itself)
+		float		useCooldownSeconds = 0.0F;
+		std::string useCooldownGroup;
+		bool		glider = false; // "glider": elytra
+		// "attribute_modifiers": ItemAttributeModifiers.Entry (attribute id, amount, modifier id, operation 0 add_value,
+		// 1 add_multiplied_base, 2 add_multiplied_total, slot group: any, mainhand, offhand, hand, feet, legs, chest, head,
+		// armor, body, saddle)
+		struct AttributeModifierEntry {
+			int			attribute;
+			double		amount;
+			std::string id;
+			int			operation;
+			std::string slot;
+		};
+		std::vector<AttributeModifierEntry> attributeModifiers;
+		// Components kept as they are in the reports (potion_contents, charged_projectiles, fireworks, death_protection)
+		nlohmann::json rawComponents = nlohmann::json::object();
 	};
 
+	// A dimension type (minecraft:dimension_type, DimensionType): its height and the rules of the dimension
 	struct Dimension {
-		int minY;
-		int height;
+		int	   minY				   = 0;
+		int	   height			   = 256;
+		int	   logicalHeight	   = 256;
+		bool   hasSkyLight		   = true;
+		bool   hasCeiling		   = false;
+		bool   ultraWarm		   = false; // Water evaporates, lava flows fast and far
+		bool   natural			   = true;	// Compasses and clocks work, beds let players sleep
+		bool   bedWorks			   = true;	// Beds set the spawn point (else they explode)
+		bool   respawnAnchorWorks  = false; // Respawn anchors set the spawn point (else they explode)
+		bool   piglinSafe		   = false; // Piglins and hoglins don't zombify
+		bool   hasRaids			   = true;
+		double coordinateScale	   = 1.0;	// Nether portals: coordinates divided by 8 going from 1.0 to 8.0
+		float  ambientLight		   = 0.0F;
+		std::optional<int64_t> fixedTime; // The time of day stays there (nether, end)
+		// monster_spawn_light_level: an int provider (uniform 0..7 in the overworld), as min..max
+		int				   monsterSpawnLightMin = 0, monsterSpawnLightMax = 7;
+		int				   monsterSpawnBlockLightLimit = 0;
+		std::string		   infiniburn; // Block tag fire burns forever on ("#minecraft:infiniburn_overworld")
+		std::string		   effects;	   // "minecraft:the_nether"...
+	};
+	// Per biome, from biomes.json (Biome.ClimateSettings and MobSpawnSettings)
+	struct SpawnerData {
+		int typeId, weight, minCount, maxCount;
+	};
+	struct Biome {
+		float temperature = 0.8F, downfall = 0.4F;
+		bool  hasPrecipitation		= true;
+		bool  frozenModifier		= false; // temperature_modifier: frozen (the frozen oceans)
+		float creatureSpawnProbability = 0.1F;
+		std::array<std::vector<SpawnerData>, 8> spawners; // By MobCategory
+		// spawn_costs: per entity type, the energy budget and charge (soul sand valley, warped forest)
+		std::unordered_map<int, std::pair<double, double>> spawnCosts;
 	};
 
 	// MobCategory: what a type counts as for spawning and despawning
@@ -248,6 +314,10 @@ class GameData {
 
 	// nullptr for an unknown dimension type
 	const Dimension* getDimension(const std::string& name) const;
+	// By minecraft:worldgen/biome synced id; nullptr if unknown
+	const Biome*	 getBiome(int biomeId) const { return biomeId >= 0 && biomeId < static_cast<int>(_biomes.size()) ? &_biomes[biomeId] : nullptr; }
+	// enchantments.json: the enchantment definitions (by name) and the enchantment providers
+	const nlohmann::json& getEnchantmentData() const { return _enchantmentData; }
 	// DamageType.exhaustion of a damage type ("minecraft:player_attack"...): hunger a player gets when hurt by it, 0 if unknown
 	float getDamageExhaustion(const std::string& type) const;
 
@@ -286,11 +356,14 @@ class GameData {
 	std::unordered_map<std::string, std::unordered_set<int>> _tagSets; // "registry#tag" -> ids
 
 	std::unordered_map<std::string, Dimension> _dimensions;
+	std::vector<Biome>						   _biomes; // By biome synced id
+	nlohmann::json							   _enchantmentData;
 	std::vector<EntityTypeInfo>				   _entityTypes;
 	std::vector<AttributeInfo>				   _attributes;
 	std::unordered_map<int, int>			   _spawnEggTypes;
 
 	void loadEntityTypes(const std::filesystem::path& file);
+	void loadBiomes(const std::filesystem::path& file);
 
 	void			   addBlockState(const std::string& key, int id);
 	void			   applyOverrides(const std::filesystem::path& file);

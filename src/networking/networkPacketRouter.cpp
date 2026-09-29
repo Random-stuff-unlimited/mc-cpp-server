@@ -1,3 +1,4 @@
+#include "Commands.hpp"
 #include "PacketIds.hpp"
 #include "logger.hpp"
 #include "network/networking.hpp"
@@ -8,6 +9,8 @@
 #include "world/ChunkStreamer.hpp"
 #include "world/Combat.hpp"
 #include "world/PlayerDataStorage.hpp"
+#include "world/Xp.hpp"
+#include "world/Level.hpp"
 #include "world/World.hpp"
 
 #include <algorithm>
@@ -78,11 +81,15 @@ void enterPlay(Packet* packet, Server& server) {
 	// configured game mode is only for new players (ServerPlayer.calculateGameModeForNewPlayer)
 	player->setGameMode(defaultGameMode);
 	player->setPosition(spawn.x, spawn.y, spawn.z);
+	player->setLevel(&server.getLevel());
 	if (std::optional<nbt::TagCompound> saved = server.getPlayerData().load(player->getUUID())) {
 		PlayerData::load(*player, *saved, server.getGameData(), defaultGameMode);
 		std::string dimension = PlayerData::dimension(*saved);
-		// A dimension the server doesn't have: vanilla puts the player in the overworld, at the saved position
-		if (!dimension.empty() && dimension != server.getWorld().getDimensionName()) {
+		// The dimension it was in; one the server doesn't have: vanilla puts the player in the overworld, at the saved
+		// position
+		if (Level* level = dimension.empty() ? nullptr : server.getLevel(dimension)) {
+			player->setLevel(level);
+		} else if (!dimension.empty()) {
 			g_logger->logGameInfo(WARN, player->getPlayerName() + " was in " + dimension + ", which isn't loaded: placed in " + server.getWorld().getDimensionName(),
 								  "PlayerData");
 		}
@@ -92,6 +99,7 @@ void enterPlay(Packet* packet, Server& server) {
 	changeDifficultyPacket(*packet, server);
 	playerAbilitiesPacket(*packet, server);
 	setHeldItemPacket(*packet, server);
+	Commands::sendCommandTree(server, *player); // PlayerList.sendPlayerPermissionLevel
 	sendInitialRecipeBook(*packet, server);
 	synchronizePlayerPositionPacket(*packet, server);
 
@@ -103,6 +111,8 @@ void enterPlay(Packet* packet, Server& server) {
 
 	// Tab list and player entities, both ways
 	server.getPlayerTracker().join(player->shared_from_this(), viewDistance);
+	server.sendLevelInfo(player->shared_from_this(), *player->level());
 	Combat::sendHealth(server, *player);
+	Xp::send(server, *player);
 	server.addGamePlayer(player->shared_from_this());
 }

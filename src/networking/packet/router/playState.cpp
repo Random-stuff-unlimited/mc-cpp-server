@@ -9,7 +9,9 @@
 #include "world/ChunkStreamer.hpp"
 #include "world/Combat.hpp"
 #include "world/entity/LivingEntity.hpp"
+#include "world/inventory/AnvilMenu.hpp"
 #include "world/Level.hpp"
+#include "world/entity/Mob.hpp"
 #include "world/Survival.hpp"
 
 #include <algorithm>
@@ -46,7 +48,7 @@ namespace {
 		bool onGround = data.readUByte() & MOVE_FLAG_ON_GROUND;
 		// Jump and movement exhaustion (handleMovePlayer: jumpFromGround, setOnGroundWithMovement, checkMovementStatistics)
 		if (withPosition && !player->combat().dead) {
-			Survival::onMove(server.getLevel(), *player, x - previousX, y - previousY, z - previousZ, onGround);
+			Survival::onMove(server.levelOf(*player), *player, x - previousX, y - previousY, z - previousZ, onGround);
 		}
 		player->setOnGround(onGround);
 
@@ -58,7 +60,7 @@ namespace {
 		// applyEffectsFromBlocks: pressure plates under the player
 		if (withPosition && player->getGameMode() != GameMode::Spectator && !player->combat().dead) {
 			double half = Player::BB_WIDTH / 2.0;
-			server.getLevel().checkInsideBlocks({x - half, y, z - half, x + half, y + Player::BB_HEIGHT, z + half}, nullptr);
+			server.levelOf(*player).checkInsideBlocks({x - half, y, z - half, x + half, y + Player::BB_HEIGHT, z + half}, player);
 		}
 	}
 
@@ -121,14 +123,24 @@ void handlePlayState(Packet* packet, Server& server) {
 		break;
 	case PacketId::Play::Serverbound::INTERACT: {
 		int entityId = packet->getData().readVarInt();
-		if (packet->getData().readVarInt() == ATTACK) {
+		int type	 = packet->getData().readVarInt();
+		if (type == INTERACT) {
+			// ServerGamePacketListenerImpl.handleInteract: Player.interactOn a mob in reach (Mob.interact / mobInteract)
+			int	 hand = packet->getData().readVarInt();
+			Mob* mob  = dynamic_cast<Mob*>(server.levelOf(*player).entities().byId(entityId));
+			if (mob && mob->isAlive() && player->getGameMode() != GameMode::Spectator && mob->mobInteract(*player, hand)) {
+				Buffer animation;
+				animation.writeVarInt(player->getPlayerID());
+				animation.writeUByte(hand == 0 ? ANIMATE_SWING_MAIN_HAND : ANIMATE_SWING_OFF_HAND);
+				server.getPlayerTracker().broadcast(player, PacketId::Play::Clientbound::ANIMATE, animation, false);
+			}
+		} else if (type == ATTACK) {
 			if (auto target = server.getPlayerTracker().findVisible(player, entityId)) {
 				Combat::attack(server, *player, *target);
-			} else if (auto* living = dynamic_cast<LivingEntity*>(server.getLevel().entities().byId(entityId))) {
+			} else if (auto* living = dynamic_cast<LivingEntity*>(server.levelOf(*player).entities().byId(entityId))) {
 				Combat::attack(server, *player, *living);
 			}
 		}
-		// Right-clicking entities isn't handled yet
 		break;
 	}
 	case PacketId::Play::Serverbound::SWING: {
@@ -150,6 +162,13 @@ void handlePlayState(Packet* packet, Server& server) {
 	case PacketId::Play::Serverbound::CONTAINER_SLOT_STATE_CHANGED:
 		handleContainerSlotStateChangedPacket(*packet, server);
 		break;
+	case PacketId::Play::Serverbound::RENAME_ITEM: {
+		// The anvil's name field: its result and cost follow
+		packet->getData().readVarInt(); // Container id
+		std::string name = packet->getData().readString(50);
+		if (auto* anvil = dynamic_cast<AnvilMenu*>(&Menus::current(*player, server.levelOf(*player)))) anvil->renameItem(name);
+		break;
+	}
 	case PacketId::Play::Serverbound::PLACE_RECIPE:
 		handlePlaceRecipePacket(*packet, server);
 		break;
@@ -172,7 +191,15 @@ void handlePlayState(Packet* packet, Server& server) {
 		break;
 	}
 	case PacketId::Play::Serverbound::CLIENT_COMMAND:
-		if (packet->getData().readVarInt() == CLIENT_COMMAND_RESPAWN) Combat::respawn(server, *player);
+		if (packet->getData().readVarInt() == CLIENT_COMMAND_RESPAWN) {
+			// Back from the end credits: respawned in the overworld with everything kept, else after a death
+			if (player->wonGame()) {
+				player->setWonGame(false);
+				Combat::respawn(server, *player, true);
+			} else {
+				Combat::respawn(server, *player, false);
+			}
+		}
 		break;
 	case PacketId::Play::Serverbound::CLIENT_INFORMATION:
 		// Sent again when the player changes its settings (language...)
@@ -181,6 +208,12 @@ void handlePlayState(Packet* packet, Server& server) {
 	case PacketId::Play::Serverbound::CHAT: {
 		// ServerboundChat: message, then its timestamp, salt and signature, which aren't verified
 		handleChatLine(server, *player, packet->getData().readString(256));
+		break;
+	}
+	case PacketId::Play::Serverbound::COMMAND_SUGGESTION: {
+		int			transaction = packet->getData().readVarInt();
+		std::string text		= packet->getData().readString(32500);
+		Commands::suggest(server, *player, transaction, text);
 		break;
 	}
 	case PacketId::Play::Serverbound::CHAT_COMMAND:

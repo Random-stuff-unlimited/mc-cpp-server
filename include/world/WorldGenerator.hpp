@@ -73,6 +73,8 @@ class WorldGenerator {
 
 	// Height where players spawn in a new world
 	virtual int spawnHeight() const = 0;
+	// ChunkGenerator.getSeaLevel (superflat: -63, vanilla's FlatLevelSource)
+	virtual int seaLevel() const { return 63; }
 };
 
 // Creates the generator named by settings.options["type"]. Throws if unknown

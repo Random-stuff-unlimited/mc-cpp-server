@@ -26,7 +26,6 @@ namespace {
 	constexpr size_t MAX_FILE_SIZE = 64 * 1024 * 1024; // Uncompressed
 
 	// Values of what the server doesn't simulate yet. Once it does, the value is saved and read like Health
-	constexpr int16_t FIRE			   = -20; // Entity.remainingFireTicks of a player that isn't burning
 	constexpr float	  MAX_HEALTH	   = 20;  // LivingEntity.getMaxHealth
 	constexpr int	  ENDER_CHEST_SIZE = 27;
 
@@ -147,11 +146,11 @@ namespace PlayerData {
 		data["Motion"]		  = listTag(TagList(std::vector<double>{0.0, 0.0, 0.0})); // Movements are the client's
 		data["Rotation"]	  = listTag(TagList(std::vector<float>{player.getYaw(), player.getPitch()}));
 		data["fall_distance"] = nbt::TagDouble(combat.fallDistance);
-		data["Fire"]		  = nbt::TagShort(FIRE);
+		data["Fire"]		  = nbt::TagShort(static_cast<int16_t>(std::clamp(player.survival().remainingFireTicks, -32768, 32767)));
 		data["Air"]			  = nbt::TagShort(static_cast<int16_t>(player.getAirSupply()));
 		data["OnGround"]	  = nbt::TagByte(player.isOnGround());
 		putIfMissing(data, "Invulnerable", nbt::TagByte(0));
-		putIfMissing(data, "PortalCooldown", nbt::TagInt(0));
+		data["PortalCooldown"] = nbt::TagInt(player.portal.cooldown);
 		const UUID& uuid = player.getUUID();
 		data["UUID"]	 = nbt::TagIntArray{static_cast<int32_t>(uuid.getMostSigBits() >> 32), static_cast<int32_t>(uuid.getMostSigBits()),
 										static_cast<int32_t>(uuid.getLeastSigBits() >> 32), static_cast<int32_t>(uuid.getLeastSigBits())};
@@ -179,10 +178,10 @@ namespace PlayerData {
 		data["Inventory"]		 = listTag(saveSlots(items.data(), 36, gameData));
 		data["SelectedItemSlot"] = nbt::TagInt(player.getSelectedSlot());
 		data["SleepTimer"]		 = nbt::TagShort(0);
-		putIfMissing(data, "XpP", nbt::TagFloat(0));
-		putIfMissing(data, "XpLevel", nbt::TagInt(0));
-		putIfMissing(data, "XpTotal", nbt::TagInt(0));
-		putIfMissing(data, "XpSeed", nbt::TagInt(0));
+data["XpP"]		 = nbt::TagFloat(player.getXpProgress());
+	data["XpLevel"]	 = nbt::TagInt(player.getXpLevel());
+	data["XpTotal"]	 = nbt::TagInt(player.getXpTotal());
+	data["XpSeed"]	 = nbt::TagInt(player.getXpSeed());
 		putIfMissing(data, "Score", nbt::TagInt(0));
 		// FoodData.addAdditionalSaveData
 		const FoodData& food		= player.foodData();
@@ -216,7 +215,7 @@ namespace PlayerData {
 		data["playerGameType"] = nbt::TagInt(static_cast<int>(mode));
 		data.data.erase("previousPlayerGameType");
 		if (player.getPreviousGameMode() >= 0) data["previousPlayerGameType"] = nbt::TagInt(player.getPreviousGameMode());
-		putIfMissing(data, "seenCredits", nbt::TagByte(0));
+		data["seenCredits"] = nbt::TagByte(player.seenCredits());
 		// ServerRecipeBook.Packed: every recipe is known, the lists of the loaded file are kept as they were
 		TagCompound recipeBook;
 		if (const TagCompound* saved = compound(data, "recipeBook")) recipeBook = *saved;
@@ -264,6 +263,9 @@ namespace PlayerData {
 		}
 		combat.fallDistance = doubleOr(data, "fall_distance", doubleOr(data, "FallDistance", 0)); // Float before 1.21.5
 		player.setOnGround(boolOr(data, "OnGround", false));
+		player.survival().remainingFireTicks = intOr(data, "Fire", -20);
+		player.portal.cooldown				 = intOr(data, "PortalCooldown", 0);
+		player.setSeenCredits(boolOr(data, "seenCredits", false));
 
 		// LivingEntity.readAdditionalSaveData
 		combat.health = std::min(floatOr(data, "Health", MAX_HEALTH), MAX_HEALTH);
@@ -310,6 +312,12 @@ namespace PlayerData {
 				}
 			}
 		}
+
+		// ServerPlayer.readAdditionalSaveData
+		player.setXpTotal(intOr(data, "XpTotal", 0));
+		player.setXpLevel(intOr(data, "XpLevel", 0));
+		player.setXpProgress(floatOr(data, "XpP", 0));
+		player.setXpSeed(intOr(data, "XpSeed", 0));
 
 		// ServerPlayer.readAdditionalSaveData
 		int gameType = gameTypeOf(data, "playerGameType");

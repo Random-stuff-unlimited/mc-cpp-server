@@ -26,6 +26,18 @@ const AttributeIds& AttributeIds::get(const GameData& gameData) {
 		a.scale					  = id("minecraft:scale");
 		a.stepHeight			  = id("minecraft:step_height");
 		a.waterMovementEfficiency = id("minecraft:water_movement_efficiency");
+		a.explosionKnockbackResistance = id("minecraft:explosion_knockback_resistance");
+		a.attackSpeed				   = id("minecraft:attack_speed");
+		a.flyingSpeed				   = id("minecraft:flying_speed");
+		a.luck						   = id("minecraft:luck");
+		a.spawnReinforcements		   = id("minecraft:spawn_reinforcements");
+		a.temptRange				   = id("minecraft:tempt_range");
+		a.burningTime				   = id("minecraft:burning_time");
+		a.sweepingDamageRatio		   = id("minecraft:sweeping_damage_ratio");
+		a.miningEfficiency			   = id("minecraft:mining_efficiency");
+		a.blockBreakSpeed			   = id("minecraft:block_break_speed");
+		a.submergedMiningSpeed		   = id("minecraft:submerged_mining_speed");
+		a.sneakingSpeed				   = id("minecraft:sneaking_speed");
 		return a;
 	}();
 	return ids;

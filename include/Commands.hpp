@@ -26,6 +26,11 @@ namespace Commands {
 	// Runs a command line without the leading '/', e.g. "tp 100 64 100". Shows an error if it is unknown
 	void run(Server& server, Player& player, const std::string& line);
 
+	// The command tree for the client's suggestions and syntax coloring (Commands packet), sent when it joins
+	void sendCommandTree(Server& server, Player& player);
+	// Command Suggestion Request: what to suggest for the arguments that ask the server (text: as typed, with its '/')
+	void suggest(Server& server, Player& player, int transaction, const std::string& text);
+
 	// A message in the player's own chat (System Chat, in the chat)
 	void message(Server& server, Player& player, const std::string& text);
 	// A player's line for everyone to see (chat.type.text: its name, then the message)

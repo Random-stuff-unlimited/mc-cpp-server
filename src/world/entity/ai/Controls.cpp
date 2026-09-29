@@ -1,7 +1,10 @@
 #include "world/entity/ai/Controls.hpp"
 
+#include "data/GameData.hpp"
+#include "world/Level.hpp"
 #include "world/entity/Mob.hpp"
 
+#include <algorithm>
 #include <cmath>
 
 // ----- MoveControl -----
@@ -22,13 +25,90 @@ void MoveControl::strafe(float forwards, float right) {
 }
 
 void MoveControl::tick() {
-	if (_operation == Operation::Wait) {
+	if (_operation == Operation::Strafe) {
+		float speed	   = static_cast<float>(_mob.getAttributeValue(_mob.attributeIds().movementSpeed));
+		float scaled   = static_cast<float>(_speedModifier) * speed;
+		float forwards = _strafeForwards, right = _strafeRight;
+		float length   = std::sqrt(forwards * forwards + right * right);
+		if (length < 1.0F) length = 1.0F;
+		length = scaled / length;
+		forwards *= length;
+		right *= length;
+		float sin = Mth::sin(_mob.yRot() * (float)(M_PI / 180.0)), cos = Mth::cos(_mob.yRot() * (float)(M_PI / 180.0));
+		float dx = forwards * cos - right * sin, dz = right * cos + forwards * sin;
+		if (!isWalkable(dx, dz)) {
+			_strafeForwards = 1.0F;
+			_strafeRight	= 0.0F;
+		}
+		_mob.setSpeed(scaled);
+		_mob.setZza(_strafeForwards);
+		_mob.setXxa(_strafeRight);
+		_operation = Operation::Wait;
+	} else if (_operation == Operation::MoveTo) {
+		_operation = Operation::Wait;
+		const Vec3& position = _mob.position();
+		double		dx = _wantedX - position.x, dz = _wantedZ - position.z, dy = _wantedY - position.y;
+		if (dx * dx + dy * dy + dz * dz < 2.5000003E-7F) {
+			_mob.setZza(0.0F);
+			return;
+		}
+		float yRot = static_cast<float>(Mth::atan2(dz, dx) * 180.0F / (float)M_PI) - 90.0F;
+		_mob.setYRot(rotlerp(_mob.yRot(), yRot, 90.0F));
+		_mob.setSpeed(static_cast<float>(_speedModifier * _mob.getAttributeValue(_mob.attributeIds().movementSpeed)));
+		Level&	 level = _mob.level();
+		BlockPos pos   = _mob.blockPosition();
+		int		 state = level.getBlockState(pos);
+		const auto& shape = level.gameData().getCollisionShape(state);
+		double	 top	= 0.0;
+		for (const auto& box : shape) top = std::max(top, box.maxY);
+		static std::vector<bool> doors, fences;
+		static const GameData*	 cached = nullptr;
+		if (cached != &level.gameData()) {
+			cached = &level.gameData();
+			doors  = cached->blockTag("minecraft:doors");
+			fences = cached->blockTag("minecraft:fences");
+		}
+		int block = level.blocks().blockOf(state);
+		if ((dy > _mob.maxUpStep() && dx * dx + dz * dz < std::max(1.0F, _mob.width())) ||
+			(!shape.empty() && position.y < top + pos.y && !doors[block] && !fences[block])) {
+			_mob.jumpControl().jump();
+			_operation = Operation::Jumping;
+		}
+	} else if (_operation == Operation::Jumping) {
+		_mob.setSpeed(static_cast<float>(_speedModifier * _mob.getAttributeValue(_mob.attributeIds().movementSpeed)));
+		if (_mob.onGround() || (_mob.isInLiquid() && _mob.isAffectedByFluids())) _operation = Operation::Wait;
+	} else {
 		_mob.setZza(0.0F);
-		return;
 	}
-	// MOVE_TO, STRAFE, JUMPING: not ported yet (no goal asks for them). Back to waiting, like vanilla after each move
-	_operation = Operation::Wait;
-	_mob.setZza(0.0F);
+}
+
+bool MoveControl::isWalkable(float x, float z) {
+	NodeEvaluator& evaluator = _mob.navigation().getNodeEvaluator();
+	BlockPos	   pos{Mth::floor(_mob.position().x + x), _mob.blockPosition().y, Mth::floor(_mob.position().z + z)};
+	return evaluator.getPathType(_mob, pos) == PathType::Walkable;
+}
+
+float MoveControl::rotlerp(float from, float to, float max) {
+	float delta = Mth::wrapDegrees(to - from);
+	delta		= std::clamp(delta, -max, max);
+	float result = from + delta;
+	if (result < 0.0F) {
+		result += 360.0F;
+	} else if (result > 360.0F) {
+		result -= 360.0F;
+	}
+	return result;
+}
+
+// ----- Sensing -----
+
+bool Sensing::hasLineOfSight(Actor& target) {
+	int id = target.id();
+	if (_seen.count(id)) return true;
+	if (_unseen.count(id)) return false;
+	bool visible = _mob.hasLineOfSight(target);
+	(visible ? _seen : _unseen).insert(id);
+	return visible;
 }
 
 // ----- LookControl -----
@@ -42,6 +122,20 @@ void LookControl::setLookAt(double x, double y, double z, float yMaxRotSpeed, fl
 	_yMaxRotSpeed	= yMaxRotSpeed;
 	_xMaxRotAngle	= xMaxRotAngle;
 	_lookAtCooldown = 2;
+}
+
+namespace {
+	double wantedY(Actor& target) {
+		if (target.asLiving() || target.isPlayer()) return target.eyeY();
+		AABB box = target.boundingBox();
+		return (box.minY + box.maxY) / 2.0;
+	}
+} // namespace
+
+void LookControl::setLookAt(Actor& target) { setLookAt(target.position().x, wantedY(target), target.position().z); }
+
+void LookControl::setLookAt(Actor& target, float yMaxRotSpeed, float xMaxRotAngle) {
+	setLookAt(target.position().x, wantedY(target), target.position().z, yMaxRotSpeed, xMaxRotAngle);
 }
 
 void LookControl::tick() {
@@ -107,6 +201,4 @@ void BodyRotationControl::clientTick() {
 	}
 }
 
-// ----- PathNavigation -----
 
-bool PathNavigation::moveTo(double, double, double, double) { return false; }

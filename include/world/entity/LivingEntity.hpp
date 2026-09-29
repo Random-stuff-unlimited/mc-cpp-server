@@ -3,7 +3,12 @@
 
 #include "data/GameData.hpp"
 #include "world/entity/Attributes.hpp"
+#include "world/Fluids.hpp"
 #include "world/entity/Entity.hpp"
+#include "world/entity/EquipmentSlot.hpp"
+#include "world/item/ItemStack.hpp"
+
+#include <array>
 
 #include <string>
 
@@ -42,7 +47,12 @@ class LivingEntity : public Entity {
 	float maxHealth() const { return static_cast<float>(getAttributeValue(_ids.maxHealth)); }
 	void  heal(float amount);
 	bool  isDeadOrDying() const { return _health <= 0.0F; }
-	bool  isAlive() const { return !isRemoved() && !isDeadOrDying(); }
+	// LivingEntity.isBaby: ageable mobs (animals, villagers...) and baby zombies override it
+	virtual bool isBaby() const { return false; }
+	// Monster.isPreventingPlayerRest: monsters keep players from sleeping nearby (zombified piglins only when angry)
+	virtual bool isPreventingPlayerRest(Player&) const { return _type.is("Monster"); }
+	bool  isAlive() const override { return !isRemoved() && !isDeadOrDying(); }
+	LivingEntity* asLiving() override { return this; }
 	int	  hurtTime() const { return _hurtTime; }
 	int	  deathTime() const { return _deathTime; }
 	int	  invulnerableTime() const { return _invulnerableTime; }
@@ -50,9 +60,6 @@ class LivingEntity : public Entity {
 	void  setAirSupply(int air);
 	void  setRemainingFireTicks(int ticks);
 	// Entity.igniteForSeconds
-	void  igniteForTicks(int ticks) {
-		 if (_remainingFireTicks < ticks) setRemainingFireTicks(ticks);
-	}
 	// The player that hurt it recently (entity id, -1 if none): kill credit and player-only loot
 	int	  lastHurtByPlayer() const { return _lastHurtByPlayerMemoryTime > 0 ? _lastHurtByPlayer : -1; }
 	bool  isResting() const { return _resting; }
@@ -61,8 +68,7 @@ class LivingEntity : public Entity {
 	void  setYHeadRot(float rot) { _yHeadRot = rot; }
 	float yBodyRot() const { return _yBodyRot; }
 	void  setYBodyRot(float rot) { _yBodyRot = rot; }
-	float eyeHeight() const { return _type.eyeHeight; }
-	double eyeY() const { return _position.y + _type.eyeHeight; }
+	float eyeHeight() const override { return _eyeHeightOverride >= 0.0F ? _eyeHeightOverride : _type.eyeHeight; }
 
 	// Movement input, set by the AI (vanilla's xxa, yya, zza, jumping, speed)
 	void  setXxa(float value) { _xxa = value; }
@@ -71,6 +77,51 @@ class LivingEntity : public Entity {
 	void  setJumping(bool jumping) { _jumping = jumping; }
 	float speed() const { return _speed; }
 	virtual void setSpeed(float speed) { _speed = speed; }
+
+	// ----- Equipment -----
+
+	const ItemStack& getItemBySlot(EquipmentSlot slot) const { return _equipment[static_cast<int>(slot)]; }
+	// setItemSlot: the item's attribute modifiers and the viewers follow at the next tick (detectEquipmentUpdates)
+	virtual void	 setItemSlot(EquipmentSlot slot, ItemStack stack) { _equipment[static_cast<int>(slot)] = std::move(stack); }
+	const ItemStack& getMainHandItem() const { return getItemBySlot(EquipmentSlot::MainHand); }
+	// Set Equipment entries for every slot that isn't empty (the pairing data of a new viewer); false if none
+	bool			 writeEquipment(Buffer& buf) const;
+
+	// ----- Combat memory -----
+
+	// getLastHurtByMob: who last hurt it (for 100 ticks), null if gone
+	Actor* getLastHurtByMob();
+	int	   getLastHurtByMobTimestamp() const { return _lastHurtByMobTimestamp; }
+	void   setLastHurtByMob(Actor* attacker);
+	// getLastHurtMob: the last one it hurt
+	Actor* getLastHurtMob();
+	void   setLastHurtMob(Actor* target);
+	// LivingEntity.getLastDamageSource: the type of the last damage taken, for 40 ticks ("" if none)
+	std::string getLastDamageType() const;
+	// LivingEntity.swing: the arm animation for the viewers (hand 0 main, 1 off)
+	void		swing(int hand);
+	// LivingEntity.hasLineOfSight: nothing solid between the eyes, 128 blocks at most
+	bool   hasLineOfSight(Actor& target);
+	// Entity.isInWater, public (pathfinding asks)
+	bool   isInWaterNow() const { return isInWater(); }
+	// Entity.isInLiquid
+	bool   isInLiquid() const { return isInWater() || isInLava(); }
+	virtual bool isAffectedByFluids() const { return true; }
+	// LivingEntity.canStandOnFluid: striders on lava
+	virtual bool canStandOnFluid(const FluidState&) const { return false; }
+	// LivingEntity.maxUpStep: the step_height attribute
+	float		 maxUpStep() const { return static_cast<float>(getAttributeValue(_ids.stepHeight)); }
+	// LivingEntity.getMaxFallDistance
+	virtual int	 getMaxFallDistance() { return 3; }
+	// LivingEntity.isInvertedHealAndHarm: undead heal from harming and take damage from healing
+	bool		 isInvertedHealAndHarm() const;
+
+	// A loot table rolled for it ("minecraft:shearing/sheep", "minecraft:gameplay/chicken_lay"), with the tool used
+	std::vector<ItemStack> rollLootTable(const std::string& table, const ItemStack* tool = nullptr);
+	// Its data components for loot predicates ("minecraft:sheep/color" -> "white"), "" if it has none of that kind
+	virtual std::string lootComponent(const std::string&) const { return ""; }
+	// EntitySubPredicate ("type_specific" of loot predicates: a sheared sheep...), false if not ported for it
+	virtual bool		lootTypeSpecific(const nlohmann::json&) const { return false; }
 
 	void tick() override;
 	bool hurtServer(const Combat::DamageSource& source, float amount) override;
@@ -89,6 +140,16 @@ class LivingEntity : public Entity {
 	void load(Buffer& buf) override;
 
   protected:
+	std::array<ItemStack, EQUIPMENT_SLOT_COUNT> _equipment, _lastEquipment;
+	EntityRef									_lastHurtByMob, _lastHurtMob;
+	int											_lastHurtByMobTimestamp = 0, _lastHurtMobTimestamp = 0;
+	std::string									_lastDamageType;
+	int64_t										_lastDamageStamp = 0;
+
+	// LivingEntity.detectEquipmentUpdates: modifiers of the changed slots swapped, the viewers told
+	void detectEquipmentUpdates();
+	void applyItemModifiers(const ItemStack& stack, EquipmentSlot slot, bool add);
+
 	const GameData::EntityTypeInfo& _type;
 	const AttributeIds&				_ids;
 	AttributeMap					_attributes;
@@ -108,6 +169,22 @@ class LivingEntity : public Entity {
 	int								_pose = POSE_STANDING;
 	uint8_t							_sharedFlags = 0;
 	uint32_t						_dirtyData	 = 0; // Bit per entity data id changed since last sent
+
+	// Entity data entries of the subclasses (their ids come after LivingEntity's and Mob's, see
+	// .cache/vanilla/entity_data_ids.txt): write one when asked (mask) and, for pairing, when not at its default
+	static constexpr int SERIALIZER_BOOLEAN = 8;
+	bool wantsData(uint32_t mask, int id, bool onlyNonDefault, bool isDefault) const { return (mask & (1u << id)) && !(onlyNonDefault && isDefault); }
+	static void writeByteData(Buffer& buf, int id, uint8_t value);
+	static void writeIntData(Buffer& buf, int id, int value);
+	static void writeBoolData(Buffer& buf, int id, bool value);
+	static void writeFloatData(Buffer& buf, int id, float value);
+	// Entity.refreshDimensions: a new size (babies), its eye height too
+	void setDimensions(float width, float height, float eyeHeight) {
+		_width			   = width;
+		_height			   = height;
+		_eyeHeightOverride = eyeHeight;
+	}
+	float _eyeHeightOverride = -1.0F;
 
 	void markData(int id) {
 		_dirtyData |= 1u << id;
@@ -140,7 +217,8 @@ class LivingEntity : public Entity {
 	// Burning, lava and water from the blocks it is inside (the fire and fluid effects of applyEffectsFromBlocks)
 	void		 applyFireEffectsFromBlocks();
 	void		 pushEntities();
-	bool		 onClimbable();
+	// LivingEntity.onClimbable: in a climbable block (spiders: against a wall)
+	virtual bool onClimbable();
 	// Sounds of its type: "minecraft:entity.<type>.<name>" when the game has one, else the fallback
 	std::string	 typeSound(const char* name, const char* fallback) const;
 	void		 playSound(const std::string& sound, float volume, float pitch);

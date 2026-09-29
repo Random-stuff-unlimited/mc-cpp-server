@@ -98,6 +98,10 @@ class Chunk {
 
 	static int64_t key(int x, int z) { return (static_cast<int64_t>(z) << 32) | static_cast<uint32_t>(x); }
 
+	// LevelChunk.inhabitedTime: ticks players spent near it (the local difficulty). Game thread only; not saved
+	int64_t inhabitedTime() const { return _inhabitedTime; }
+	void	incrementInhabitedTime(int64_t ticks) { _inhabitedTime += ticks; }
+
   private:
 	int								 _x;
 	int								 _z;
@@ -116,6 +120,7 @@ class Chunk {
 	std::vector<uint16_t>			 _randomTicking;
 	BlockEntities					 _blockEntities;
 	std::vector<uint8_t>			 _savedEntities;
+	int64_t							 _inhabitedTime = 0;
 
 	ChunkSection& sectionAt(int y) { return _sections[(y - _minY) >> 4]; }
 	const ChunkSection& sectionAt(int y) const { return _sections[(y - _minY) >> 4]; }

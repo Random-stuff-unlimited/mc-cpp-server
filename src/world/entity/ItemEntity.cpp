@@ -155,3 +155,34 @@ void ItemEntity::writeEntityData(Buffer& buf) const {
 	buf.writeVarInt(ITEM_STACK_SERIALIZER);
 	_stack.write(buf);
 }
+
+void ItemEntity::save(Buffer& buf) const {
+	buf.writeUUID(_uuid);
+	for (double v : {_position.x, _position.y, _position.z, _delta.x, _delta.y, _delta.z}) buf.writeDouble(v);
+	buf.writeFloat(_yRot);
+	buf.writeVarInt(_stack.item);
+	buf.writeVarInt(_stack.count);
+	buf.writeVarInt(static_cast<int32_t>(_stack.components.size()));
+	buf.writeBytes(_stack.components);
+	buf.writeInt(_age);
+	buf.writeInt(_pickupDelay);
+	buf.writeInt(_health);
+}
+
+void ItemEntity::load(Buffer& buf) {
+	_uuid		= buf.readUUID();
+	_position.x = buf.readDouble();
+	_position.y = buf.readDouble();
+	_position.z = buf.readDouble();
+	_delta.x	= buf.readDouble();
+	_delta.y	= buf.readDouble();
+	_delta.z	= buf.readDouble();
+	_yRot		= buf.readFloat();
+	_stack.item	 = buf.readVarInt();
+	_stack.count = buf.readVarInt();
+	_stack.components = buf.readBytes(static_cast<size_t>(buf.readVarInt()));
+	_age		 = buf.readInt();
+	_pickupDelay = buf.readInt();
+	_health		 = buf.readInt();
+	_oldPosition = _position;
+}
