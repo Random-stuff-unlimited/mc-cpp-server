@@ -5,6 +5,7 @@
 #include "world/entity/mobs/Drowned.hpp"
 #include "world/entity/mobs/Enderman.hpp"
 #include "world/entity/mobs/FarmAnimals.hpp"
+#include "world/entity/mobs/Hoglin.hpp"
 #include "world/entity/mobs/IronGolem.hpp"
 #include "world/entity/mobs/PolarBear.hpp"
 #include "world/entity/mobs/Rabbit.hpp"
@@ -35,6 +36,7 @@ void registerVanillaMobs(MobRegistry& registry) {
 	registry.setFactory("minecraft:spider", factory<Spider>());
 	registry.setFactory("minecraft:cave_spider", factory<CaveSpider>());
 	registry.setFactory("minecraft:enderman", factory<Enderman>());
+	registry.setFactory("minecraft:hoglin", factory<Hoglin>());
 	registry.setFactory("minecraft:iron_golem", factory<IronGolem>());
 	registry.setFactory("minecraft:skeleton", factory<Skeleton>());
 	registry.setFactory("minecraft:stray", factory<Stray>());
