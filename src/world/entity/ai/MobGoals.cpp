@@ -1,6 +1,7 @@
 #include "world/entity/Mob.hpp"
 #include "world/entity/MobRegistry.hpp"
 #include "world/entity/mobs/Bat.hpp"
+#include "world/entity/mobs/Blaze.hpp"
 #include "world/entity/mobs/Creeper.hpp"
 #include "world/entity/mobs/Drowned.hpp"
 #include "world/entity/mobs/Enderman.hpp"
@@ -31,6 +32,7 @@ namespace {
 void registerVanillaMobs(MobRegistry& registry) {
 	registry.setFactory("minecraft:zombie", factory<Zombie>());
 	registry.setFactory("minecraft:bat", factory<Bat>());
+	registry.setFactory("minecraft:blaze", factory<Blaze>());
 	registry.setFactory("minecraft:husk", factory<Husk>());
 	registry.setFactory("minecraft:drowned", factory<Drowned>());
 	registry.setFactory("minecraft:creeper", factory<Creeper>());
