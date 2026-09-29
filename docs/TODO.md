@@ -47,19 +47,19 @@ Implémentées : `tp`, `gamemode`/`gm`, `spawn`, `setworldspawn`, `spawnpoint`, 
 ## Mobs & IA
 
 Solide : goals (19), pathfinding, équipement (`SET_EQUIPMENT`), élevage (amour/bébés/nourriture), spawn naturel,
-despawn, conversion (`convertTo`), combat à distance (flèches), vol (bat), sauts (slime/rabbit), mobs spécifiques :
-zombie/husk/drowned, creeper, spider/cave spider, enderman, slime/magma cube, cow/pig/chicken/sheep/rabbit,
-skeleton/stray, wolf (apprivoisable), zombified piglin, polar bear, bat.
+despawn, conversion (`convertTo`), combat à distance (flèches + boules de feu), vol (bat/blaze), sauts
+(slime/rabbit), grimpe (araignée). Mobs spécifiques : zombie/husk/drowned, creeper, spider/cave spider, enderman,
+slime/magma cube, cow/pig/chicken/sheep/rabbit, skeleton/stray, wolf (apprivoisable), zombified piglin, polar bear,
+bat, blaze, hoglin, iron golem, snow golem, silverfish.
 
 - [ ] Mobs « brain » : villageois (jobs, horaires, commerce `MERCHANT_OFFERS`), piglins (bartering), axolotls, grenouilles, renards
-- [ ] Mobs volants restants : ghast, phantom (navigation volante + attaques), perroquet (perchoir)
+- [ ] Mobs volants restants : ghast (fireball + vol), phantom (plonge), perroquet (perchoir), bee (ruche)
 - [ ] Mobs aquatiques : navigation sous-marine (squid, poissons, guardian, dauphin), trident du drowned
 - [ ] Boss : Wither et Ender Dragon (`BOSS_EVENT`, combat multi-segment, invocations, drops)
-- [ ] Mobs emblématiques : witch (potions), golems fer/neige, zombie villager, cheval/montures, ocelot/chat, panda,
-      bee, golem de cuivre, allay
+- [ ] Mobs emblématiques : witch (potions), zombie villager, cheval/montures, ocelot/chat, panda, golem de cuivre, allay
 - [ ] Montures/apprivoisement étendus : chevaux, chats, perroquets, selles ; laisses (lead) ; loup : protéger son maître
       (`OwnerHurtByTargetGoal`), élevage, changement de couleur du collier
-- [ ] Comportements : creeper chargé (foudre), araignées qui grimpent, conversion zombie→villageois, `CrossbowAttackGoal`
+- [ ] Comportements : creeper chargé (foudre), conversion zombie→villageois, `CrossbowAttackGoal`, flèches qui restent plantées
 - [ ] Réglages de spawn : caps par dimension, spawn par biome (tableaux), `SpawnPlacements` étendus, groupes
 - [ ] Sons par type (ambient/hurt/death/step) complets
 
