@@ -47,15 +47,16 @@ Implémentées : `tp`, `gamemode`/`gm`, `spawn`, `setworldspawn`, `spawnpoint`, 
 ## Mobs & IA
 
 Solide : goals (19), pathfinding, équipement (`SET_EQUIPMENT`), élevage (amour/bébés/nourriture), spawn naturel,
-despawn, conversion (`convertTo`), combat à distance (flèches), mobs spécifiques zombie/husk/creeper/spider/cow/pig/
-chicken/sheep/skeleton/stray/wolf (apprivoisable).
+despawn, conversion (`convertTo`), combat à distance (flèches), vol (bat), sauts (slime/rabbit), mobs spécifiques :
+zombie/husk/drowned, creeper, spider/cave spider, enderman, slime/magma cube, cow/pig/chicken/sheep/rabbit,
+skeleton/stray, wolf (apprivoisable), zombified piglin, polar bear, bat.
 
-- [ ] Attaques à distance étendues : flèches qui restent plantées/récupérables, arbalètes, mending/effets des flèches
 - [ ] Mobs « brain » : villageois (jobs, horaires, commerce `MERCHANT_OFFERS`), piglins (bartering), axolotls, grenouilles, renards
-- [ ] Mobs volants : `FlyingMoveControl` + navigation volante (ghast, bat, phantom, bee, perroquet)
-- [ ] Mobs aquatiques : navigation sous-marine (squid, poissons, drowned, guardian, dauphin)
+- [ ] Mobs volants restants : ghast, phantom (navigation volante + attaques), perroquet (perchoir)
+- [ ] Mobs aquatiques : navigation sous-marine (squid, poissons, guardian, dauphin), trident du drowned
 - [ ] Boss : Wither et Ender Dragon (`BOSS_EVENT`, combat multi-segment, invocations, drops)
-- [ ] Mobs emblématiques : enderman (téléportation + bloc), slime/magma cube (division, sauts), witch (potions), drowned, zombie piglin, golems fer/neige
+- [ ] Mobs emblématiques : witch (potions), golems fer/neige, zombie villager, cheval/montures, ocelot/chat, panda,
+      bee, golem de cuivre, allay
 - [ ] Montures/apprivoisement étendus : chevaux, chats, perroquets, selles ; laisses (lead) ; loup : protéger son maître
       (`OwnerHurtByTargetGoal`), élevage, changement de couleur du collier
 - [ ] Comportements : creeper chargé (foudre), araignées qui grimpent, conversion zombie→villageois, `CrossbowAttackGoal`
