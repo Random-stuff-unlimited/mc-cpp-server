@@ -205,7 +205,7 @@ class LivingEntity : public Entity {
 	// Body toward the movement (LivingEntity.tickHeadTurn; mobs use their BodyRotationControl)
 	virtual void tickHeadTurn(float bodyTarget);
 	virtual int	 maxHeadYRot() const { return 75; }
-	void		 travel(const Vec3& input);
+	virtual void travel(const Vec3& input);
 	void		 jumpFromGround();
 	virtual void tickDeath();
 	virtual void dropAllDeathLoot(const Combat::DamageSource& source);
