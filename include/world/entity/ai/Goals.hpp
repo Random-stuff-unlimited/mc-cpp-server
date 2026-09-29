@@ -389,4 +389,27 @@ class RangedAttackGoal : public Goal {
 	void	shoot(Actor& target);
 };
 
+// FollowOwnerGoal (vanilla's): a tamed mob goes back to its owner when it strays beyond `startDistance`, stopping
+// within `stopDistance`
+class FollowOwnerGoal : public Goal {
+  public:
+	FollowOwnerGoal(Mob& mob, double speed, float startDistance, float stopDistance)
+		: _mob(mob), _speed(speed), _startDistance(startDistance), _stopDistance(stopDistance) {
+		setFlags({Flag::Move, Flag::Look});
+	}
+	bool canUse() override;
+	bool canContinueToUse() override;
+	void start() override;
+	void stop() override;
+	void tick() override;
+
+  private:
+	Mob&	_mob;
+	double	_speed;
+	float	_startDistance, _stopDistance;
+	int		_recalculateTicks = 0;
+	float	_oldWaterLevel	 = 0.0F;
+	bool	_startedFollowing = false;
+};
+
 #endif

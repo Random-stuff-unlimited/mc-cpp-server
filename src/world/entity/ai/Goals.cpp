@@ -732,3 +732,41 @@ void RangedAttackGoal::shoot(Actor& target) {
 	level.playSoundAt(nullptr, _mob.position().x, _mob.position().y, _mob.position().z, "minecraft:entity.skeleton.shoot", Level::SoundSource::Hostile, 1.0F,
 					  1.0F / (_mob.random().nextFloat() * 0.4F + 0.8F));
 }
+
+// ===================== FollowOwnerGoal =====================
+
+bool FollowOwnerGoal::canUse() {
+	Actor* owner = _mob.getOwnerEntity();
+	return owner && owner->isAlive() && _mob.distanceToSqr(*owner) > static_cast<double>(_startDistance) * _startDistance;
+}
+
+bool FollowOwnerGoal::canContinueToUse() {
+	Actor* owner = _mob.getOwnerEntity();
+	return owner && owner->isAlive() && !_mob.navigation().isDone() && _mob.distanceToSqr(*owner) > static_cast<double>(_stopDistance) * _stopDistance;
+}
+
+void FollowOwnerGoal::start() { _recalculateTicks = 0; _startedFollowing = false; }
+
+void FollowOwnerGoal::stop() {
+	_mob.navigation().stop();
+	_startedFollowing = false;
+}
+
+void FollowOwnerGoal::tick() {
+	Actor* owner = _mob.getOwnerEntity();
+	if (!owner) return;
+	_mob.lookControl().setLookAt(*owner, 10.0F, static_cast<float>(_mob.maxHeadXRot()));
+	// FollowOwnerGoal.tryTeleportTo: the owner is too far (144 blocks): teleport next to it (25 % chance a tick)
+	if (_mob.distanceToSqr(*owner) >= 144.0 * 144.0) {
+		if (_mob.random().nextFloat() < 0.25F) {
+			Vec3 at = owner->position();
+			_mob.snapTo({at.x, at.y, at.z}, _mob.yRot(), _mob.xRot());
+			_mob.navigation().stop();
+		}
+		return;
+	}
+	if (--_recalculateTicks <= 0) {
+		_recalculateTicks = 10;
+		if (!_mob.navigation().moveTo(*owner, _speed)) _mob.navigation().moveTo(owner->position().x, owner->position().y, owner->position().z, _speed);
+	}
+}

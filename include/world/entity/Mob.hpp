@@ -54,6 +54,8 @@ class Mob : public LivingEntity {
 	// Mob.getTarget: what it attacks, null if none (or gone, dead, elsewhere)
 	Actor*		 getTarget();
 	virtual void setTarget(Actor* target);
+	// TamableAnimal.getOwner: the player that tamed it, null for wild mobs
+	virtual Actor* getOwnerEntity() { return nullptr; }
 	// Mob.canAttackType
 	virtual bool canAttackType(int typeId) const;
 	// LivingEntity.canAttack: a target it may attack (not a creative or spectator player, not itself)
