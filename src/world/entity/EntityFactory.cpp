@@ -2,6 +2,7 @@
 
 #include "network/buffer.hpp"
 #include "world/Level.hpp"
+#include "world/entity/Arrow.hpp"
 #include "world/entity/ItemEntity.hpp"
 #include "world/entity/Mob.hpp"
 #include "world/entity/MobRegistry.hpp"
@@ -14,6 +15,8 @@ namespace EntityFactory {
 		const std::string& name = level.gameData().getStaticName("minecraft:entity_type", typeId);
 		if (name == "minecraft:item") return std::make_unique<ItemEntity>(level, Vec3{}, ItemStack{}, Vec3{});
 		if (name == "minecraft:tnt") return std::make_unique<PrimedTnt>(level, Vec3{}, nullptr);
+		if (name == "minecraft:arrow") return std::make_unique<Arrow>(level);
+		if (name == "minecraft:trident") return std::make_unique<ThrownTrident>(level);
 		return nullptr;
 	}
 

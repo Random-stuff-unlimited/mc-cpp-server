@@ -9,6 +9,8 @@
 #include "world/item/ItemDamage.hpp"
 #include "world/item/ItemUse.hpp"
 #include "world/item/Recipes.hpp"
+#include "world/item/Components.hpp"
+#include "world/blockentity/StorageEntities.hpp"
 
 namespace {
 	constexpr int SAVE_VERSION = 1;
@@ -120,6 +122,161 @@ void VariantAnimal::load(Buffer& buf) {
 	_dirtyData	= 0;
 }
 
+// ===================== Mooshroom =====================
+
+namespace {
+	// The flowers' SuspiciousEffectHolder effects (FlowerBlock: seconds * 20 ticks)
+	std::optional<std::pair<MobEffects::Effect, int>> flowerStewEffect(const std::string& item) {
+		static const std::vector<std::tuple<const char*, MobEffects::Effect, float>> flowers = {
+				{"minecraft:dandelion", MobEffects::Saturation, 0.35F},		  {"minecraft:torchflower", MobEffects::NightVision, 5.0F},
+				{"minecraft:poppy", MobEffects::NightVision, 5.0F},			  {"minecraft:blue_orchid", MobEffects::Saturation, 0.35F},
+				{"minecraft:allium", MobEffects::FireResistance, 3.0F},		  {"minecraft:azure_bluet", MobEffects::Blindness, 11.0F},
+				{"minecraft:red_tulip", MobEffects::Weakness, 7.0F},		  {"minecraft:orange_tulip", MobEffects::Weakness, 7.0F},
+				{"minecraft:white_tulip", MobEffects::Weakness, 7.0F},		  {"minecraft:pink_tulip", MobEffects::Weakness, 7.0F},
+				{"minecraft:oxeye_daisy", MobEffects::Regeneration, 7.0F},	  {"minecraft:cornflower", MobEffects::JumpBoost, 5.0F},
+				{"minecraft:wither_rose", MobEffects::Wither, 7.0F},		  {"minecraft:lily_of_the_valley", MobEffects::Poison, 11.0F},
+				{"minecraft:open_eyeblossom", MobEffects::Blindness, 11.0F}, {"minecraft:closed_eyeblossom", MobEffects::Nausea, 7.0F},
+		};
+		for (const auto& [name, effect, seconds] : flowers) {
+			if (item == name) return std::make_pair(effect, static_cast<int>(std::floor(seconds * 20.0F)));
+		}
+		return std::nullopt;
+	}
+} // namespace
+
+void Mooshroom::setVariant(int variant) {
+	if (variant == _variant) return;
+	_variant = variant;
+	markData(DATA_TYPE);
+}
+
+// AbstractCow.registerGoals
+void Mooshroom::registerGoals() {
+	_goalSelector.addGoal(0, std::make_unique<FloatGoal>(*this));
+	_goalSelector.addGoal(1, std::make_unique<PanicGoal>(*this, 2.0));
+	_goalSelector.addGoal(2, std::make_unique<BreedGoal>(*this, 1.0));
+	_goalSelector.addGoal(3, std::make_unique<TemptGoal>(*this, 1.25, itemTag(_level, "minecraft:cow_food"), false));
+	_goalSelector.addGoal(4, std::make_unique<FollowParentGoal>(*this, 1.25));
+	_goalSelector.addGoal(5, std::make_unique<WaterAvoidingRandomStrollGoal>(*this, 1.0));
+	_goalSelector.addGoal(6, std::make_unique<LookAtPlayerGoal>(*this, "Player", 6.0F));
+	_goalSelector.addGoal(7, std::make_unique<RandomLookAroundGoal>(*this));
+}
+
+// MushroomCow.getWalkTargetValue: mycelium, else the light
+float Mooshroom::getWalkTargetValue(const BlockPos& pos) {
+	int below = _level.gameData().getBlocks().blockOf(_level.getBlockState(pos.below()));
+	if (below == _level.gameData().getStaticId("minecraft:block", "minecraft:mycelium")) return 10.0F;
+	return _level.getPathfindingCostFromLightLevels(pos);
+}
+
+bool Mooshroom::mobInteract(Player& player, int hand) {
+	const ItemStack& stack = player.getStackInHand(hand);
+	const GameData&	 data  = _level.gameData();
+	if (isItem(_level, stack, "minecraft:bowl") && !isBaby()) {
+		// A bowl: mushroom stew, or the suspicious stew of the flower it ate
+		bool	  suspicious = _hasStewEffects;
+		ItemStack stew(data.getStaticId("minecraft:item", suspicious ? "minecraft:suspicious_stew" : "minecraft:mushroom_stew"), 1);
+		if (suspicious) {
+			Components::set(stew, data, "minecraft:suspicious_stew_effects", Components::encodeStewEffects(_stewEffects));
+			_stewEffects.clear();
+			_hasStewEffects = false;
+		}
+		ItemStack held = ItemUse::filledResult(_level, player, stack, std::move(stew));
+		player.inventory().set(player.handSlot(hand), std::move(held));
+		playSound(suspicious ? "minecraft:entity.mooshroom.suspicious_milk" : "minecraft:entity.mooshroom.milk", 1.0F, 1.0F);
+		return true;
+	}
+	if (isItem(_level, stack, "minecraft:shears") && readyForShearing()) {
+		shear();
+		ItemDamage::hurtAndBreak(_level, player.inventory().getMutable(player.handSlot(hand)), 1, &player, player.handSlot(hand));
+		return true;
+	}
+	if (_variant == Brown && !stack.isEmpty()) {
+		if (auto effect = flowerStewEffect(data.getStaticName("minecraft:item", stack.item))) {
+			if (_hasStewEffects) {
+				// Already fed: smoke. Level.addParticle does nothing on the server, only its random draws are made
+				for (int i = 0; i < 6; i++) _random.nextDouble();
+			} else {
+				if (!player.isCreative()) player.inventory().getMutable(player.handSlot(hand)).shrink(1); // ItemStack.consume
+				for (int i = 0; i < 12; i++) _random.nextDouble(); // The effect particles' draws
+				_stewEffects	= {{effect->first, effect->second}};
+				_hasStewEffects = true;
+				playSound("minecraft:entity.mooshroom.eat", 2.0F, 1.0F);
+			}
+			return true;
+		}
+	}
+	return Animal::mobInteract(player, hand);
+}
+
+void Mooshroom::shear() {
+	_level.playSoundAt(nullptr, _position.x, _position.y, _position.z, "minecraft:entity.mooshroom.shear", Level::SoundSource::Players, 1.0F, 1.0F);
+	// The mushrooms drop where it stood, one by one, from the top of the mooshroom
+	Vec3				   at = _position;
+	float				   top = _height;
+	std::vector<ItemStack> drops = rollLootTable("minecraft:shearing/mooshroom");
+	convertTo(_level.gameData().getStaticId("minecraft:entity_type", "minecraft:cow"), false, false, [&](Mob&) {
+		sendParticles(_level, "minecraft:explosion", at.x, at.y + top * 0.5, at.z, 1, 0.0, 0.0, 0.0, 0.0);
+		for (ItemStack& stack : drops) {
+			for (int i = 0; i < stack.count; i++) {
+				auto item = ItemEntity::create(_level, {at.x, at.y + top, at.z}, stack.copyWithCount(1));
+				_level.entities().add(std::move(item));
+			}
+		}
+	});
+}
+
+// MushroomCow.getOffspringVariant: one parent's, a mutation (1/1024) when both are the same
+std::unique_ptr<Mob> Mooshroom::getBreedOffspring(Animal& partner) {
+	std::unique_ptr<Mob> child = Animal::getBreedOffspring(partner);
+	auto*				 calf  = dynamic_cast<Mooshroom*>(child.get());
+	auto*				 other = dynamic_cast<Mooshroom*>(&partner);
+	if (!calf || !other) return child;
+	int variant;
+	if (_variant == other->_variant && _random.nextInt(1024) == 0) {
+		variant = _variant == Brown ? Red : Brown;
+	} else {
+		variant = _random.nextBoolean() ? _variant : other->_variant;
+	}
+	calf->setVariant(variant);
+	return child;
+}
+
+std::string Mooshroom::lootComponent(const std::string& component) const {
+	if (component == "minecraft:mooshroom/variant") return _variant == Brown ? "brown" : "red";
+	return Animal::lootComponent(component);
+}
+
+void Mooshroom::writeData(Buffer& buf, uint32_t mask, bool onlyNonDefault) const {
+	Animal::writeData(buf, mask, onlyNonDefault);
+	if (wantsData(mask, DATA_TYPE, onlyNonDefault, _variant == Red)) writeIntData(buf, DATA_TYPE, _variant);
+}
+
+void Mooshroom::save(Buffer& buf) const {
+	Animal::save(buf);
+	buf.writeUByte(SAVE_VERSION);
+	buf.writeVarInt(_variant);
+	buf.writeBool(_hasStewEffects);
+	buf.writeVarInt(static_cast<int32_t>(_stewEffects.size()));
+	for (const auto& [effect, duration] : _stewEffects) {
+		buf.writeVarInt(effect);
+		buf.writeVarInt(duration);
+	}
+}
+
+void Mooshroom::load(Buffer& buf) {
+	Animal::load(buf);
+	if (buf.readUByte() != SAVE_VERSION) throw std::runtime_error("unknown mooshroom data version");
+	_variant		= buf.readVarInt() == Brown ? Brown : Red;
+	_hasStewEffects = buf.readBool();
+	_stewEffects.clear();
+	for (int i = buf.readVarInt(); i > 0; i--) {
+		int effect = buf.readVarInt();
+		_stewEffects.emplace_back(effect, buf.readVarInt());
+	}
+	_dirtyData = 0;
+}
+
 // ===================== Cow =====================
 
 Cow::Cow(Level& level, int typeId) : VariantAnimal(level, typeId, "minecraft:cow_variant", 17, SERIALIZER_COW_VARIANT) {}
@@ -151,6 +308,23 @@ bool Cow::mobInteract(Player& player, int hand) {
 // ===================== Pig =====================
 
 Pig::Pig(Level& level, int typeId) : VariantAnimal(level, typeId, "minecraft:pig_variant", 18, SERIALIZER_PIG_VARIANT) {}
+
+bool Pig::mobInteract(Player& player, int hand) {
+	bool food = isFood(player.getStackInHand(hand));
+	if (!food && isSaddled() && !hasRider() && !player.isShiftKeyDown()) {
+		startRiding(player);
+		return true;
+	}
+	if (VariantAnimal::mobInteract(player, hand)) return true;
+	return isAlive() && !isBaby() && equipFromPlayer(player, hand, EquipmentSlot::Saddle);
+}
+
+bool Pig::isControlledByRider() {
+	Player* player = rider();
+	if (!player || !isSaddled()) return false;
+	int stick = _level.gameData().getStaticId("minecraft:item", "minecraft:carrot_on_a_stick");
+	return player->getStackInHand(0).item == stick || player->getStackInHand(1).item == stick;
+}
 
 void Pig::registerGoals() {
 	_goalSelector.addGoal(0, std::make_unique<FloatGoal>(*this));
@@ -283,18 +457,28 @@ std::unique_ptr<Mob> Sheep::getBreedOffspring(Animal& partner) {
 	auto*				 lamb  = dynamic_cast<Sheep*>(child.get());
 	auto*				 other = dynamic_cast<Sheep*>(&partner);
 	if (!lamb || !other) return child;
-	const GameData& data = _level.gameData();
-	auto			dye	 = [&](int color) { return ItemStack(data.getStaticId("minecraft:item", std::string("minecraft:") + COLORS[color] + "_dye"), 1); };
-	CraftingInput	input  = CraftingInput::ofPositioned(2, 1, {dye(color()), dye(other->color())}).input;
-	int				mixed  = -1;
-	if (const Recipe* recipe = _level.recipes().getRecipeFor(RecipeType::Crafting, input)) {
-		ItemStack result = recipe->assemble(input);
-		for (int c = 0; c < 16 && !result.isEmpty(); c++) {
-			if (data.getStaticName("minecraft:item", result.item) == std::string("minecraft:") + COLORS[c] + "_dye") mixed = c;
-		}
-	}
-	lamb->setColor(mixed >= 0 ? mixed : (_level.random().nextBoolean() ? color() : other->color()));
+	lamb->setColor(mixedDyeColor(_level, color(), other->color()));
 	return child;
+}
+
+int mixedDyeColor(Level& level, int a, int b) {
+	const GameData& data = level.gameData();
+	auto			dye	 = [&](int color) { return ItemStack(data.getStaticId("minecraft:item", std::string("minecraft:") + COLORS[color] + "_dye"), 1); };
+	CraftingInput	input = CraftingInput::ofPositioned(2, 1, {dye(a), dye(b)}).input;
+	if (const Recipe* recipe = level.recipes().getRecipeFor(RecipeType::Crafting, input)) {
+		int color = dyeColorOfItem(level, recipe->assemble(input));
+		if (color >= 0) return color;
+	}
+	return level.random().nextBoolean() ? a : b;
+}
+
+int dyeColorOfItem(Level& level, const ItemStack& stack) {
+	if (stack.isEmpty()) return -1;
+	const std::string& name = level.gameData().getStaticName("minecraft:item", stack.item);
+	for (int c = 0; c < 16; c++) {
+		if (name == std::string("minecraft:") + COLORS[c] + "_dye") return c;
+	}
+	return -1;
 }
 
 std::string Sheep::lootComponent(const std::string& component) const {

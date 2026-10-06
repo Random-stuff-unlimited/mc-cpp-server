@@ -6,6 +6,7 @@
 #include "world/BlockPos.hpp"
 #include "world/FoodData.hpp"
 #include "world/entity/Actor.hpp"
+#include "world/entity/MobEffects.hpp"
 #include "world/item/PlayerInventory.hpp"
 
 #include <algorithm>
@@ -100,6 +101,10 @@ struct SurvivalState {
 	bool	 sleeping	= false;
 	int	 sleepTimer	= 0;
 	BlockPos sleepingPos;
+
+	// Stats.TIME_SINCE_REST: ticks since it last slept or died (phantoms come after 3 days). Not kept across restarts
+	int	 timeSinceRest	= 0;
+	bool effectAmbience = false; // LivingEntity.DATA_EFFECT_AMBIENCE_ID as last set
 };
 
 class PlayerConfig {
@@ -138,7 +143,7 @@ class PlayerConfig {
 	void setServerListings(bool serverListings) { _allowServerListings = serverListings; }
 };
 
-class Player : public Actor, public std::enable_shared_from_this<Player> {
+class Player : public Actor, public std::enable_shared_from_this<Player>, public MobEffects::Host {
   private:
 	std::string				 _name;
 	mutable std::mutex		 _nameMutex; // The name is set at login while other logins look for duplicates
@@ -181,6 +186,7 @@ class Player : public Actor, public std::enable_shared_from_this<Player> {
 	Server&		  _server;
 	PlayerConfig* _config;
 	bool		  _shiftKeyDown = false;
+	int			  _vehicleId	= -1;
 	std::array<ItemStack, 27> _enderChest;
 	std::unique_ptr<Menu> _inventoryMenu, _openMenu;
 	int					  _containerCounter = 0;
@@ -194,6 +200,13 @@ class Player : public Actor, public std::enable_shared_from_this<Player> {
 	FoodData			  _foodData;
 	SurvivalState		  _survival;
 	JavaRandom			  _random{0}; // Entity.random (seeded in the constructors)
+	// LivingEntity's attributes (made the first time they are needed: movement speed, attack damage... with the
+	// effects' modifiers), active effects and absorption
+	std::unique_ptr<AttributeMap> _attributes;
+	MobEffects::Active			  _effects;
+	float						  _absorption = 0.0F;
+	EntityRef					  _lastHurtByMob, _lastHurtMob;
+	int							  _lastHurtByMobTimestamp = 0, _lastHurtMobTimestamp = 0;
 
   public:
 	// The standing player's box (EntityDimensions 0.6 x 1.8, floats)
@@ -270,6 +283,9 @@ class Player : public Actor, public std::enable_shared_from_this<Player> {
 	float  getYaw() const { return _yaw; }
 	// Sneak key held (Player Input packet): isSecondaryUseActive
 	bool   isShiftKeyDown() const { return _shiftKeyDown; }
+	// Entity.getVehicle: the id of the entity it rides, -1 if none (see Entity::startRiding)
+	int	   vehicleId() const { return _vehicleId; }
+	void   setVehicleId(int id) { _vehicleId = id; }
 	void   setShiftKeyDown(bool down) { _shiftKeyDown = down; }
 	float  getPitch() const { return _pitch; }
 	bool   isOnGround() const { return _onGround; }
@@ -317,6 +333,70 @@ class Player : public Actor, public std::enable_shared_from_this<Player> {
 
 	CombatState& combat() { return _combat; }
 	const CombatState& combat() const { return _combat; }
+
+	// LivingEntity.getLastHurtByMob / getLastHurtMob and their timestamps (its tick count): who last hurt it, whom it
+	// last hit. Tamed animals defend their owner with them
+	const EntityRef& lastHurtByMob() const { return _lastHurtByMob; }
+	int				 lastHurtByMobTimestamp() const { return _lastHurtByMobTimestamp; }
+	void			 setLastHurtByMob(Actor* attacker) {
+		if (attacker) {
+			_lastHurtByMob			= EntityRef(*attacker);
+			_lastHurtByMobTimestamp = static_cast<int>(_survival.tickCount);
+		} else {
+			_lastHurtByMob.clear();
+		}
+	}
+	const EntityRef& lastHurtMob() const { return _lastHurtMob; }
+	int				 lastHurtMobTimestamp() const { return _lastHurtMobTimestamp; }
+	void			 setLastHurtMob(Actor& target) {
+		_lastHurtMob		  = EntityRef(target);
+		_lastHurtMobTimestamp = static_cast<int>(_survival.tickCount);
+	}
+
+	// ----- Attributes and effects (LivingEntity's) -----
+
+	AttributeMap&			  attributes();
+	// A new player's attributes (after a respawn): the effects' modifiers are gone
+	void					  resetAttributes() { _attributes.reset(); }
+	// 0 for an attribute the game data doesn't have (a player made without game data, in tests)
+	double					  getAttributeValue(int attribute);
+	// LivingEntity.getMaxHealth
+	float					  maxHealth();
+	MobEffects::Active&		  effects() { return _effects; }
+	const MobEffects::Active& effects() const { return _effects; }
+	bool					  hasEffect(MobEffects::Effect effect) const { return _effects.has(effect); }
+	bool					  addEffect(const MobEffects::Instance& instance, Actor* source = nullptr) { return _effects.add(*this, instance, source != nullptr); }
+	bool					  removeEffect(MobEffects::Effect effect) { return _effects.remove(*this, effect); }
+	bool					  removeAllEffects() { return _effects.removeAll(*this); }
+	float					  absorptionAmount() const { return _absorption; }
+	void					  setAbsorptionAmount(float amount);
+	// An attribute's value computed from another base (the item's damage and attack speed: item modifiers aren't
+	// in the map), with the map's modifiers (the effects')
+	double					  attributeValueWithBase(int attribute, double base);
+	// PlayerList.sendActivePlayerEffects: all of its effects, to its client (joining, changing dimension)
+	void					  sendActiveEffects();
+
+	// MobEffects::Host
+	Level&		  effectLevel() override;
+	const GameData& effectGameData() const override;
+	int			  effectEntityId() const override { return _playerId; }
+	int			  effectTypeId() const override;
+	int64_t		  effectTickCount() const override { return _survival.tickCount; }
+	float		  effectHealth() const override { return _combat.health; }
+	float		  effectMaxHealth() const override { return const_cast<Player*>(this)->maxHealth(); }
+	void		  effectHeal(float amount) override;
+	bool		  effectHurt(const Combat::DamageSource& source, float amount) override;
+	AttributeMap* effectAttributes() override { return &attributes(); }
+	bool		  effectCanBeAffected(MobEffects::Effect effect) const override;
+	void		  onEffectAttributesChanged() override;
+	float		  effectAbsorption() const override { return _absorption; }
+	void		  setEffectAbsorption(float amount) override { setAbsorptionAmount(amount); }
+	void		  effectFoodExhaustion(float exhaustion) override;
+	void		  effectEat(int food, float saturation) override;
+	void		  sendEffectUpdate(const MobEffects::Instance& instance, bool blend) override;
+	void		  sendEffectRemoved(MobEffects::Effect effect) override;
+	void		  updateEffectVisuals() override;
+	void		  playEffectSound(const std::string& sound) override;
 	// The respawn point: a bed or a respawn anchor, set when the player sleeps in one (or by /spawnpoint)
 	PlayerSpawn&		spawn() { return _spawn; }
 	const PlayerSpawn&	spawn() const { return _spawn; }

@@ -171,6 +171,41 @@ std::vector<const PoiManager::Record*> PoiManager::getInRange(Type type, const B
 	return result;
 }
 
+std::vector<const PoiManager::Record*> PoiManager::getAllInRange(const BlockPos& center, int radius, Occupancy occupancy) const {
+	std::vector<const Record*> result;
+	for (int cx = (center.x - radius) >> 4; cx <= (center.x + radius) >> 4; cx++) {
+		for (int cz = (center.z - radius) >> 4; cz <= (center.z + radius) >> 4; cz++) {
+			auto chunk = _byChunk.find(Chunk::key(cx, cz));
+			if (chunk == _byChunk.end()) continue;
+			for (int64_t key : chunk->second) {
+				const Record& record = _byPos.at(key);
+				if (!matches(record, occupancy)) continue;
+				int64_t dx = record.pos.x - center.x, dy = record.pos.y - center.y, dz = record.pos.z - center.z;
+				if (dx * dx + dy * dy + dz * dz <= static_cast<int64_t>(radius) * radius) result.push_back(&record);
+			}
+		}
+	}
+	return result;
+}
+
+int PoiManager::sectionsToVillage(int sectionX, int sectionY, int sectionZ) const {
+	int best = 7;
+	for (int cx = sectionX - 6; cx <= sectionX + 6; cx++) {
+		for (int cz = sectionZ - 6; cz <= sectionZ + 6; cz++) {
+			auto chunk = _byChunk.find(Chunk::key(cx, cz));
+			if (chunk == _byChunk.end()) continue;
+			for (int64_t key : chunk->second) {
+				const Record& record = _byPos.at(key);
+				// PoiTypeTags.VILLAGE: the job sites, beds and bells
+				if (record.type > Type::Meeting || !matches(record, Occupancy::IsOccupied)) continue;
+				int distance = std::max({std::abs(cx - sectionX), std::abs((record.pos.y >> 4) - sectionY), std::abs(cz - sectionZ)});
+				best		 = std::min(best, distance);
+			}
+		}
+	}
+	return best;
+}
+
 const PoiManager::Record* PoiManager::get(const BlockPos& pos) const {
 	auto it = _byPos.find(pos.asLong());
 	return it == _byPos.end() ? nullptr : &it->second;

@@ -7,7 +7,7 @@
 // despawn sooner). Every entity type of the Monster class that has no class of its own is made one of these
 class Monster : public Mob {
   public:
-	using Mob::Mob;
+	Monster(Level& level, int typeId) : Mob(level, typeId) { _xpReward = 5; }
 	// Monster.getWalkTargetValue: minus how bright it is
 	float getWalkTargetValue(const BlockPos& pos) override;
 

@@ -31,6 +31,7 @@ struct AABB {
 	AABB move(double dx, double dy, double dz) const { return {minX + dx, minY + dy, minZ + dz, maxX + dx, maxY + dy, maxZ + dz}; }
 	AABB move(const Vec3& v) const { return move(v.x, v.y, v.z); }
 	AABB inflate(double dx, double dy, double dz) const { return {minX - dx, minY - dy, minZ - dz, maxX + dx, maxY + dy, maxZ + dz}; }
+	AABB inflate(double d) const { return inflate(d, d, d); }
 	AABB deflate(double d) const { return inflate(-d, -d, -d); }
 	// AABB.expandTowards: grows toward the movement
 	AABB expandTowards(const Vec3& v) const {
@@ -43,6 +44,8 @@ struct AABB {
 	bool intersects(const AABB& o) const {
 		return minX < o.maxX && maxX > o.minX && minY < o.maxY && maxY > o.minY && minZ < o.maxZ && maxZ > o.minZ;
 	}
+	// AABB.contains: the point is inside (min inclusive, max exclusive)
+	bool contains(const Vec3& p) const { return p.x >= minX && p.x < maxX && p.y >= minY && p.y < maxY && p.z >= minZ && p.z < maxZ; }
 	double min(int axis) const { return axis == 0 ? minX : axis == 1 ? minY : minZ; }
 	double max(int axis) const { return axis == 0 ? maxX : axis == 1 ? maxY : maxZ; }
 };

@@ -1,3 +1,5 @@
+#include "world/entity/mobs/Horses.hpp"
+#include "world/entity/Fireballs.hpp"
 #include "PacketIds.hpp"
 #include "Commands.hpp"
 #include "logger.hpp"
@@ -35,17 +37,28 @@ namespace {
 		Player* player	  = packet->getPlayer();
 		double	x = player->getX(), y = player->getY(), z = player->getZ();
 		double	previousX = x, previousY = y, previousZ = z;
+		// Riding: its position is its vehicle's, only its look counts (handleMovePlayer, isPassenger)
+		bool riding = player->vehicleId() != -1;
 		if (withPosition) {
 			x = data.readDouble();
 			y = data.readDouble(); // Feet
 			z = data.readDouble();
-			player->setPosition(x, y, z);
+			if (riding) {
+				x = previousX, y = previousY, z = previousZ;
+				withPosition = false;
+			} else {
+				player->setPosition(x, y, z);
+			}
 		}
 		if (withRotation) {
 			float yaw = data.readFloat();
 			player->setRotation(yaw, data.readFloat());
 		}
 		bool onGround = data.readUByte() & MOVE_FLAG_ON_GROUND;
+		if (riding) {
+			server.getPlayerTracker().move(player);
+			return;
+		}
 		// Jump and movement exhaustion (handleMovePlayer: jumpFromGround, setOnGroundWithMovement, checkMovementStatistics)
 		if (withPosition && !player->combat().dead) {
 			Survival::onMove(server.levelOf(*player), *player, x - previousX, y - previousY, z - previousZ, onGround);
@@ -65,7 +78,7 @@ namespace {
 	}
 
 	enum InteractType { INTERACT = 0, ATTACK = 1, INTERACT_AT = 2 };
-	enum PlayerCommandAction { START_SPRINTING = 1, STOP_SPRINTING = 2 };
+	enum PlayerCommandAction { START_SPRINTING = 1, STOP_SPRINTING = 2, START_RIDING_JUMP = 3 };
 	constexpr int CLIENT_COMMAND_RESPAWN = 0;
 	constexpr int ANIMATE_SWING_MAIN_HAND = 0, ANIMATE_SWING_OFF_HAND = 3;
 } // namespace
@@ -139,6 +152,16 @@ void handlePlayState(Packet* packet, Server& server) {
 				Combat::attack(server, *player, *target);
 			} else if (auto* living = dynamic_cast<LivingEntity*>(server.levelOf(*player).entities().byId(entityId))) {
 				Combat::attack(server, *player, *living);
+			} else if (auto* fireball = dynamic_cast<LargeFireball*>(server.levelOf(*player).entities().byId(entityId))) {
+				// Player.attack on a redirectable projectile: sent back along the player's look (Projectile.deflect, AIM_DEFLECT)
+				if (player->getGameMode() != GameMode::Spectator && !fireball->isRemoved()) {
+					const float toRadians = static_cast<float>(M_PI / 180.0);
+					float		yaw = player->getYaw() * toRadians, pitch = player->getPitch() * toRadians;
+					fireball->deflectAim(*player, {-Mth::sin(yaw) * Mth::cos(pitch), -Mth::sin(pitch), Mth::cos(yaw) * Mth::cos(pitch)});
+					Level& level = server.levelOf(*player);
+					level.playSoundAt(nullptr, player->getX(), player->getY(), player->getZ(), "minecraft:entity.player.attack.nodamage",
+									  Level::SoundSource::Players, 1.0F, 1.0F);
+				}
 			}
 		}
 		break;
@@ -181,6 +204,25 @@ void handlePlayState(Packet* packet, Server& server) {
 		// The keys held: forward, backward, left, right, jump, sneak (0x20), sprint
 		uint8_t keys = packet->getData().readUByte();
 		player->setShiftKeyDown(keys & 0x20);
+		// Sneaking gets off what it rides (ServerPlayer.rideTick)
+		if ((keys & 0x20) && player->vehicleId() != -1) {
+			if (Entity* vehicle = server.levelOf(*player).entities().byId(player->vehicleId())) {
+				vehicle->ejectRider();
+			} else {
+				player->setVehicleId(-1);
+			}
+		}
+		break;
+	}
+	case PacketId::Play::Serverbound::MOVE_VEHICLE: {
+		// The rider's client moves the vehicle it controls
+		Buffer& data = packet->getData();
+		double	x = data.readDouble(), y = data.readDouble(), z = data.readDouble();
+		float	yaw = data.readFloat(), pitch = data.readFloat();
+		bool	onGround = data.readBool();
+		if (player->vehicleId() == -1 || !std::isfinite(x) || !std::isfinite(y) || !std::isfinite(z)) break;
+		Entity* vehicle = server.levelOf(*player).entities().byId(player->vehicleId());
+		if (vehicle && vehicle->rider() == player && vehicle->isControlledByRider()) vehicle->moveFromRider({x, y, z}, yaw, pitch, onGround);
 		break;
 	}
 	case PacketId::Play::Serverbound::PLAYER_COMMAND: {
@@ -188,6 +230,11 @@ void handlePlayState(Packet* packet, Server& server) {
 		int action = packet->getData().readVarInt();
 		if (action == START_SPRINTING) player->setSprinting(true);
 		if (action == STOP_SPRINTING) player->setSprinting(false);
+		if (action == START_RIDING_JUMP && player->vehicleId() != -1) {
+			int boost = packet->getData().readVarInt();
+			auto* horse = dynamic_cast<AbstractHorse*>(server.levelOf(*player).entities().byId(player->vehicleId()));
+			if (horse && horse->isSaddled() && boost > 0) horse->handleStartJump();
+		}
 		break;
 	}
 	case PacketId::Play::Serverbound::CLIENT_COMMAND:

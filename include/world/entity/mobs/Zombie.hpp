@@ -26,6 +26,10 @@ class Zombie : public Monster {
 	void populateDefaultEquipmentSlots(DifficultyInstance& difficulty) override;
 	std::shared_ptr<SpawnGroupData> finalizeSpawn(DifficultyInstance& difficulty, int reason, std::shared_ptr<SpawnGroupData> group) override;
 	bool wantsToPickUp(const ItemStack& stack) override;
+	int	 baseExperienceReward() override {
+		if (isBaby()) _xpReward = static_cast<int>(_xpReward * 2.5); // As vanilla: each time it is asked
+		return Monster::baseExperienceReward();
+	}
 	void save(Buffer& buf) const override;
 	void load(Buffer& buf) override;
 
@@ -48,6 +52,45 @@ class Zombie : public Monster {
 	int	 _inWaterTime = 0, _conversionTime = 0;
 
 	void startUnderWaterConversion(int time);
+};
+
+// ZombieVillager: a zombie with a villager's type (by biome) and profession. Given a golden apple while weakened, it
+// cures into a villager after 3 to 5 minutes (faster near iron bars and beds)
+class ZombieVillager : public Zombie {
+  public:
+	static constexpr int DATA_CONVERTING = 19, DATA_VILLAGER_DATA = 20;
+	static constexpr int SERIALIZER_VILLAGER_DATA = 18;
+
+	ZombieVillager(Level& level, int typeId);
+
+	bool isConverting() const { return _converting; }
+	// VillagerData: minecraft:villager_type and minecraft:villager_profession ids, and the level
+	int	 villagerType() const { return _type; }
+	int	 profession() const { return _profession; }
+	void setVillagerData(int type, int profession, int level);
+	void setVillagerConversionTime(int ticks) { _conversionTime = ticks; }
+
+	void tick() override;
+	bool mobInteract(Player& player, int hand) override;
+	bool removeWhenFarAway(double distanceSqr) const override { return !_converting && _xp == 0; }
+	void save(Buffer& buf) const override;
+	void load(Buffer& buf) override;
+
+  protected:
+	bool convertsInWater() const override { return false; }
+	void writeData(Buffer& buf, uint32_t mask, bool onlyNonDefault) const override;
+
+  private:
+	bool _converting	 = false;
+	int	 _conversionTime = -1;
+	UUID _conversionStarter{};
+	bool _hasStarter = false;
+	int	 _type = 0, _profession = 0, _villagerLevel = 1, _xp = 0;
+	int	 _initialType = 0, _initialProfession = 0;
+
+	void startConverting(const UUID* starter, int ticks);
+	int	 getConversionProgress();
+	void finishConversion();
 };
 
 class Husk : public Zombie {

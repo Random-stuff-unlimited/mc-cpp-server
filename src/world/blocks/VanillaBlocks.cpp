@@ -90,6 +90,7 @@ void registerVanillaBlocks(Level& level, const GameData& gameData) {
 			{"NetherWartBlock", make<NetherWartBlock>(context)},
 			{"SweetBerryBushBlock", make<SweetBerryBushBlock>(context)},
 			{"MushroomBlock", make<MushroomBlock>(context)},
+			{"TurtleEggBlock", make<TurtleEggBlock>(context)},
 			{"FungusBlock", make<VegetationBlock>(context, Soil::Fungus)},
 			{"RootsBlock", make<VegetationBlock>(context, Soil::Nether)},
 			{"NetherSproutsBlock", make<VegetationBlock>(context, Soil::Nether)},

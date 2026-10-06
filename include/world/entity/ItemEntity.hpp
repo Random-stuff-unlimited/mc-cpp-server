@@ -29,6 +29,7 @@ class ItemEntity : public Entity {
 	// ItemEntity.playerTouch: picked up if the delay is over and it fits in the inventory. Returns the count taken
 	// for the pickup animation, 0 if none
 	int	 playerTouch(Player& player);
+	int	 touchedByPlayer(Player& player) override { return playerTouch(player); }
 	void writeEntityData(Buffer& buf) const override;
 	// For a copy (dimension travel): not saved with the chunks
 	void save(Buffer& buf) const override;

@@ -283,6 +283,7 @@ bool BedBlock::useWithoutItem(Level& level, const BlockPos& clicked, int clicked
 	level.setBlock(pos, c.blocks.withBool(state, c.occupied, true), Level::UPDATE_ALL);
 	SurvivalState& survival = player.survival();
 	survival.sleeping		= true;
+	survival.timeSinceRest	= 0;
 	survival.sleepTimer		= 0;
 	survival.sleepingPos	= pos;
 	Survival::setPose(player, Pose::Sleeping);

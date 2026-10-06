@@ -12,14 +12,6 @@
 namespace {
 	constexpr int SAVE_VERSION = 1;
 	constexpr int EVENT_EAT_GRASS = 10; // EntityEvent: the sheep's head goes down
-
-	// AgeableMob.AgeableMobGroupData
-	struct AgeableMobGroupData : SpawnGroupData {
-		int	  groupSize = 0;
-		bool  shouldSpawnBaby;
-		float babySpawnChance;
-		AgeableMobGroupData(bool baby, float chance) : shouldSpawnBaby(baby), babySpawnChance(chance) {}
-	};
 } // namespace
 
 // ===================== AgeableMob =====================
@@ -211,7 +203,8 @@ void Animal::load(Buffer& buf) {
 
 // ===================== BreedGoal =====================
 
-BreedGoal::BreedGoal(Animal& animal, double speed) : _animal(animal), _speedModifier(speed) { setFlags({Flag::Move, Flag::Look}); }
+BreedGoal::BreedGoal(Animal& animal, double speed, std::string partnerClass)
+	: _animal(animal), _partnerClass(std::move(partnerClass)), _speedModifier(speed) { setFlags({Flag::Move, Flag::Look}); }
 
 Animal* BreedGoal::partner() {
 	Actor* actor = _partner.isSet() ? _animal.level().actorByRef(_partner) : nullptr;
@@ -225,7 +218,8 @@ Animal* BreedGoal::getFreePartner() {
 	double				bestDist   = std::numeric_limits<double>::max();
 	for (Entity* entity : _animal.level().entities().entitiesIn(_animal.boundingBox().inflate(8.0, 8.0, 8.0))) {
 		auto* other = dynamic_cast<Animal*>(entity);
-		if (!other || other->typeId() != _animal.typeId() || !conditions.test(_animal.level(), &_animal, *other)) continue;
+		if (!other || !(_partnerClass.empty() ? other->typeId() == _animal.typeId() : isOfClass(*other, _partnerClass))) continue;
+		if (!conditions.test(_animal.level(), &_animal, *other)) continue;
 		double d = _animal.distanceToSqr(*other);
 		if (_animal.canMate(*other) && !other->isPanicking() && d < bestDist) {
 			best	 = other;

@@ -189,21 +189,28 @@ void EntityManager::tick() {
 		entity.setOldPosAndRot();
 		entity.tickCountIncrement();
 		entity.tick();
+		if (entity.hasRider() && !entity.isRemoved()) entity.positionRider();
 	}
 }
 
 void EntityManager::pickUpItems(Player& player) {
 	double half = PLAYER_WIDTH / 2.0;
 	AABB   box{player.getX() - half, player.getY(), player.getZ() - half, player.getX() + half, player.getY() + PLAYER_HEIGHT, player.getZ() + half};
-	for (ItemEntity* item : itemsIn(box.inflate(1.0, 0.5, 1.0))) {
-		int taken = item->playerTouch(player);
+	// Player.touch: what it touches (items, stuck arrows), in the level's order
+	std::vector<Entity*> touched;
+	forEachIn(box.inflate(1.0, 0.5, 1.0), [&](Entity& entity) {
+		if (!entity.isRemoved()) touched.push_back(&entity);
+	});
+	for (Entity* entity : touched) {
+		if (entity->isRemoved()) continue;
+		int taken = entity->touchedByPlayer(player);
 		if (taken <= 0) continue;
-		// Player.take: the pickup animation for everyone who sees the item
+		// Player.take: the pickup animation for everyone who sees it
 		Buffer take;
-		take.writeVarInt(item->id());
+		take.writeVarInt(entity->id());
 		take.writeVarInt(player.getPlayerID());
 		take.writeVarInt(taken);
-		Tracked& tracked = *_byId.at(item->id());
+		Tracked& tracked = *_byId.at(entity->id());
 		sendToViewers(tracked, PacketId::Play::Clientbound::TAKE_ITEM_ENTITY, take);
 		if (!tracked.viewers.count(&player)) Packet::send(player.shared_from_this(), PacketId::Play::Clientbound::TAKE_ITEM_ENTITY, take, _level.server());
 	}
@@ -249,6 +256,11 @@ void EntityManager::spawnFor(Tracked& tracked, Player& player) {
 	spawn.writeUByte(static_cast<uint8_t>(tracked.lastYHeadRot));
 	spawn.writeVarInt(entity.entityData()); // Entity-specific data (an experience orb's value, 0 otherwise)
 	Packet::send(self, PacketId::Play::Clientbound::ADD_ENTITY, spawn, _level.server());
+	if (entity.hasRider()) {
+		Buffer passengers;
+		entity.writePassengers(passengers);
+		Packet::send(self, PacketId::Play::Clientbound::SET_PASSENGERS, passengers, _level.server());
+	}
 
 	// ServerEntity.sendPairingData: the values that aren't the client's defaults, then the attributes it is told about
 	Buffer data;

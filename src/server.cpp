@@ -5,6 +5,7 @@
 #include "logger.hpp"
 #include "network/networking.hpp"
 #include "network/server.hpp"
+#include "world/entity/MobEffects.hpp"
 #include "player.hpp"
 #include "world/Level.hpp"
 #include "world/Portals.hpp"
@@ -431,6 +432,7 @@ void Server::changeDimension(Player& player, Level& destination, double x, doubl
 	sendLevelInfo(self, destination);
 	// PlayerList.sendAllPlayerInfo: the whole inventory, health and food again, the selected slot
 	Menus::inventory(player, destination).sendAllDataToRemote();
+	player.sendActiveEffects(); // PlayerList.sendActivePlayerEffects
 	player.survival().lastSentHealth = -1.0F;
 	player.survival().lastSentFood	 = -1;
 	setHeldItemPacket(packet, *this);
@@ -533,6 +535,7 @@ int Server::start_server() {
 
 		try {
 			_gameData.load(getPath().parent_path() / "gamedata");
+			MobEffects::verify(_gameData);
 		} catch (const std::exception& e) {
 			g_logger->logGameInfo(ERROR, "Failed to load game data: " + std::string(e.what()), "SERVER");
 			return 1;

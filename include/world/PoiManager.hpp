@@ -71,6 +71,11 @@ class PoiManager {
 	std::vector<const Record*> getInSquare(Type type, const BlockPos& center, int radius, Occupancy occupancy) const;
 	// PoiManager.getInRange: the same within a sphere (distance <= radius)
 	std::vector<const Record*> getInRange(Type type, const BlockPos& center, int radius, Occupancy occupancy) const;
+	// getInRange for every type
+	std::vector<const Record*> getAllInRange(const BlockPos& center, int radius, Occupancy occupancy) const;
+	// PoiManager.sectionsToVillage: how many sections (16x16x16) away the nearest village is: one with an occupied
+	// village point (a claimed bed, job site or bell), 0 inside, 7 if none within 6
+	int			  sectionsToVillage(int sectionX, int sectionY, int sectionZ) const;
 	const Record* get(const BlockPos& pos) const;
 	// PoiManager.take / release: a villager claims a job site or bed ticket
 	bool take(const BlockPos& pos);

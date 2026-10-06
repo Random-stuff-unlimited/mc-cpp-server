@@ -21,6 +21,8 @@ namespace Survival {
 	constexpr int DATA_LIVING_FLAGS = 2; // LivingEntity.DATA_LIVING_ENTITY_FLAGS
 	constexpr int DATA_POSE			= 4; // Entity.DATA_POSE_ID
 	constexpr int DATA_SHARED_FLAGS = 8; // Entity.DATA_SHARED_FLAGS_ID
+	constexpr int DATA_EFFECTS		= 16; // LivingEntity.DATA_EFFECT_PARTICLES and DATA_EFFECT_AMBIENCE_ID
+	constexpr int DATA_ABSORPTION	= 32; // Player.DATA_PLAYER_ABSORPTION_ID
 	constexpr int MAX_AIR_SUPPLY	= 300;
 
 	// The world's difficulty (config "difficulty": peaceful, easy, normal, hard)
@@ -53,6 +55,8 @@ namespace Survival {
 	void tickFood(Level& level, Player& player);
 	// The entity data that changed this tick, to the player and the ones that see it (ServerEntity.sendDirtyEntityData)
 	void sendDirtyData(Server& server, Player& player);
+	// The syncable attributes that changed (UPDATE_ATTRIBUTES), to the viewers and the player
+	void sendDirtyAttributes(Server& server, Player& player);
 	// The entity data that isn't at its default value, for a new viewer (ADD_ENTITY's getNonDefaultValues). Writes
 	// nothing and returns false when everything is at its default
 	bool writeNonDefaultData(Buffer& data, const Player& player);

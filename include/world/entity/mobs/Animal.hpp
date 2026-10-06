@@ -3,6 +3,14 @@
 
 #include "world/entity/Mob.hpp"
 
+// AgeableMob.AgeableMobGroupData: the mobs of a group after the first may be babies
+struct AgeableMobGroupData : SpawnGroupData {
+	int	  groupSize = 0;
+	bool  shouldSpawnBaby;
+	float babySpawnChance;
+	AgeableMobGroupData(bool baby, float chance) : shouldSpawnBaby(baby), babySpawnChance(chance) {}
+};
+
 // AgeableMob: mobs that are born as babies (half their size) and grow up in 20 minutes (age -24000 counting up to 0).
 // After breeding, the parents wait 5 minutes (age 6000 counting down). Some spawn as babies (5% of a pack's mobs
 // after the first)
@@ -50,15 +58,17 @@ class Animal : public AgeableMob {
 
 	// Animal.isFood: its breeding food (the "<type>_food" item tag of its class by default)
 	virtual bool isFood(const ItemStack& stack) const;
-	bool		 canFallInLove() const { return _inLove <= 0; }
+	virtual bool canFallInLove() const { return _inLove <= 0; }
+	void		 setInLoveTime(int ticks) { _inLove = ticks; }
 	void		 setInLove(Player* cause);
 	bool		 isInLove() const { return _inLove > 0; }
 	int			 inLoveTime() const { return _inLove; }
 	void		 resetLove() { _inLove = 0; }
+	const EntityRef& loveCause() const { return _loveCause; }
 	// Animal.canMate: another of the same class, both in love
 	virtual bool canMate(Animal& other);
 	// Animal.spawnChildFromBreeding: the baby at its position, the parents wait 5 minutes
-	void		 spawnChildFromBreeding(Animal& partner);
+	virtual void spawnChildFromBreeding(Animal& partner);
 	// Animal.getBreedOffspring: a baby of its own type (sheep mix their colors...)
 	virtual std::unique_ptr<Mob> getBreedOffspring(Animal& partner);
 
@@ -75,6 +85,7 @@ class Animal : public AgeableMob {
 	void		 aiStep() override;
 	void		 customServerAiStep() override;
 	int			 ambientSoundInterval() const override { return 120; }
+	int			 baseExperienceReward() override { return 1 + _random.nextInt(3); }
 	virtual void playEatingSound() {}
 	// Mob.usePlayerItem: one of the stack eaten (not in creative)
 	void		 usePlayerItem(Player& player, int hand);
@@ -85,15 +96,17 @@ class Animal : public AgeableMob {
 // BreedGoal: in love, it walks to the closest partner in love within 8 blocks and breeds after 3 seconds together
 class BreedGoal : public Goal {
   public:
-	BreedGoal(Animal& animal, double speed);
+	// partnerClass: the class it breeds with ("AbstractHorse"), its own type if empty
+	BreedGoal(Animal& animal, double speed, std::string partnerClass = "");
 	bool canUse() override;
 	bool canContinueToUse() override;
 	void stop() override;
 	void tick() override;
 
-  private:
+  protected:
 	Animal&	  _animal;
 	EntityRef _partner;
+	std::string _partnerClass;
 	int		  _loveTime = 0;
 	double	  _speedModifier;
 

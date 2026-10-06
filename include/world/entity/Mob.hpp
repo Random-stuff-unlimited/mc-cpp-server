@@ -62,6 +62,7 @@ class Mob : public LivingEntity {
 	virtual bool canAttack(Actor& target);
 
 	bool isNoAi() const { return _mobFlags & FLAG_NO_AI; }
+	bool isEffectiveAiPublic() const { return !isNoAi(); }
 	void setNoAi(bool noAi) { setMobFlag(FLAG_NO_AI, noAi); }
 	bool isLeftHanded() const { return _mobFlags & FLAG_LEFT_HANDED; }
 	void setLeftHanded(bool left) { setMobFlag(FLAG_LEFT_HANDED, left); }
@@ -121,6 +122,8 @@ class Mob : public LivingEntity {
 	// Entity.getLightLevelDependentMagicValue: the light at its eyes, 0 to 1 (0 in unloaded chunks)
 	float		 lightLevelDependentMagicValue();
 	virtual void playAttackSound() {}
+	// RangedAttackMob.performRangedAttack: shoots at the target (power: how far the bow was drawn, 0 to 1)
+	virtual void performRangedAttack(Actor&, float) {}
 
 	// ----- Equipment -----
 
@@ -132,6 +135,10 @@ class Mob : public LivingEntity {
 	virtual void populateDefaultEquipmentEnchantments(DifficultyInstance& difficulty);
 	// Mob.getEquipmentForSlot: the armor of a slot for a material tier (0 leather .. 5 diamond)
 	int			 equipmentForSlot(EquipmentSlot slot, int tier) const;
+	// ItemStack.interactLivingEntity for an equippable: the item in the player's hand goes into this slot if it is
+	// its slot and it is free (saddles, horse armor)
+	bool		 equipFromPlayer(Player& player, int hand, EquipmentSlot slot);
+	bool		 isSaddled() const { return !_equipment[static_cast<int>(EquipmentSlot::Saddle)].isEmpty(); }
 	// Mob.equipItemIfPossible, from an item it picks up
 	ItemStack	 equipItemIfPossible(const ItemStack& stack);
 	virtual bool wantsToPickUp(const ItemStack& stack) { return canHoldItem(stack); }
@@ -167,6 +174,8 @@ class Mob : public LivingEntity {
 	// what the previous mob of the same pack returned (natural spawning), shared by the pack (all babies or none...)
 	virtual std::shared_ptr<SpawnGroupData> finalizeSpawn(DifficultyInstance& difficulty, int reason, std::shared_ptr<SpawnGroupData> group = nullptr);
 	void		 playAmbientSound();
+	// Mob.getAmbientSound: its type's by default, "" for none
+	virtual std::string ambientSoundName() { return typeSound("ambient", ""); }
 	void		 tick() override;
 	void		 checkDespawn() override;
 	// Mob.removeWhenFarAway: whether it despawns far from players (animals, golems, villagers... don't)
@@ -186,6 +195,9 @@ class Mob : public LivingEntity {
 	EntityRef						_target;
 	uint8_t							_mobFlags			 = 0;
 	bool							_persistenceRequired = false;
+	int								_xpReward			 = 0; // Mob.xpReward
+	// Mob.getBaseExperienceReward: its reward, more for each piece of equipment it keeps
+	int								baseExperienceReward() override;
 	bool							_canPickUpLoot		 = false;
 	int								_ambientSoundTime	 = 0;
 	BlockPos						_homePos;
@@ -211,7 +223,7 @@ class Mob : public LivingEntity {
 	ItemEntity*	 spawnAtLocation(ItemStack stack, float yOffset = 0.0F);
 	// Mob.pickUpItem
 	virtual void pickUpItem(ItemEntity& item);
-	bool		 canReplaceCurrentItem(const ItemStack& candidate, const ItemStack& current, EquipmentSlot slot);
+	virtual bool canReplaceCurrentItem(const ItemStack& candidate, const ItemStack& current, EquipmentSlot slot);
 	double		 approximateAttributeWith(const ItemStack& stack, int attribute, EquipmentSlot slot);
 	void		 enchantSpawnedEquipment(EquipmentSlot slot, float chance, DifficultyInstance& difficulty);
 

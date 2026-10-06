@@ -10,141 +10,227 @@
 #include <cmath>
 
 namespace {
-	// SlimeMoveControl: turns toward the wanted yaw, then jumps every so often (nothing between the jumps)
+	constexpr int SAVE_VERSION = 2;
+
+	// Slime.SlimeMoveControl: turned toward a direction; when a goal wants it to move, it jumps every jumpDelay ticks
+	// (three times as often when attacking), with speed only while in the air
 	class SlimeMoveControl : public MoveControl {
 	  public:
-		explicit SlimeMoveControl(Slime& slime) : MoveControl(slime), _slime(slime) {}
+		explicit SlimeMoveControl(Slime& slime) : MoveControl(slime), _slime(slime), _yRot(180.0F * slime.yRot() / static_cast<float>(M_PI)) {}
+		void setDirection(float yRot, bool aggressive) {
+			_yRot		= yRot;
+			_aggressive = aggressive;
+		}
+		void setWantedMovement(double speed) {
+			_speedModifier = speed;
+			_operation	   = Operation::MoveTo;
+		}
 		void tick() override {
-			_slime.setYRotPublic(rotlerp(_slime.yRot(), _slime.targetYaw(), 90.0F));
-			if (--_jumpTicks <= 0) {
-				_jumpTicks = 20 + _slime.random().nextInt(20); // getRandomJumpTicks
-				_slime.setJumping(true);
-				_slime.level().playSoundAt(nullptr, _slime.position().x, _slime.position().y, _slime.position().z, "minecraft:entity.slime.jump",
-										   Level::SoundSource::Hostile, 1.0F, 1.0F);
+			_mob.setYRotPublic(rotlerp(_mob.yRot(), _yRot, 90.0F));
+			_mob.setYHeadRot(_mob.yRot());
+			_mob.setYBodyRot(_mob.yRot());
+			if (_operation != Operation::MoveTo) {
+				_mob.setZza(0.0F);
+				return;
+			}
+			_operation	= Operation::Wait;
+			float speed = static_cast<float>(_speedModifier * _mob.getAttributeValue(_mob.attributeIds().movementSpeed));
+			if (!_mob.onGround()) {
+				_mob.setSpeed(speed);
+				return;
+			}
+			_mob.setSpeed(speed);
+			if (_jumpDelay-- <= 0) {
+				_jumpDelay = _slime.jumpDelay();
+				if (_aggressive) _jumpDelay /= 3;
+				_slime.jumpControl().jump();
+				_slime.playJumpSound();
 			} else {
-				_slime.setJumping(false);
+				_slime.setXxa(0.0F);
 				_slime.setZza(0.0F);
+				_mob.setSpeed(0.0F);
 			}
 		}
 
 	  private:
 		Slime& _slime;
-		int	   _jumpTicks = 20;
+		float  _yRot;
+		int	   _jumpDelay  = 0;
+		bool   _aggressive = false;
 	};
-	// RandomSlimeJumpGoal: idle slimes hop around in a random direction
-	class RandomSlimeJumpGoal : public Goal {
+
+	SlimeMoveControl& control(Slime& slime) { return static_cast<SlimeMoveControl&>(slime.moveControl()); }
+
+	class SlimeFloatGoal : public Goal {
 	  public:
-		explicit RandomSlimeJumpGoal(Slime& slime) : _slime(slime) {
-			setFlags({Flag::Move, Flag::Look});
+		explicit SlimeFloatGoal(Slime& slime) : _slime(slime) {
+			setFlags({Flag::Jump, Flag::Move});
+			slime.navigation().setCanFloat(true);
 		}
-		bool canUse() override { return _slime.getTarget() == nullptr; }
+		bool canUse() override { return _slime.isInWaterNow() || _slime.isInLavaNow(); }
+		bool requiresUpdateEveryTick() override { return true; }
 		void tick() override {
-			if (--_ticks <= 0) {
-				_ticks = 20 + _slime.random().nextInt(40);
-				_slime.setTargetYaw(_slime.random().nextFloat() * 360.0F);
-				_slime.setZza(0.6F);
-			}
+			if (_slime.random().nextFloat() < 0.8F) _slime.jumpControl().jump();
+			control(_slime).setWantedMovement(1.2);
 		}
 
 	  private:
 		Slime& _slime;
-		int	   _ticks = 0;
 	};
-	// SlimeAttackGoal: hop toward the target and squash it on contact
+
+	// Faces its target for 15 seconds, jumping faster if it deals damage
 	class SlimeAttackGoal : public Goal {
 	  public:
-		explicit SlimeAttackGoal(Slime& slime) : _slime(slime) {
-			setFlags({Flag::Move, Flag::Look});
-		}
-		bool canUse() override { return _slime.getTarget() && _slime.getTarget()->isAlive(); }
-		bool canContinueToUse() override { return canUse(); }
-		void tick() override {
+		explicit SlimeAttackGoal(Slime& slime) : _slime(slime) { setFlags({Flag::Look}); }
+		bool canUse() override {
 			Actor* target = _slime.getTarget();
-			if (!target) return;
-			_slime.lookControl().setLookAt(*target, 10.0F, 10.0F);
-			// Face it and hop toward it
-			double dx = target->position().x - _slime.position().x;
-			double dz = target->position().z - _slime.position().z;
-			_slime.setTargetYaw(static_cast<float>(std::atan2(dz, dx) * 180.0 / M_PI) - 90.0F);
-			_slime.setZza(1.0F);
-			if (_slime.distanceToSqr(*target) < 2.5 && --_attackTicks <= 0) {
-				_attackTicks = 20;
-				_slime.dealContactDamage(*target);
-			}
+			return target && _slime.canAttack(*target);
+		}
+		void start() override { _growTiredTimer = reducedTickDelay(300); }
+		bool canContinueToUse() override {
+			Actor* target = _slime.getTarget();
+			return target && _slime.canAttack(*target) && --_growTiredTimer > 0;
+		}
+		bool requiresUpdateEveryTick() override { return true; }
+		void tick() override {
+			if (Actor* target = _slime.getTarget()) _slime.lookAt(*target, 10.0F, 10.0F);
+			control(_slime).setDirection(_slime.yRot(), _slime.isDealsDamage());
 		}
 
 	  private:
 		Slime& _slime;
-		int	   _attackTicks = 0;
+		int	   _growTiredTimer = 0;
+	};
+
+	// A new random direction every 2 to 5 seconds
+	class SlimeRandomDirectionGoal : public Goal {
+	  public:
+		explicit SlimeRandomDirectionGoal(Slime& slime) : _slime(slime) { setFlags({Flag::Look}); }
+		bool canUse() override {
+			return !_slime.getTarget() && (_slime.onGround() || _slime.isInWaterNow() || _slime.isInLavaNow() || _slime.hasEffect(MobEffects::Levitation));
+		}
+		void tick() override {
+			if (--_nextRandomizeTime <= 0) {
+				_nextRandomizeTime = adjustedTickDelay(40 + _slime.random().nextInt(60));
+				_chosenDegrees	   = static_cast<float>(_slime.random().nextInt(360));
+			}
+			control(_slime).setDirection(_chosenDegrees, false);
+		}
+
+	  private:
+		Slime& _slime;
+		float  _chosenDegrees	  = 0;
+		int	   _nextRandomizeTime = 0;
+	};
+
+	class SlimeKeepOnJumpingGoal : public Goal {
+	  public:
+		explicit SlimeKeepOnJumpingGoal(Slime& slime) : _slime(slime) { setFlags({Flag::Jump, Flag::Move}); }
+		bool canUse() override { return true; }
+		void tick() override { control(_slime).setWantedMovement(1.0); }
+
+	  private:
+		Slime& _slime;
 	};
 } // namespace
 
-Slime::Slime(Level& level, int typeId) : Mob(level, typeId) {
-	setMoveControl(std::make_unique<SlimeMoveControl>(*this));
-}
-
-bool Slime::fireImmune() const {
-	return _level.gameData().getStaticName("minecraft:entity_type", _typeId) == "minecraft:magma_cube";
-}
-
-void Slime::setSize(int size) {
-	_size = size;
-	markData(DATA_SIZE);
-	_width = _height = 0.51F * size; // Entity.getDimensions
-	if (AttributeInstance* health = attributes().getInstance(attributeIds().maxHealth)) {
-		health->setBaseValue(size * size); // MAX_HEALTH = size^2
-		setHealth(static_cast<float>(health->baseValue()));
-	}
-}
+Slime::Slime(Level& level, int typeId) : Mob(level, typeId) { setMoveControl(std::make_unique<SlimeMoveControl>(*this)); }
 
 void Slime::registerGoals() {
-	_goalSelector.addGoal(1, std::make_unique<FloatGoal>(*this));
+	_goalSelector.addGoal(1, std::make_unique<SlimeFloatGoal>(*this));
 	_goalSelector.addGoal(2, std::make_unique<SlimeAttackGoal>(*this));
-	_goalSelector.addGoal(3, std::make_unique<RandomSlimeJumpGoal>(*this));
-	_goalSelector.addGoal(4, std::make_unique<LookAtPlayerGoal>(*this, "Player", 8.0F));
-	_goalSelector.addGoal(5, std::make_unique<RandomLookAroundGoal>(*this));
+	_goalSelector.addGoal(3, std::make_unique<SlimeRandomDirectionGoal>(*this));
+	_goalSelector.addGoal(5, std::make_unique<SlimeKeepOnJumpingGoal>(*this));
+	_targetSelector.addGoal(1, std::make_unique<NearestAttackableTargetGoal>(*this, "Player", 10, true, false, [this](Actor& target, Level&) {
+		return std::abs(target.position().y - _position.y) <= 4.0;
+	}));
+	_targetSelector.addGoal(3, std::make_unique<NearestAttackableTargetGoal>(*this, "IronGolem", true));
+}
 
-	_targetSelector.addGoal(1, std::make_unique<HurtByTargetGoal>(*this));
-	_targetSelector.addGoal(2, std::make_unique<NearestAttackableTargetGoal>(*this, "Player", true));
+void Slime::setSize(int size, bool resetHealth) {
+	int clamped = std::clamp(size, 1, 127);
+	if (clamped != _size) {
+		_size = clamped;
+		markData(DATA_SIZE);
+	}
+	// refreshDimensions: its type's box, scaled
+	setDimensions(_type.width * _size, _type.height * _size, _type.eyeHeight * _size);
+	if (AttributeInstance* health = _attributes.getInstance(_ids.maxHealth)) health->setBaseValue(_size * _size);
+	if (AttributeInstance* speed = _attributes.getInstance(_ids.movementSpeed)) speed->setBaseValue(0.2F + 0.1F * _size);
+	if (AttributeInstance* damage = _attributes.getInstance(_ids.attackDamage)) damage->setBaseValue(_size);
+	if (resetHealth) setHealth(maxHealth());
+	_xpReward = _size;
+}
+
+void Slime::playJumpSound() {
+	float pitch = ((_random.nextFloat() - _random.nextFloat()) * 0.2F + 1.0F) * (isTiny() ? 1.4F : 0.8F); // getSoundPitch
+	playSound(jumpSound(), soundVolume(), pitch);
 }
 
 void Slime::tick() {
 	Mob::tick();
 	if (isRemoved()) return;
-	// The squish: the squash sound when it lands (a jump onto the ground)
-	if (_onGround && _horizontalCollision) {
-		_level.playSoundAt(nullptr, _position.x, _position.y, _position.z, "minecraft:entity.slime.squish", Level::SoundSource::Hostile, 1.0F,
-						   (_random.nextFloat() - _random.nextFloat()) * 0.2F + 1.0F);
-	}
-}
-
-void Slime::dealContactDamage(Actor& target) {
-	// Slime.dealDamage: the size as damage, from a mob attack
-	float amount = static_cast<float>(_size);
-	if (auto* player = target.asPlayer()) {
-		Combat::damage(_level.server(), *player, amount, {"minecraft:mob_attack", this, nullptr, std::nullopt});
-	} else if (auto* living = target.asLiving()) {
-		living->hurtServer({"minecraft:mob_attack", this, nullptr, std::nullopt}, amount);
-	}
-	_level.playSoundAt(nullptr, _position.x, _position.y, _position.z, "minecraft:entity.slime.attack", Level::SoundSource::Hostile, 1.0F, 1.0F);
-}
-
-void Slime::die(const Combat::DamageSource& source) {
-	// Slime.die: a bigger one splits into two of half its size
-	int split = _size / 2;
-	if (split >= 1) {
-		for (int i = 0; i < 2; i++) {
-			double ox = _random.nextInt(2) * 2 - 1; // -1 or 1
-			double oz = _random.nextInt(2) * 2 - 1;
-			std::unique_ptr<Mob> child = _level.mobs().create(_level, _typeId);
-			if (auto* slime = dynamic_cast<Slime*>(child.get())) {
-				slime->setSize(split);
-				slime->snapTo({_position.x + ox * 0.5, _position.y, _position.z + oz * 0.5}, _yRot, _xRot);
-				_level.entities().add(std::move(child));
-			}
+	if (_onGround && !_wasOnGround) {
+		// Landed: the particles are the clients' (their random draws are made), the squish sound
+		int particles = static_cast<int>(std::ceil(_width * 2.0F * 16.0F));
+		for (int i = 0; i < particles; i++) {
+			_random.nextFloat();
+			_random.nextFloat();
 		}
+		playSound(sizedSound("squish"), soundVolume(), ((_random.nextFloat() - _random.nextFloat()) * 0.2F + 1.0F) / 0.8F);
 	}
-	LivingEntity::die(source);
+	_wasOnGround = _onGround;
+}
+
+void Slime::jumpFromGround() {
+	_delta.y   = jumpPower();
+	hasImpulse = true;
+}
+
+void Slime::dealDamage(Actor& target) {
+	if (!isAlive() || !isWithinMeleeAttackRange(target) || !hasLineOfSight(target)) return;
+	Combat::DamageSource source{"minecraft:mob_attack", this, nullptr, std::nullopt};
+	bool hurt = target.asPlayer() ? Combat::damage(_level.server(), *target.asPlayer(), attackDamage(), source) : target.hurtServer(source, attackDamage());
+	if (hurt) playSound(std::string(soundPrefix()) + "attack", 1.0F, (_random.nextFloat() - _random.nextFloat()) * 0.2F + 1.0F);
+}
+
+int Slime::touchedByPlayer(Player& player) {
+	if (isDealsDamage()) dealDamage(player);
+	return 0;
+}
+
+void Slime::pushAgainst(Entity& other) {
+	Mob::pushAgainst(other);
+	const GameData::EntityTypeInfo* type = _level.gameData().getEntityType(other.typeId());
+	if (type && type->is("IronGolem") && isDealsDamage()) dealDamage(other);
+}
+
+void Slime::tickDeath() {
+	Mob::tickDeath();
+	if (!isRemoved() || _size <= 1) return;
+	// Slime.remove: gone, it leaves 2 to 4 slimes of half its size
+	float half	   = _width / 2.0F;
+	int	  size	   = _size / 2;
+	int	  children = 2 + _random.nextInt(3);
+	for (int i = 0; i < children; i++) {
+		float				 dx	   = (i % 2 - 0.5F) * half;
+		float				 dz	   = (i / 2 - 0.5F) * half;
+		std::unique_ptr<Mob> child = _level.mobs().create(_level, _typeId);
+		auto*				 slime = dynamic_cast<Slime*>(child.get());
+		if (!slime) break;
+		slime->setSize(size, true);
+		slime->snapTo({_position.x + dx, _position.y + 0.5, _position.z + dz}, _random.nextFloat() * 360.0F, 0.0F);
+		slime->setNoAi(isNoAi());
+		_level.addFreshEntity(std::move(child));
+	}
+}
+
+std::shared_ptr<SpawnGroupData> Slime::finalizeSpawn(DifficultyInstance& difficulty, int reason, std::shared_ptr<SpawnGroupData> group) {
+	JavaRandom& random = _level.random();
+	int			power  = random.nextInt(3);
+	if (power < 2 && random.nextFloat() < 0.5F * difficulty.getSpecialMultiplier()) power++;
+	setSize(1 << power, true);
+	return Mob::finalizeSpawn(difficulty, reason, group);
 }
 
 void Slime::writeData(Buffer& buf, uint32_t mask, bool onlyNonDefault) const {
@@ -154,10 +240,38 @@ void Slime::writeData(Buffer& buf, uint32_t mask, bool onlyNonDefault) const {
 
 void Slime::save(Buffer& buf) const {
 	Mob::save(buf);
+	buf.writeUByte(SAVE_VERSION);
 	buf.writeVarInt(_size);
+	buf.writeBool(_wasOnGround);
 }
 
 void Slime::load(Buffer& buf) {
 	Mob::load(buf);
-	setSize(buf.readVarInt());
+	if (buf.readUByte() != SAVE_VERSION) throw std::runtime_error("unknown slime data version");
+	float health = _health;
+	setSize(buf.readVarInt(), false);
+	setHealth(health);
+	_wasOnGround = buf.readBool();
+	_dirtyData	 = 0;
+}
+
+// ===================== MagmaCube =====================
+
+void MagmaCube::setSize(int size, bool resetHealth) {
+	Slime::setSize(size, resetHealth);
+	if (AttributeInstance* armor = _attributes.getInstance(_ids.armor)) armor->setBaseValue(_size * 3);
+}
+
+void MagmaCube::jumpFromGround() {
+	_delta.y   = jumpPower() + _size * 0.1F;
+	hasImpulse = true;
+}
+
+void MagmaCube::jumpInLiquid(bool lava) {
+	if (!lava) {
+		Slime::jumpInLiquid(lava);
+		return;
+	}
+	_delta.y   = 0.22F + _size * 0.05F;
+	hasImpulse = true;
 }

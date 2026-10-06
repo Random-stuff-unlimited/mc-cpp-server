@@ -45,7 +45,7 @@ void Creeper::registerGoals() {
 void Creeper::tick() {
 	if (isAlive()) {
 		if (_ignited) setSwellDir(1);
-		// The PRIME_FUSE game event (swell starting) isn't listened to by anything ported
+		if (_swellDir > 0 && _swell == 0) playSound("minecraft:entity.creeper.primed", 1.0F, 0.5F);
 		_swell += _swellDir;
 		if (_swell < 0) _swell = 0;
 		if (_swell >= _maxSwell) {

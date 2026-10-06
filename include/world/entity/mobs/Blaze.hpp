@@ -3,18 +3,28 @@
 
 #include "world/entity/mobs/Monster.hpp"
 
-// Blaze: a hostile of the Nether that hovers (no gravity), immune to fire and lava, and shoots volleys of three
-// fireballs at its target
+// Blaze: falls slowly, rises above its target, hits it up close and from afar charges up (on fire for 3 seconds) then
+// shoots three small fireballs, every 5 seconds. Water and rain hurt it
 class Blaze : public Monster {
   public:
+	static constexpr int DATA_FLAGS = 16; // 1: charged (seen on fire)
+
 	Blaze(Level& level, int typeId);
 
-	bool fireImmune() const override { return true; }
 	void registerGoals() override;
+	bool isSensitiveToWater() const override { return true; }
+	bool isCharged() const { return _flags & 1; }
+	void setCharged(bool charged);
+
+  protected:
+	void aiStep() override;
+	void customServerAiStep() override;
 	void writeData(Buffer& buf, uint32_t mask, bool onlyNonDefault) const override;
 
   private:
-	static constexpr int DATA_ID_FLAGS = 16;
+	uint8_t _flags				  = 0;
+	float	_allowedHeightOffset  = 0.5F;
+	int		_nextHeightOffsetChangeTick = 0;
 };
 
 #endif

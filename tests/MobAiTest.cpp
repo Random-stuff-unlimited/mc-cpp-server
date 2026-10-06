@@ -8,7 +8,10 @@
 #include "world/entity/Mob.hpp"
 #include "world/entity/mobs/Creeper.hpp"
 #include "world/entity/mobs/FarmAnimals.hpp"
+#include "world/entity/mobs/Skeleton.hpp"
 #include "world/entity/mobs/Spider.hpp"
+#include "world/entity/mobs/Wolf.hpp"
+#include "world/entity/Arrow.hpp"
 #include "world/entity/mobs/Zombie.hpp"
 
 namespace {
@@ -251,4 +254,190 @@ TEST(animals_tempted_by_food) {
 	f.tick(200);
 	CHECK(cow->distanceToSqr(*player) < start);
 	CHECK(cow->distanceToSqr(*player) < 5.0 * 5.0);
+}
+
+// A skeleton draws its bow at a player in range and shoots: the arrow hurts the player (about 2 to 5 damage)
+TEST(skeleton_shoots_player) {
+	LevelFixture f(2);
+	auto player = addPlayer(f, 10.5, 0.5);
+	Mob* skeleton = spawn(f, "minecraft:skeleton", {0, Y, 0});
+	CHECK(skeleton);
+	if (!skeleton) return;
+	CHECK(skeleton->isHolding("minecraft:bow"));
+	float health = player->combat().health;
+	bool  drew	 = false;
+	for (int t = 0; t < 400 && player->combat().health == health; t++) {
+		f.tick();
+		drew |= skeleton->isUsingItem();
+	}
+	CHECK(drew);
+	CHECK(player->combat().health < health);
+	CHECK(health - player->combat().health <= 6.0F);
+}
+
+// Without a bow a skeleton fights in melee; given one back, it shoots again
+TEST(skeleton_reassesses_weapon) {
+	LevelFixture f(1);
+	auto  player   = addPlayer(f, 6.5, 0.5);
+	auto* skeleton = dynamic_cast<AbstractSkeleton*>(spawn(f, "minecraft:skeleton", {0, Y, 0}));
+	CHECK(skeleton);
+	if (!skeleton) return;
+	skeleton->setItemSlot(EquipmentSlot::MainHand, ItemStack{});
+	float health = player->combat().health;
+	for (int t = 0; t < 400 && player->combat().health == health; t++) f.tick();
+	CHECK(player->combat().health < health);
+	CHECK(skeleton->distanceToSqr(*player) < 4.0); // Came to hit it
+}
+
+// An arrow flies, falls and sticks in the ground; nobody may pick up a mob's arrow
+TEST(arrow_sticks_in_ground) {
+	LevelFixture f(1);
+	Mob* skeleton = spawn(f, "minecraft:skeleton", {0, Y, 0});
+	CHECK(skeleton);
+	if (!skeleton) return;
+	auto  arrow = std::make_unique<Arrow>(*f.level, *skeleton, ItemStack{}, nullptr);
+	Arrow* shot	= arrow.get();
+	arrow->shoot(1.0, 0.2, 0.0, 1.6F, 0.0F);
+	f.level->entities().add(std::move(arrow));
+	for (int t = 0; t < 100 && !shot->isInGround(); t++) f.tick();
+	CHECK(shot->isInGround());
+	CHECK(shot->position().x > 3.0);
+	CHECK(shot->pickup() == Arrow::Pickup::Disallowed);
+}
+
+// A witch throws splash potions at a player: slowness from afar first (or poison), which the player gets
+TEST(witch_throws_potions) {
+	LevelFixture f(2);
+	auto player = addPlayer(f, 9.5, 0.5);
+	Mob* witch	= spawn(f, "minecraft:witch", {0, Y, 0});
+	CHECK(witch);
+	if (!witch) return;
+	bool affected = false;
+	for (int t = 0; t < 400 && !affected; t++) {
+		f.tick();
+		affected = !player->effects().empty() || player->combat().health < 20.0F;
+	}
+	CHECK(affected);
+	CHECK(player->hasEffect(MobEffects::Slowness) || player->hasEffect(MobEffects::Poison) || player->combat().health < 20.0F);
+}
+
+// A snow golem throws snowballs at a zombie (no damage but to blazes) and leaves snow where it stands
+TEST(snow_golem_throws_snowballs) {
+	LevelFixture f(2);
+	Mob* golem	= spawn(f, "minecraft:snow_golem", {0, Y, 0});
+	Mob* zombie = spawn(f, "minecraft:zombie", {6, Y, 0});
+	CHECK(golem && zombie);
+	if (!golem || !zombie) return;
+	zombie->goalSelector().removeAllGoals();
+	zombie->targetSelector().removeAllGoals();
+	bool hit = false;
+	for (int t = 0; t < 200 && !hit; t++) {
+		f.tick();
+		hit = zombie->hurtTime() > 0;
+	}
+	CHECK(hit);
+	CHECK_EQ(zombie->health(), zombie->maxHealth());
+	CHECK(f.level->getBlockState(golem->blockPosition()) == f.data.getDefaultBlockState("minecraft:snow"));
+}
+
+// A tamed wolf has 40 health, sits when told, and attacks what its owner hits
+TEST(wolf_tamed_defends_owner) {
+	LevelFixture f(2);
+	auto  player = addPlayer(f, 2.5, 0.5);
+	auto* wolf	 = dynamic_cast<Wolf*>(spawn(f, "minecraft:wolf", {0, Y, 0}));
+	Mob*  zombie = spawn(f, "minecraft:zombie", {5, Y, 2});
+	CHECK(wolf && zombie);
+	if (!wolf || !zombie) return;
+	zombie->goalSelector().removeAllGoals();
+	zombie->targetSelector().removeAllGoals();
+	CHECK_EQ(wolf->maxHealth(), 8.0F);
+	wolf->tame(*player);
+	CHECK(wolf->isTame() && wolf->getOwner() == player.get());
+	CHECK_EQ(wolf->health(), 40.0F);
+	// Ordered to sit: it stays put
+	wolf->setOrderedToSit(true);
+	f.tick(10);
+	CHECK(wolf->isInSittingPose());
+	wolf->setOrderedToSit(false);
+	// Its owner hits a zombie: the wolf goes for it
+	player->setLastAttack(-100);
+	player->setPosition(4.5, Y, 2.5);
+	player->survival().tickCount = 50; // The fixture doesn't tick the players
+	Combat::attack(f.server, *player, *zombie);
+	float health = zombie->health();
+	bool  targeted = false;
+	for (int t = 0; t < 200 && zombie->health() >= health; t++) {
+		f.tick();
+		targeted |= wolf->getTarget() == zombie;
+	}
+	CHECK(targeted);
+	CHECK(zombie->health() < health);
+}
+
+// A cod swims around in water and keeps its air; on land it flops, runs out of air and dies
+TEST(fish_swims_and_suffocates_on_land) {
+	LevelFixture f(1);
+	int water = f.data.getDefaultBlockState("minecraft:water");
+	for (int x = -4; x <= 4; x++) {
+		for (int z = -4; z <= 4; z++) {
+			for (int y = Y; y < Y + 5; y++) f.level->setBlock({x, y, z}, water, Level::UPDATE_ALL);
+		}
+	}
+	Mob* cod = spawn(f, "minecraft:cod", {0, Y + 2, 0});
+	CHECK(cod);
+	if (!cod) return;
+	Vec3   start = cod->position();
+	double moved = 0.0;
+	for (int t = 0; t < 400; t++) {
+		f.tick();
+		moved = std::max(moved, (cod->position() - start).length());
+	}
+	CHECK(cod->isAlive());
+	CHECK(moved > 1.0);
+	CHECK_EQ(cod->airSupply(), 300);
+	Mob* beached = spawn(f, "minecraft:cod", {12, Y, 12});
+	CHECK(beached);
+	if (!beached) return;
+	int id = beached->id();
+	f.tick(450);
+	Actor* still = f.level->actorById(id); // Gone once dead
+	CHECK(!still || !still->isAlive());
+}
+
+// A strider stands on the surface of lava instead of sinking, and isn't hurt by it
+TEST(strider_stands_on_lava) {
+	LevelFixture f(1);
+	int lava = f.data.getDefaultBlockState("minecraft:lava");
+	for (int x = -4; x <= 4; x++) {
+		for (int z = -4; z <= 4; z++) {
+			for (int y = Y; y < Y + 3; y++) f.level->setBlock({x, y, z}, lava, Level::UPDATE_ALL);
+		}
+	}
+	Mob* strider = spawn(f, "minecraft:strider", {0, Y + 4, 0});
+	CHECK(strider);
+	if (!strider) return;
+	float health = strider->health();
+	f.tick(200);
+	CHECK(strider->isAlive());
+	CHECK_EQ(strider->health(), health);
+	CHECK(strider->position().y > Y + 2.4 && strider->position().y < Y + 3.1);
+}
+
+// A red fox hunts the chicken it sees at night: stalks, pounces, bites
+TEST(fox_hunts_chicken) {
+	LevelFixture f(1);
+	Mob* fox	 = spawn(f, "minecraft:fox", {0, Y, 0});
+	Mob* chicken = spawn(f, "minecraft:chicken", {7, Y, 0});
+	CHECK(fox && chicken);
+	if (!fox || !chicken) return;
+	fox->setBaby(false);
+	chicken->goalSelector().removeAllGoals();
+	int	 id	  = chicken->id();
+	bool hurt = false;
+	for (int t = 0; t < 1200 && !hurt; t++) {
+		f.tick();
+		Actor* still = f.level->actorById(id);
+		hurt		 = !still || !still->isAlive() || static_cast<Mob*>(still)->health() < 4.0F;
+	}
+	CHECK(hurt);
 }

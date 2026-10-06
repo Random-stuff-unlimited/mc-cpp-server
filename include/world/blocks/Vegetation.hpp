@@ -84,6 +84,21 @@ class SweetBerryBushBlock : public VegetationBlock {
 	void randomTick(Level& level, const BlockPos& pos, int state) const override;
 };
 
+// TurtleEggBlock: on sand, cracks twice then hatches into baby turtles (at night's end mostly). Trampling and
+// stacking eggs by hand aren't ported
+class TurtleEggBlock : public BlockBehavior {
+  public:
+	explicit TurtleEggBlock(std::shared_ptr<const BlockContext> context);
+	bool isRandomlyTicking(int) const override { return true; }
+	void randomTick(Level& level, const BlockPos& pos, int state) const override;
+	void onPlace(Level& level, const BlockPos& pos, int state, int oldState, bool movedByPiston) const override;
+
+  private:
+	std::shared_ptr<const BlockContext> _context;
+	std::vector<bool>					_sand;
+	int									_hatch, _eggs;
+};
+
 // MushroomBlock: anything in mushroom_grow_block, or an opaque block in light under 13. Spreads slowly around
 class MushroomBlock : public VegetationBlock {
   public:

@@ -9,6 +9,7 @@
 #include "world/Clip.hpp"
 #include "world/Level.hpp"
 #include "world/entity/ItemEntity.hpp"
+#include "world/entity/SpawnPlacements.hpp"
 #include "world/entity/ExperienceOrb.hpp"
 #include "world/Xp.hpp"
 
@@ -21,9 +22,10 @@ namespace {
 	constexpr int	 MAX_ENTITY_CRAMMING  = 24; // Game rule maxEntityCramming, default
 	constexpr int	 PLAYER_MEMORY_TICKS  = 100;
 	constexpr int	 DEFAULT_PICKUP_DELAY = 10;
-	constexpr int	 SAVE_VERSION		  = 1;
+	constexpr int	 SAVE_VERSION		  = 2; // 2: effects and absorption
 	constexpr uint32_t LIVING_DATA = 1u << LivingEntity::DATA_SHARED_FLAGS | 1u << LivingEntity::DATA_AIR_SUPPLY | 1u << LivingEntity::DATA_POSE |
-									 1u << LivingEntity::DATA_LIVING_FLAGS | 1u << LivingEntity::DATA_HEALTH;
+									 1u << LivingEntity::DATA_LIVING_FLAGS | 1u << LivingEntity::DATA_HEALTH |
+									 1u << LivingEntity::DATA_EFFECT_PARTICLES | 1u << LivingEntity::DATA_EFFECT_AMBIENCE;
 
 	const GameData::EntityTypeInfo& typeOf(Level& level, int typeId) {
 		const GameData::EntityTypeInfo* type = level.gameData().getEntityType(typeId);
@@ -65,6 +67,119 @@ void LivingEntity::setHealth(float health) {
 
 void LivingEntity::heal(float amount) {
 	if (_health > 0.0F) setHealth(_health + amount);
+}
+
+// ----- Using an item -----
+
+bool LivingEntity::isHolding(const std::string& item) const {
+	int id = _level.gameData().getStaticId("minecraft:item", item);
+	return (!getMainHandItem().isEmpty() && getMainHandItem().item == id) || (!getItemInHand(1).isEmpty() && getItemInHand(1).item == id);
+}
+
+int LivingEntity::useDuration(const ItemStack& stack) const {
+	if (stack.isEmpty()) return 0;
+	const std::string& name = _level.gameData().getStaticName("minecraft:item", stack.item);
+	if (name == "minecraft:bow" || name == "minecraft:crossbow" || name == "minecraft:shield" || name == "minecraft:trident") return 72000;
+	const GameData::ItemProperties* props = _level.gameData().getItemProperties(stack.item);
+	return props && props->consumable ? props->consumable->consumeTicks() : 0;
+}
+
+void LivingEntity::startUsingItem(int hand) {
+	const ItemStack& stack = getItemInHand(hand);
+	if (stack.isEmpty() || isUsingItem()) return;
+	_useItem		  = stack;
+	_useItemRemaining = useDuration(stack);
+	uint8_t flags	  = static_cast<uint8_t>((_livingFlags | 1) & ~2) | (hand == 1 ? 2 : 0);
+	if (flags != _livingFlags) {
+		_livingFlags = flags;
+		markData(DATA_LIVING_FLAGS);
+	}
+}
+
+void LivingEntity::stopUsingItem() {
+	if (_livingFlags & 1) {
+		_livingFlags &= static_cast<uint8_t>(~1);
+		markData(DATA_LIVING_FLAGS);
+	}
+	_useItem		  = ItemStack{};
+	_useItemRemaining = 0;
+}
+
+int LivingEntity::getTicksUsingItem() const { return isUsingItem() ? useDuration(_useItem) - _useItemRemaining : 0; }
+
+void LivingEntity::updatingUsingItem() {
+	if (!isUsingItem()) return;
+	const ItemStack& held = getItemInHand(getUsedItemHand());
+	if (!held.isEmpty() && !_useItem.isEmpty() && held.item == _useItem.item) {
+		_useItem = held;
+		// updateUsingItem: bows and crossbows wait for their release (useOnRelease); the rest completes at the end
+		const std::string& name = _level.gameData().getStaticName("minecraft:item", _useItem.item);
+		if (--_useItemRemaining == 0 && name != "minecraft:bow" && name != "minecraft:crossbow" && name != "minecraft:trident") stopUsingItem();
+	} else {
+		stopUsingItem();
+	}
+}
+
+// ----- Effects -----
+
+bool LivingEntity::canBeAffected(MobEffects::Effect effect) const { return MobEffects::Active::canBeAffected(_level.gameData(), _typeId, effect); }
+
+const GameData& LivingEntity::effectGameData() const { return _level.gameData(); }
+
+bool LivingEntity::addEffectTo(Actor& target, const MobEffects::Instance& instance, Actor* source) {
+	if (Player* player = target.asPlayer()) return player->addEffect(instance, source);
+	if (LivingEntity* living = target.asLiving()) return living->addEffect(instance, source);
+	return false;
+}
+
+void LivingEntity::setAbsorptionAmount(float amount) {
+	// LivingEntity.setAbsorptionAmount / internalSetAbsorptionAmount
+	int	   maxAbsorption = _level.gameData().getStaticId("minecraft:attribute", "minecraft:max_absorption");
+	double max			 = _attributes.hasAttribute(maxAbsorption) ? getAttributeValue(maxAbsorption) : 0.0;
+	_absorption			 = std::clamp(amount, 0.0F, static_cast<float>(max));
+}
+
+void LivingEntity::onEffectAttributesChanged() {
+	// refreshDirtyAttributes: onAttributeUpdated of max_health and max_absorption
+	if (_health > maxHealth()) setHealth(maxHealth());
+	setAbsorptionAmount(_absorption);
+}
+
+void LivingEntity::setSharedFlag(int flag, bool value) {
+	uint8_t flags = static_cast<uint8_t>(value ? _sharedFlags | 1 << flag : _sharedFlags & ~(1 << flag));
+	if (flags == _sharedFlags) return;
+	_sharedFlags = flags;
+	markData(DATA_SHARED_FLAGS);
+}
+
+void LivingEntity::updateEffectVisuals() {
+	// updateInvisibilityStatus (the particles and ambience are written from the effects), updateGlowingStatus
+	setSharedFlag(SHARED_FLAG_INVISIBLE, _effects.has(MobEffects::Invisibility));
+	setSharedFlag(SHARED_FLAG_GLOWING, _effects.has(MobEffects::Glowing));
+	markData(DATA_EFFECT_PARTICLES);
+	// The ambience is left as it was once no effect remains
+	if (!_effects.empty() && _effects.allAmbient() != _effectAmbience) {
+		_effectAmbience = _effects.allAmbient();
+		markData(DATA_EFFECT_AMBIENCE);
+	}
+}
+
+void LivingEntity::playEffectSound(const std::string& sound) { playSound(sound, 1.0F, 1.0F); }
+
+double LivingEntity::effectiveGravity() const {
+	double gravity = getAttributeValue(_ids.gravity);
+	return _delta.y <= 0.0 && _effects.has(MobEffects::SlowFalling) ? std::min(gravity, 0.01) : gravity;
+}
+
+float LivingEntity::damageAfterMagicAbsorb(const Combat::DamageSource&, float amount, int damageType) const {
+	const GameData& data = _level.gameData();
+	if (data.isInTag("minecraft:damage_type", "minecraft:bypasses_effects", damageType)) return amount;
+	int resistance = _effects.amplifier(MobEffects::Resistance);
+	if (resistance >= 0 && !data.isInTag("minecraft:damage_type", "minecraft:bypasses_resistance", damageType)) {
+		int factor = 25 - (resistance + 1) * 5;
+		amount	   = std::max(amount * factor / 25.0F, 0.0F);
+	}
+	return amount <= 0.0F ? 0.0F : amount; // Protection enchantments aren't ported for mobs
 }
 
 void LivingEntity::setAirSupply(int air) {
@@ -194,6 +309,7 @@ void LivingEntity::tick() {
 	livingBaseTick();
 	if (isRemoved()) return;
 	detectEquipmentUpdates();
+	updatingUsingItem();
 	if (!isRemoved()) aiStep();
 
 	// The body turns toward where it moved
@@ -238,6 +354,7 @@ void LivingEntity::livingBaseTick() {
 	}
 	// The attacker is forgotten after 100 ticks, or when it is gone
 	if (_lastHurtByMob.isSet() && (_tickCount - _lastHurtByMobTimestamp > 100 || !getLastHurtByMob())) _lastHurtByMob.clear();
+	_effects.tick(*this); // tickEffects
 }
 
 // Entity.updateFluidOnEyes: water above the eyes, and whether it is a bubble column (air comes from it)
@@ -252,7 +369,9 @@ void LivingEntity::updateFluidOnEyes() {
 
 void LivingEntity::updateAir() {
 	if (_eyeInWater && !_eyeInBubbleColumn) {
-		if (!_canBreatheUnderwater) {
+		// MobEffectUtil.hasWaterBreathing: water breathing or conduit power
+		if (!_canBreatheUnderwater && !_effects.has(MobEffects::WaterBreathing) && !_effects.has(MobEffects::ConduitPower)) {
+			if (keepsAirSupply()) return;
 			// decreaseAirSupply: oxygen bonus sometimes saves the air
 			double bonus = _attributes.hasAttribute(_ids.oxygenBonus) ? getAttributeValue(_ids.oxygenBonus) : 0.0;
 			setAirSupply(bonus > 0.0 && _random.nextDouble() >= 1.0 / (bonus + 1.0) ? _airSupply : _airSupply - 1);
@@ -261,11 +380,11 @@ void LivingEntity::updateAir() {
 				broadcastEntityEvent(EVENT_DROWN_PARTICLES);
 				hurtServer({"minecraft:drown", nullptr}, 2.0F);
 			}
-		} else if (_airSupply < MAX_AIR_SUPPLY) {
-			setAirSupply(std::min(_airSupply + 4, MAX_AIR_SUPPLY));
+		} else if (_airSupply < maxAirSupply()) {
+			setAirSupply(increaseAirSupply(_airSupply));
 		}
-	} else if (_airSupply < MAX_AIR_SUPPLY) {
-		setAirSupply(std::min(_airSupply + 4, MAX_AIR_SUPPLY)); // increaseAirSupply
+	} else if (_airSupply < maxAirSupply()) {
+		setAirSupply(increaseAirSupply(_airSupply));
 	}
 }
 
@@ -278,6 +397,14 @@ void LivingEntity::tickDeath() {
 }
 
 void LivingEntity::aiStep() {
+	if (hasRider() && isControlledByRider()) {
+		// LivingEntity.isControlledByClient: its rider's client moves it
+		_jumping = false;
+		_xxa = _yya = _zza = 0.0F;
+		_delta	 = {};
+		_resting = false;
+		return;
+	}
 	if (_noJumpDelay > 0) _noJumpDelay--;
 	// Tiny movements stop
 	if (std::abs(_delta.x) < 0.003) _delta.x = 0.0;
@@ -304,15 +431,16 @@ void LivingEntity::aiStep() {
 					_noJumpDelay = 10;
 				}
 			} else {
-				_delta.y += 0.04F; // jumpInLiquid
+				jumpInLiquid(isInLava());
 			}
 		} else {
-			_delta.y += 0.04F;
+			jumpInLiquid(false);
 		}
 	} else {
 		_noJumpDelay = 0;
 	}
 
+	if (_effects.has(MobEffects::SlowFalling) || _effects.has(MobEffects::Levitation)) resetFallDistance();
 	if (isEffectiveAi()) {
 		Vec3 input{_xxa, _yya, _zza};
 		bool still = input.lengthSqr() == 0.0 && !_jumping;
@@ -330,6 +458,43 @@ void LivingEntity::aiStep() {
 	}
 	applyFireEffectsFromBlocks();
 	pushEntities();
+	if (isSensitiveToWater() && isInWaterOrRain()) hurtServer({"minecraft:drown", nullptr}, 1.0F);
+}
+
+bool LivingEntity::randomTeleport(double x, double y, double z, bool broadcast) {
+	Vec3	 from = _position;
+	BlockPos pos{Mth::floor(x), Mth::floor(y), Mth::floor(z)};
+	bool	 done = false;
+	if (_level.hasChunkAt(pos)) {
+		bool ground = false;
+		while (!ground && pos.y > _level.minY()) {
+			BlockPos below = pos.below();
+			if (_level.gameData().getStateProperties(_level.getBlockState(below)).blocksMotion) {
+				ground = true;
+			} else {
+				y--;
+				pos = below;
+			}
+		}
+		if (ground) {
+			_position = {x, y, z};
+			if (!_level.hasBlockCollision(boundingBox()) && !SpawnPlacements::containsAnyLiquid(_level, boundingBox())) done = true;
+		}
+	}
+	if (!done) {
+		_position = from;
+		return false;
+	}
+	snapTo(_position, _yRot, _xRot);
+	hasImpulse = true;
+	if (broadcast) broadcastEntityEvent(46);
+	return true;
+}
+
+bool LivingEntity::isInWaterOrRain() {
+	if (isInWater()) return true;
+	BlockPos top{Mth::floor(_position.x), Mth::floor(boundingBox().maxY), Mth::floor(_position.z)};
+	return _level.isRainingAt(blockPosition()) || _level.isRainingAt(top);
 }
 
 // ----- Resting -----
@@ -383,11 +548,54 @@ float LivingEntity::blockSpeedFactor() {
 }
 
 void LivingEntity::travel(const Vec3& input) {
-	// Fluids that can be stood on (striders on lava) aren't ported
-	if (isInWater() || isInLava()) {
+	if ((isInWater() || isInLava()) && !canStandOnFluid(_level.fluids().stateOf(_level.getBlockState(blockPosition())))) {
 		travelInFluid(input);
 	} else {
 		travelInAir(input);
+	}
+}
+
+bool LivingEntity::inPowderSnow() {
+	AABB box	= boundingBox().deflate(1.0E-5);
+	int	 powder = _level.gameData().getStaticId("minecraft:block", "minecraft:powder_snow");
+	for (int x = Mth::floor(box.minX); x <= Mth::floor(box.maxX); x++) {
+		for (int y = Mth::floor(box.minY); y <= Mth::floor(box.maxY); y++) {
+			for (int z = Mth::floor(box.minZ); z <= Mth::floor(box.maxZ); z++) {
+				if (_level.blocks().blockOf(_level.getBlockState({x, y, z})) == powder) return true;
+			}
+		}
+	}
+	return false;
+}
+
+void LivingEntity::setPose(int pose) {
+	if (pose == _pose || _pose == POSE_DYING) return;
+	_pose = pose;
+	markData(DATA_POSE);
+}
+
+void LivingEntity::setSprinting(bool sprinting) {
+	if (sprinting == isSprinting()) return;
+	setSharedFlag(SHARED_FLAG_SPRINTING, sprinting);
+	AttributeInstance* speed = _attributes.getInstance(_ids.movementSpeed);
+	if (!speed) return;
+	speed->removeModifier("minecraft:sprinting");
+	if (sprinting) speed->addModifier({"minecraft:sprinting", 0.3F, AttributeModifier::Operation::AddMultipliedTotal}, false);
+}
+
+void LivingEntity::travelFlying(const Vec3& input, float speed) {
+	if (isInWater()) {
+		moveRelative(0.02F, input);
+		move(_delta);
+		_delta = _delta.scale(0.8F);
+	} else if (isInLava()) {
+		moveRelative(0.02F, input);
+		move(_delta);
+		_delta = _delta.scale(0.5);
+	} else {
+		moveRelative(speed, input);
+		move(_delta);
+		_delta = _delta.scale(0.91F);
 	}
 }
 
@@ -413,14 +621,19 @@ void LivingEntity::travelInAir(const Vec3& input) {
 	Vec3 movement = _delta;
 	if ((_horizontalCollision || _jumping) && onClimbable()) movement.y = 0.2;
 
-	double y = movement.y - getAttributeValue(_ids.gravity); // Levitation and slow falling aren't ported
-	_delta	 = {movement.x * inertia, y * (_flyingAnimal ? inertia : 0.98F), movement.z * inertia};
+	double y = movement.y;
+	if (const MobEffects::Instance* levitation = _effects.get(MobEffects::Levitation)) {
+		y += (0.05 * (levitation->amplifier + 1) - movement.y) * 0.2;
+	} else {
+		y -= effectiveGravity();
+	}
+	_delta = {movement.x * inertia, y * (_flyingAnimal ? inertia : 0.98F), movement.z * inertia};
 }
 
 void LivingEntity::travelInFluid(const Vec3& input) {
 	bool   falling = _delta.y <= 0.0;
 	double startY  = _position.y;
-	double gravity = getAttributeValue(_ids.gravity);
+	double gravity = effectiveGravity();
 	auto   fallingAdjusted = [&](Vec3 movement) {
 		  // getFluidFallingAdjustedMovement
 		  if (gravity != 0.0) {
@@ -433,7 +646,7 @@ void LivingEntity::travelInFluid(const Vec3& input) {
 		  return movement;
 	};
 	if (isInWater()) {
-		float slowDown	 = 0.8F; // getWaterSlowDown
+		float slowDown	 = waterSlowDown();
 		float speed		 = 0.02F;
 		float efficiency = static_cast<float>(getAttributeValue(_ids.waterMovementEfficiency));
 		if (!_onGround) efficiency *= 0.5F;
@@ -441,6 +654,7 @@ void LivingEntity::travelInFluid(const Vec3& input) {
 			slowDown += (0.54600006F - slowDown) * efficiency;
 			speed += (_speed - speed) * efficiency;
 		}
+		if (_effects.has(MobEffects::DolphinsGrace)) slowDown = 0.96F;
 		moveRelative(speed, input);
 		move(_delta);
 		Vec3 movement = _delta;
@@ -474,8 +688,14 @@ bool LivingEntity::isFree(const Vec3& offset) {
 	return true;
 }
 
+float LivingEntity::jumpPower() {
+	// getJumpPower: plus getJumpBoostPower
+	int jumpBoost = _effects.amplifier(MobEffects::JumpBoost);
+	return static_cast<float>(getAttributeValue(_ids.jumpStrength)) * jumpPowerFactor() * blockJumpFactor() + (jumpBoost >= 0 ? 0.1F * (jumpBoost + 1.0F) : 0.0F);
+}
+
 void LivingEntity::jumpFromGround() {
-	float power = static_cast<float>(getAttributeValue(_ids.jumpStrength)) * blockJumpFactor(); // No jump boost
+	float power = jumpPower();
 	if (power <= 1.0E-5F) return;
 	_delta.y   = std::max(static_cast<double>(power), _delta.y);
 	hasImpulse = true;
@@ -552,7 +772,10 @@ void LivingEntity::pushEntities() {
 	if (count > MAX_ENTITY_CRAMMING - 1 && _random.nextInt(4) == 0) hurtServer({"minecraft:cramming", nullptr}, 6.0F); // No passengers
 	if (count > 0) {
 		_level.entities().forEachIn(box, [&](Entity& other) {
-			if (&other != this && other.isPushable()) other.pushAgainst(*this); // doPush: other.push(this)
+			if (&other != this && other.isPushable()) {
+				doPush(other);
+				other.pushAgainst(*this); // Entity.push(this)
+			}
 		});
 	}
 	// Players it touches push it (their Player.push(this) is the half that concerns it)
@@ -580,6 +803,7 @@ bool LivingEntity::hurtServer(const Combat::DamageSource& source, float amount) 
 	// isInvulnerableTo
 	if (isRemoved() || (tagged("minecraft:is_fire") && fireImmune()) || (tagged("minecraft:is_fall") && _fallDamageImmune)) return false;
 	if (isDeadOrDying()) return false;
+	if (tagged("minecraft:is_fire") && _effects.has(MobEffects::FireResistance)) return false;
 	_noActionTime = 0;
 	if (amount < 0.0F) amount = 0.0F;
 	if (tagged("minecraft:is_freezing") && data.isInTag("minecraft:entity_type", "minecraft:freeze_hurts_extra_types", _typeId)) amount *= 5.0F;
@@ -636,7 +860,7 @@ bool LivingEntity::hurtServer(const Combat::DamageSource& source, float amount) 
 	_lastDamageType	 = source.type;
 	_lastDamageStamp = _level.getGameTime();
 	if (isDeadOrDying()) {
-		if (fullHit) playSound(typeSound("death", "minecraft:entity.generic.death"), 1.0F, voicePitch());
+		if (fullHit) playSound(deathSoundName(), soundVolume(), voicePitch());
 		die(source);
 	} else if (fullHit) {
 		playHurtSound();
@@ -644,10 +868,9 @@ bool LivingEntity::hurtServer(const Combat::DamageSource& source, float amount) 
 	return true;
 }
 
-void LivingEntity::playHurtSound() { playSound(typeSound("hurt", "minecraft:entity.generic.hurt"), 1.0F, voicePitch()); }
+void LivingEntity::playHurtSound() { playSound(hurtSoundName(), soundVolume(), voicePitch()); }
 
 void LivingEntity::actuallyHurt(const Combat::DamageSource& source, float amount, int damageType) {
-	(void)source;
 	if (!_level.gameData().isInTag("minecraft:damage_type", "minecraft:bypasses_armor", damageType)) {
 		// CombatRules.getDamageAfterAbsorb (armor from attributes: equipment isn't ported)
 		float armor		= static_cast<float>(Mth::floor(getAttributeValue(_ids.armor)));
@@ -655,8 +878,11 @@ void LivingEntity::actuallyHurt(const Combat::DamageSource& source, float amount
 		float effective = Mth::clamp(armor - amount / toughness, armor * 0.2F, 20.0F) / 25.0F;
 		amount *= 1.0F - effective;
 	}
-	// No effects, enchantments or absorption yet
-	if (amount != 0.0F) setHealth(_health - amount);
+	amount = damageAfterMagicAbsorb(source, amount, damageType);
+	// Absorption takes the damage first
+	float remaining = std::max(amount - _absorption, 0.0F);
+	setAbsorptionAmount(_absorption - (amount - remaining));
+	if (remaining != 0.0F) setHealth(_health - remaining);
 }
 
 void LivingEntity::knockback(double strength, double x, double z) {
@@ -698,10 +924,18 @@ void LivingEntity::dropAllDeathLoot(const Combat::DamageSource& source) {
 		_level.entities().add(std::move(item));
 	}
 	// Its XP, when a player killed it (LivingEntity.dropExperience): split into orbs
-	if (context.killedByPlayer) {
-		int xp = Xp::mobXp(_level.gameData(), _typeId);
+	if (context.killedByPlayer && !isBaby()) { // shouldDropExperience
+		int xp = baseExperienceReward();
+		// ExperienceOrb.award: in orbs of the standard values
+		static const int values[] = {2477, 1237, 617, 307, 149, 73, 37, 17, 7, 3, 1};
 		while (xp > 0) {
-			int split = std::min(20, xp);
+			int split = 1;
+			for (int value : values) {
+				if (xp >= value) {
+					split = value;
+					break;
+				}
+			}
 			xp -= split;
 			if (auto orb = ExperienceOrb::create(_level, _position, split)) _level.entities().add(std::move(orb));
 		}
@@ -730,7 +964,7 @@ void LivingEntity::playSound(const std::string& sound, float volume, float pitch
 					   volume, pitch);
 }
 
-float LivingEntity::voicePitch() { return (_random.nextFloat() - _random.nextFloat()) * 0.2F + 1.0F; }
+float LivingEntity::voicePitch() { return (_random.nextFloat() - _random.nextFloat()) * 0.2F + (isBaby() ? 1.5F : 1.0F); }
 
 void LivingEntity::broadcastEntityEvent(int event) {
 	Buffer data;
@@ -762,11 +996,20 @@ void LivingEntity::writeData(Buffer& buf, uint32_t mask, bool onlyNonDefault) co
 		buf.writeVarInt(SERIALIZER_POSE);
 		buf.writeVarInt(_pose);
 	}
+	if (wanted(DATA_LIVING_FLAGS, _livingFlags == 0)) writeByteData(buf, DATA_LIVING_FLAGS, _livingFlags);
 	if (wanted(DATA_HEALTH, _health == 1.0F)) {
 		buf.writeUByte(DATA_HEALTH);
 		buf.writeVarInt(SERIALIZER_FLOAT);
 		buf.writeFloat(_health);
 	}
+	bool anyParticles = false;
+	for (const MobEffects::Instance& i : _effects.all()) anyParticles |= i.visible;
+	if (wanted(DATA_EFFECT_PARTICLES, !anyParticles)) {
+		buf.writeUByte(DATA_EFFECT_PARTICLES);
+		buf.writeVarInt(SERIALIZER_PARTICLES);
+		_effects.writeParticles(buf, _level.gameData());
+	}
+	if (wanted(DATA_EFFECT_AMBIENCE, !_effectAmbience)) writeBoolData(buf, DATA_EFFECT_AMBIENCE, _effectAmbience);
 }
 
 void LivingEntity::writeByteData(Buffer& buf, int id, uint8_t value) {
@@ -805,10 +1048,13 @@ void LivingEntity::save(Buffer& buf) const {
 	buf.writeShort(static_cast<int16_t>(_hurtTime));
 	buf.writeShort(static_cast<int16_t>(_deathTime));
 	_attributes.save(buf);
+	_effects.save(buf);
+	buf.writeFloat(_absorption);
 }
 
 void LivingEntity::load(Buffer& buf) {
-	if (buf.readUByte() != SAVE_VERSION) throw std::runtime_error("unknown living entity data version");
+	int version = buf.readUByte();
+	if (version < 1 || version > SAVE_VERSION) throw std::runtime_error("unknown living entity data version");
 	_uuid = buf.readUUID();
 	_position.x = buf.readDouble();
 	_position.y = buf.readDouble();
@@ -827,8 +1073,14 @@ void LivingEntity::load(Buffer& buf) {
 	float health		= buf.readFloat();
 	_hurtTime			= buf.readShort();
 	_deathTime			= buf.readShort();
-	_attributes.load(buf); // Before the health: the maximum may have changed
+	_attributes.load(buf); // Before the health: the maximum may have changed (with the effects' modifiers, saved with them)
+	float absorption = 0.0F;
+	if (version >= 2) {
+		_effects.load(buf);
+		absorption = buf.readFloat();
+	}
 	_health = std::clamp(health, 0.0F, maxHealth());
+	setAbsorptionAmount(absorption);
 	if (_health <= 0.0F) _pose = POSE_DYING;
 	_oldPosition = _position;
 	_attributes.clearDirty();

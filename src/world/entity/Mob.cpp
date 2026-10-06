@@ -174,6 +174,18 @@ bool Mob::isSunBurnTick() {
 
 bool Mob::mobInteract(Player&, int) { return false; }
 
+bool Mob::equipFromPlayer(Player& player, int hand, EquipmentSlot slot) {
+	const ItemStack& stack = player.getStackInHand(hand);
+	if (stack.isEmpty() || !_equipment[static_cast<int>(slot)].isEmpty()) return false;
+	const GameData::ItemProperties* props = _level.gameData().getItemProperties(stack.item);
+	if (!props || EquipmentSlots::fromGameData(props->equipmentSlot) != slot) return false;
+	setItemSlot(slot, stack.copyWithCount(1));
+	setGuaranteedDrop(slot);
+	if (!props->equipSound.empty()) playSound(props->equipSound, 1.0F, 1.0F);
+	if (!player.isCreative()) player.inventory().getMutable(player.handSlot(hand)).shrink(1);
+	return true;
+}
+
 Mob* Mob::convertTo(int typeId, bool keepEquipment, bool preserveCanPickUpLoot, const std::function<void(Mob&)>& finalize) {
 	if (isRemoved()) return nullptr;
 	std::unique_ptr<Mob> mob = _level.mobs().create(_level, typeId);
@@ -386,9 +398,19 @@ std::shared_ptr<SpawnGroupData> Mob::finalizeSpawn(DifficultyInstance&, int, std
 	return group;
 }
 
+int Mob::baseExperienceReward() {
+	if (_xpReward <= 0) return _xpReward;
+	int reward = _xpReward;
+	for (int slot = 0; slot < EQUIPMENT_SLOT_COUNT; slot++) {
+		if (slot == static_cast<int>(EquipmentSlot::Saddle)) continue; // canIncreaseExperience
+		if (!_equipment[slot].isEmpty() && _dropChances[slot] <= 1.0F) reward += 1 + _random.nextInt(3);
+	}
+	return reward;
+}
+
 void Mob::playAmbientSound() {
-	std::string sound = typeSound("ambient", "");
-	if (!sound.empty()) playSound(sound, 1.0F, voicePitch());
+	std::string sound = ambientSoundName();
+	if (!sound.empty()) playSound(sound, soundVolume(), voicePitch());
 }
 
 void Mob::livingBaseTick() {

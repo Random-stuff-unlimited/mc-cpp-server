@@ -351,6 +351,31 @@ namespace Components {
 		return out;
 	}
 
+	std::vector<uint8_t> encodeStewEffects(const std::vector<std::pair<int, int>>& effects) {
+		std::vector<uint8_t> out;
+		writeVarInt(out, static_cast<int32_t>(effects.size()));
+		for (const auto& [effect, duration] : effects) {
+			writeVarInt(out, effect);
+			writeVarInt(out, duration);
+		}
+		return out;
+	}
+
+	std::optional<std::vector<std::pair<int, int>>> decodeStewEffects(const std::vector<uint8_t>& value) {
+		size_t pos = 0;
+		Reader in{value, pos};
+		try {
+			std::vector<std::pair<int, int>> effects;
+			for (int i = in.varint(); i > 0; i--) {
+				int effect = in.varint();
+				effects.emplace_back(effect, in.varint());
+			}
+			return effects;
+		} catch (const std::exception&) {
+			return std::nullopt;
+		}
+	}
+
 	int decodePotion(const std::vector<uint8_t>& value) {
 		size_t pos = 0;
 		Reader in{value, pos};

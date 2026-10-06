@@ -38,10 +38,46 @@ class Cow : public VariantAnimal {
 	float babyEyeHeight() const override { return 0.665F; }
 };
 
+// MushroomCow: a cow of the mushroom fields, red or brown (lightning swaps them). A bowl gives mushroom stew (a
+// suspicious stew after a brown one ate a flower), shears turn it into a cow and drop its mushrooms
+class Mooshroom : public Animal {
+  public:
+	static constexpr int DATA_TYPE = 17;
+	enum Variant { Red = 0, Brown = 1 };
+
+	Mooshroom(Level& level, int typeId) : Animal(level, typeId) {}
+
+	int	 variant() const { return _variant; }
+	void setVariant(int variant);
+	bool readyForShearing() const { return isAlive() && !isBaby(); }
+	// MushroomCow.shear: a cow takes its place, its mushrooms drop
+	void shear();
+
+	void				 registerGoals() override;
+	bool				 mobInteract(Player& player, int hand) override;
+	float				 getWalkTargetValue(const BlockPos& pos) override;
+	std::unique_ptr<Mob> getBreedOffspring(Animal& partner) override;
+	std::string			 lootComponent(const std::string& component) const override;
+	void				 save(Buffer& buf) const override;
+	void				 load(Buffer& buf) override;
+
+  protected:
+	float babyEyeHeight() const override { return 0.665F; }
+	void  writeData(Buffer& buf, uint32_t mask, bool onlyNonDefault) const override;
+
+  private:
+	int							   _variant = Red;
+	std::vector<std::pair<int, int>> _stewEffects; // The flower it ate (empty: none)
+	bool						   _hasStewEffects = false;
+};
+
 class Pig : public VariantAnimal {
   public:
 	Pig(Level& level, int typeId);
 	void registerGoals() override;
+	// A saddle put on it, then ridden; a carrot on a stick steers it
+	bool mobInteract(Player& player, int hand) override;
+	bool isControlledByRider() override;
 };
 
 // Chicken: lays an egg every 5 to 10 minutes (its variant's), falls slowly
@@ -98,5 +134,9 @@ class Sheep : public Animal {
 
 // DyeColor's names, by id
 const char* dyeColorName(int color);
+// DyeColor.getMixedColor: the color the two dyes craft into, else one of them at random
+int			mixedDyeColor(Level& level, int a, int b);
+// The color of a dye item (DyeItem.getDyeColor), -1 if it isn't one
+int			dyeColorOfItem(Level& level, const ItemStack& stack);
 
 #endif

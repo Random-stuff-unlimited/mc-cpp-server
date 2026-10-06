@@ -381,8 +381,31 @@ void GameData::setItemProperty(const std::string& item, const std::string& prope
 		consumable.hasConsumeParticles = value.value("has_consume_particles", true);
 		if (value.contains("on_consume_effects")) {
 			for (const auto& effect : value.at("on_consume_effects")) {
-				consumable.onConsumeEffects.push_back({effect.at("type").get<std::string>(),
-													   effect.contains("sound") && effect.at("sound").is_string() ? effect.at("sound").get<std::string>() : ""});
+				ConsumeEffect parsed;
+				parsed.type	 = effect.at("type").get<std::string>();
+				parsed.sound = effect.contains("sound") && effect.at("sound").is_string() ? effect.at("sound").get<std::string>() : "";
+				parsed.probability = effect.value("probability", 1.0F);
+				parsed.diameter	   = effect.value("diameter", 16.0F);
+				if (parsed.type == "minecraft:apply_effects" && effect.contains("effects")) {
+					for (const auto& e : effect.at("effects")) {
+						ConsumeEffect::Effect instance;
+						instance.id			   = e.at("id").get<std::string>();
+						instance.duration	   = e.value("duration", 0);
+						instance.amplifier	   = e.value("amplifier", 0);
+						instance.ambient	   = e.value("ambient", false);
+						instance.showParticles = e.value("show_particles", true);
+						instance.showIcon	   = e.value("show_icon", instance.showParticles);
+						parsed.effects.push_back(std::move(instance));
+					}
+				} else if (parsed.type == "minecraft:remove_effects" && effect.contains("effects")) {
+					const auto& effects = effect.at("effects");
+					if (effects.is_string()) {
+						parsed.removeEffects.push_back(effects.get<std::string>());
+					} else {
+						for (const auto& e : effects) parsed.removeEffects.push_back(e.get<std::string>());
+					}
+				}
+				consumable.onConsumeEffects.push_back(std::move(parsed));
 			}
 		}
 		props.consumable = std::move(consumable);

@@ -1,6 +1,7 @@
 #include "Commands.hpp"
 
 #include "commands/CommandSupport.hpp"
+#include "network/server.hpp"
 #include "player.hpp"
 #include "world/BlockPos.hpp"
 #include "world/Level.hpp"
@@ -96,8 +97,9 @@ namespace Commands {
 				maxY = std::min(maxY, level->maxY() - 1);
 
 				int64_t volume = static_cast<int64_t>(maxX - minX + 1) * std::max(0, maxY - minY + 1) * (maxZ - minZ + 1);
-				if (volume > 32768) {
-					message(server, player, "The fill region is too big (max 32768 blocks)");
+				int fillLimit = server.getConfig().getFillLimit();
+				if (volume > fillLimit) {
+					message(server, player, "The fill region is too big (max " + std::to_string(fillLimit) + " blocks)");
 					return;
 				}
 

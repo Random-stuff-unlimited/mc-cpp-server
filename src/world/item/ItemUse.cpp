@@ -9,7 +9,7 @@
 #include "world/Clip.hpp"
 #include "world/Level.hpp"
 #include "world/Survival.hpp"
-#include "world/entity/ThrownExperienceBottle.hpp"
+#include "world/entity/Throwables.hpp"
 #include "world/inventory/Menu.hpp"
 #include "world/item/Components.hpp"
 
@@ -120,10 +120,40 @@ namespace {
 			level.playSoundAt(nullptr, player.getX(), player.getY(), player.getZ(), "minecraft:entity.player.burp", Level::SoundSource::Players, 0.5F,
 							  randomBetween(random, 0.9F, 1.0F));
 		}
-		// Mob effects aren't there yet: apply_effects, remove_effects, clear_all_effects (milk, honey, golden apples,
-		// suspicious stew...) do nothing, nor teleport_randomly (chorus fruit)
+		// PotionContents.onConsume: the potion's effects (instant ones at once)
+		if (std::optional<std::vector<uint8_t>> contents = Components::get(stack, level.gameData(), "minecraft:potion_contents")) {
+			int potion = Components::decodePotion(*contents);
+			if (potion >= 0) MobEffects::applyPotion(player, player.effects(), level.gameData().getStaticName("minecraft:potion", potion), 1.0F, &player);
+		}
+		// SuspiciousStewEffects.onConsume
+		if (std::optional<std::vector<uint8_t>> stew = Components::get(stack, level.gameData(), "minecraft:suspicious_stew_effects")) {
+			if (auto effects = Components::decodeStewEffects(*stew)) {
+				for (const auto& [effect, duration] : *effects) {
+					if (effect >= 0 && effect < MobEffects::Count) player.addEffect(MobEffects::Instance(static_cast<MobEffects::Effect>(effect), duration));
+				}
+			}
+		}
+		// The consume effects (teleport_randomly, the chorus fruit's, isn't ported)
 		for (const GD::ConsumeEffect& effect : consumable.onConsumeEffects) {
-			if (effect.type == "minecraft:play_sound" && !effect.sound.empty()) {
+			if (effect.type == "minecraft:apply_effects") {
+				// ApplyStatusEffectsConsumeEffect: all of them, with this probability
+				if (player.random().nextFloat() >= effect.probability) continue;
+				for (const GD::ConsumeEffect::Effect& e : effect.effects) {
+					MobEffects::Effect id = MobEffects::byName(e.id);
+					if (id != MobEffects::Count) player.addEffect(MobEffects::Instance(id, e.duration, e.amplifier, e.ambient, e.showParticles, e.showIcon));
+				}
+			} else if (effect.type == "minecraft:clear_all_effects") {
+				player.removeAllEffects();
+			} else if (effect.type == "minecraft:remove_effects") {
+				for (const std::string& name : effect.removeEffects) {
+					if (name.rfind('#', 0) == 0) {
+						// A tag of effects: the registry's tags aren't in the game data, so none
+						continue;
+					}
+					MobEffects::Effect id = MobEffects::byName(name);
+					if (id != MobEffects::Count) player.removeEffect(id);
+				}
+			} else if (effect.type == "minecraft:play_sound" && !effect.sound.empty()) {
 				// PlaySoundConsumeEffect: at the center of the block the player is in
 				level.playSound(nullptr, {Mth::floor(player.getX()), Mth::floor(player.getY()), Mth::floor(player.getZ())}, effect.sound,
 								Level::SoundSource::Players);
@@ -316,14 +346,39 @@ namespace {
 		if (name == "minecraft:water_bucket") return useBucket(level, player, stack, level.fluids().water());
 		if (name == "minecraft:lava_bucket") return useBucket(level, player, stack, level.fluids().lava());
 		if (name == "minecraft:glass_bottle") return useBottle(level, player, stack);
-		if (name == "minecraft:experience_bottle") {
-			// ExperienceBottleItem (ThrowableItem): a thrown bottle, one used (none in creative)
-			level.playSoundAt(nullptr, player.getX(), player.getY(), player.getZ(), "minecraft:entity.experience_bottle.throw", Level::SoundSource::Neutral,
-							  0.5F, 0.4F / (level.random().nextFloat() * 0.4F + 0.8F));
-			level.entities().add(std::make_unique<ThrownExperienceBottle>(level, player));
+		// The thrown items (SnowballItem, EggItem, ExperienceBottleItem, SplashPotionItem): the sound, the projectile
+		// along the player's look (Projectile.spawnProjectileFromRotation), one used (none in creative)
+		struct Throwable {
+			const char* item;
+			const char* sound;
+			bool		playerSound;
+			float		offset, power;
+		};
+		static const Throwable throwables[] = {
+				{"minecraft:snowball", "minecraft:entity.snowball.throw", false, 0.0F, 1.5F},
+				{"minecraft:egg", "minecraft:entity.egg.throw", true, 0.0F, 1.5F},
+				{"minecraft:experience_bottle", "minecraft:entity.experience_bottle.throw", false, -20.0F, 0.7F},
+				{"minecraft:splash_potion", "minecraft:entity.splash_potion.throw", true, -20.0F, 0.5F},
+		};
+		for (const Throwable& t : throwables) {
+			if (name != t.item) continue;
+			level.playSoundAt(nullptr, player.getX(), player.getY(), player.getZ(), t.sound,
+							  t.playerSound ? Level::SoundSource::Players : Level::SoundSource::Neutral, 0.5F, 0.4F / (level.random().nextFloat() * 0.4F + 0.8F));
+			std::unique_ptr<ThrowableProjectile> thrown;
+			if (name == "minecraft:snowball") {
+				thrown = std::make_unique<Snowball>(level, &player, stack);
+			} else if (name == "minecraft:egg") {
+				thrown = std::make_unique<ThrownEgg>(level, &player, stack);
+			} else if (name == "minecraft:experience_bottle") {
+				thrown = std::make_unique<ThrownExperienceBottle>(level, &player, stack);
+			} else {
+				thrown = std::make_unique<ThrownSplashPotion>(level, &player, stack);
+			}
+			thrown->shootFromRotation(player.getPitch(), player.getYaw(), t.offset, t.power, 1.0F);
+			level.entities().add(std::move(thrown));
 			ItemStack result = stack;
 			if (!infiniteMaterials(player)) result.shrink(1);
-			return {Result::Consume, result};
+			return {Result::Success, result};
 		}
 		if (name == "minecraft:spyglass") {
 			playerSound(level, player, "minecraft:item.spyglass.use", 1.0F, 1.0F);

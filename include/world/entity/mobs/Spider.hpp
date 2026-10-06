@@ -17,6 +17,8 @@ class Spider : public Monster {
 
 	void registerGoals() override;
 	void tick() override;
+	// Spider.canBeAffected: never poisoned
+	bool canBeAffected(MobEffects::Effect effect) const override { return effect != MobEffects::Poison && Monster::canBeAffected(effect); }
 	std::shared_ptr<SpawnGroupData> finalizeSpawn(DifficultyInstance& difficulty, int reason, std::shared_ptr<SpawnGroupData> group) override;
 
   protected:

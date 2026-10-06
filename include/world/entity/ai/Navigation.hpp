@@ -42,9 +42,9 @@ class PathNavigation {
 	bool		 isDone() const { return !_path || _path->isDone(); }
 	bool		 isInProgress() const { return !isDone(); }
 	void		 stop() { _path.reset(); }
-	bool		 isStableDestination(const BlockPos& pos);
+	virtual bool isStableDestination(const BlockPos& pos);
 	NodeEvaluator& getNodeEvaluator();
-	void		 setCanFloat(bool can) { getNodeEvaluator().setCanFloat(can); }
+	virtual void setCanFloat(bool can) { getNodeEvaluator().setCanFloat(can); }
 	bool		 canFloat() { return getNodeEvaluator().canFloat(); }
 	void		 setCanOpenDoors(bool can) { getNodeEvaluator().setCanOpenDoors(can); }
 	// A block changed near the path's end: recompute it (ServerLevel.sendBlockUpdated)
@@ -121,6 +121,43 @@ class GroundPathNavigation : public PathNavigation {
 
 	BlockPos findSurfacePosition(const BlockPos& pos);
 	int		 getSurfaceY();
+};
+
+// WaterBoundPathNavigation: mobs that only swim (fish, squid, dolphins: these may leap out of the water)
+class WaterBoundPathNavigation : public PathNavigation {
+  public:
+	using PathNavigation::PathNavigation;
+	bool isStableDestination(const BlockPos& pos) override;
+	void setCanFloat(bool) override {}
+	bool canNavigateGround() const override { return false; }
+
+  protected:
+	std::unique_ptr<PathFinder> createPathFinder(int maxVisitedNodes) override;
+	Vec3						getTempMobPos() override;
+	bool						canUpdatePath() override;
+	double						getGroundY(const Vec3& position) override { return position.y; }
+	bool						canMoveDirectly(const Vec3& from, const Vec3& to) override;
+
+  private:
+	bool _allowBreaching = false;
+};
+
+// AmphibiousPathNavigation: mobs that walk and swim (drowned, turtles, frogs, axolotls)
+class AmphibiousPathNavigation : public PathNavigation {
+  public:
+	using PathNavigation::PathNavigation;
+	bool isStableDestination(const BlockPos& pos) override;
+	void setCanFloat(bool) override {}
+	bool canNavigateGround() const override { return true; }
+
+  protected:
+	std::unique_ptr<PathFinder> createPathFinder(int maxVisitedNodes) override;
+	Vec3						getTempMobPos() override;
+	bool						canUpdatePath() override { return true; }
+	double						getGroundY(const Vec3& position) override { return position.y; }
+	bool						canMoveDirectly(const Vec3& from, const Vec3& to) override;
+	// The evaluator's shallow swimming preference (turtles and frogs: false here, their own navigations set it)
+	virtual bool				prefersShallowSwimming() const { return false; }
 };
 
 // WallClimberNavigation: spiders, which climb straight to where they couldn't find a path to

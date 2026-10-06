@@ -17,6 +17,7 @@ class Config {
 	int			_viewDistance;
 	int			_compressionThreshold;
 	float		_tickRate; // Ticks per second, 20 in vanilla
+	int			_fillLimit; // Max blocks per /fill, 32768 in vanilla
 
 	// World Config
 	std::string _worldName;
@@ -41,6 +42,7 @@ class Config {
 	int			getCompressionThreshold() const { return _compressionThreshold; }
 	float		getTickRate() const { return _tickRate; }
 	int			getAutosaveInterval() const { return _autosaveInterval; }
+	int			getFillLimit() const { return _fillLimit; }
 
 	void setServerSize(int ServerSize);
 	void setServerPort(int ServerPort);

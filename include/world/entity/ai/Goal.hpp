@@ -50,7 +50,7 @@ class Goal {
 // WrappedGoal: a goal with its priority in a selector, and whether it runs
 class WrappedGoal {
   public:
-	WrappedGoal(int priority, std::unique_ptr<Goal> goal) : _goal(std::move(goal)), _priority(priority) {}
+	WrappedGoal(int priority, std::shared_ptr<Goal> goal) : _goal(std::move(goal)), _priority(priority) {}
 
 	bool  canBeReplacedBy(const WrappedGoal& other) const { return _goal->isInterruptable() && other._priority < _priority; }
 	void  start();
@@ -60,7 +60,7 @@ class WrappedGoal {
 	Goal& goal() const { return *_goal; }
 
   private:
-	std::unique_ptr<Goal> _goal;
+	std::shared_ptr<Goal> _goal; // Shared: a mob may keep a goal to add it again (AbstractSkeleton's bow and melee goals)
 	int					  _priority;
 	bool				  _running = false;
 };
@@ -69,6 +69,13 @@ class WrappedGoal {
 class GoalSelector {
   public:
 	void addGoal(int priority, std::unique_ptr<Goal> goal) { _goals.push_back(std::make_unique<WrappedGoal>(priority, std::move(goal))); }
+	// A goal kept by its mob; nothing if it is there already (vanilla's WrappedGoal equality is the goal's)
+	void addSharedGoal(int priority, const std::shared_ptr<Goal>& goal) {
+		for (const auto& wrapped : _goals) {
+			if (&wrapped->goal() == goal.get()) return;
+		}
+		_goals.push_back(std::make_unique<WrappedGoal>(priority, goal));
+	}
 	// Stopped first if it runs
 	void removeGoal(const Goal& goal);
 	void removeAllGoals() { _goals.clear(); _locked.fill(nullptr); }

@@ -3,11 +3,19 @@
 #include "world/entity/mobs/Bat.hpp"
 #include "world/entity/mobs/Blaze.hpp"
 #include "world/entity/mobs/Creeper.hpp"
+#include "world/entity/mobs/Dolphin.hpp"
 #include "world/entity/mobs/Drowned.hpp"
 #include "world/entity/mobs/Enderman.hpp"
 #include "world/entity/mobs/FarmAnimals.hpp"
+#include "world/entity/mobs/Felines.hpp"
+#include "world/entity/mobs/Fox.hpp"
+#include "world/entity/mobs/Ghast.hpp"
+#include "world/entity/mobs/Guardian.hpp"
 #include "world/entity/mobs/Hoglin.hpp"
+#include "world/entity/mobs/Horses.hpp"
 #include "world/entity/mobs/IronGolem.hpp"
+#include "world/entity/mobs/Panda.hpp"
+#include "world/entity/mobs/Phantom.hpp"
 #include "world/entity/mobs/PolarBear.hpp"
 #include "world/entity/mobs/Rabbit.hpp"
 #include "world/entity/mobs/Skeleton.hpp"
@@ -15,6 +23,10 @@
 #include "world/entity/mobs/Slime.hpp"
 #include "world/entity/mobs/SnowGolem.hpp"
 #include "world/entity/mobs/Spider.hpp"
+#include "world/entity/mobs/Strider.hpp"
+#include "world/entity/mobs/Turtle.hpp"
+#include "world/entity/mobs/WaterAnimals.hpp"
+#include "world/entity/mobs/Witch.hpp"
 #include "world/entity/mobs/Wolf.hpp"
 #include "world/entity/mobs/Zombie.hpp"
 #include "world/entity/mobs/ZombifiedPiglin.hpp"
@@ -34,6 +46,7 @@ void registerVanillaMobs(MobRegistry& registry) {
 	registry.setFactory("minecraft:bat", factory<Bat>());
 	registry.setFactory("minecraft:blaze", factory<Blaze>());
 	registry.setFactory("minecraft:husk", factory<Husk>());
+	registry.setFactory("minecraft:zombie_villager", factory<ZombieVillager>());
 	registry.setFactory("minecraft:drowned", factory<Drowned>());
 	registry.setFactory("minecraft:creeper", factory<Creeper>());
 	registry.setFactory("minecraft:spider", factory<Spider>());
@@ -43,8 +56,11 @@ void registerVanillaMobs(MobRegistry& registry) {
 	registry.setFactory("minecraft:iron_golem", factory<IronGolem>());
 	registry.setFactory("minecraft:skeleton", factory<Skeleton>());
 	registry.setFactory("minecraft:stray", factory<Stray>());
+	registry.setFactory("minecraft:bogged", factory<Bogged>());
+	registry.setFactory("minecraft:wither_skeleton", factory<WitherSkeleton>());
 	registry.setFactory("minecraft:zombified_piglin", factory<ZombifiedPiglin>());
 	registry.setFactory("minecraft:cow", factory<Cow>());
+	registry.setFactory("minecraft:mooshroom", factory<Mooshroom>());
 	registry.setFactory("minecraft:pig", factory<Pig>());
 	registry.setFactory("minecraft:chicken", factory<Chicken>());
 	registry.setFactory("minecraft:sheep", factory<Sheep>());
@@ -53,6 +69,30 @@ void registerVanillaMobs(MobRegistry& registry) {
 	registry.setFactory("minecraft:slime", factory<Slime>());
 	registry.setFactory("minecraft:snow_golem", factory<SnowGolem>());
 	registry.setFactory("minecraft:silverfish", factory<Silverfish>());
-	registry.setFactory("minecraft:magma_cube", factory<Slime>());
+	registry.setFactory("minecraft:magma_cube", factory<MagmaCube>());
+	registry.setFactory("minecraft:squid", factory<Squid>());
+	registry.setFactory("minecraft:glow_squid", factory<GlowSquid>());
+	registry.setFactory("minecraft:cod", factory<Cod>());
+	registry.setFactory("minecraft:salmon", factory<Salmon>());
+	registry.setFactory("minecraft:tropical_fish", factory<TropicalFish>());
+	registry.setFactory("minecraft:pufferfish", factory<Pufferfish>());
+	registry.setFactory("minecraft:dolphin", factory<Dolphin>());
+	registry.setFactory("minecraft:ocelot", factory<Ocelot>());
+	registry.setFactory("minecraft:cat", factory<Cat>());
+	registry.setFactory("minecraft:strider", factory<Strider>());
+	registry.setFactory("minecraft:fox", factory<Fox>());
+	registry.setFactory("minecraft:panda", factory<Panda>());
+	registry.setFactory("minecraft:horse", factory<Horse>());
+	registry.setFactory("minecraft:donkey", factory<Donkey>());
+	registry.setFactory("minecraft:mule", factory<Mule>());
+	registry.setFactory("minecraft:skeleton_horse", factory<UndeadHorse>());
+	registry.setFactory("minecraft:zombie_horse", factory<UndeadHorse>());
+	registry.setFactory("minecraft:ghast", factory<Ghast>());
+	registry.setFactory("minecraft:turtle", factory<Turtle>());
+	registry.setFactory("minecraft:guardian", factory<Guardian>());
+	registry.setFactory("minecraft:elder_guardian", factory<ElderGuardian>());
+	registry.setFactory("minecraft:endermite", factory<Endermite>());
+	registry.setFactory("minecraft:phantom", factory<Phantom>());
+	registry.setFactory("minecraft:witch", factory<Witch>());
 	registry.setFactory("minecraft:wolf", factory<Wolf>());
 }

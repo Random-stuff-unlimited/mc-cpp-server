@@ -292,6 +292,9 @@ class TemptGoal : public Goal {
 	bool isRunning() const { return _isRunning; }
 
   protected:
+	// TemptGoal.canScare: whether the player moving makes it give up
+	virtual bool canScare() { return _canScare; }
+	Player*		 player();
 	Mob&								   _mob;
 	double								   _speedModifier;
 	double								   _px = 0, _py = 0, _pz = 0, _pRotX = 0, _pRotY = 0;
@@ -368,48 +371,120 @@ class HurtByTargetGoal : public TargetGoal {
 	virtual void			 alertOther(Mob& other, Actor& target);
 };
 
-// RangedAttackGoal (vanilla's): a mob keeps its distance from its target and shoots arrows at it, every `interval`
-// ticks while it can see it
-class RangedAttackGoal : public Goal {
+// StrollThroughVillageGoal: at night near a village, toward its heart
+class StrollThroughVillageGoal : public Goal {
   public:
-	RangedAttackGoal(Mob& mob, double speed, int interval, float range) : _mob(mob), _speed(speed), _interval(interval), _range(range) {
-		setFlags({Flag::Move, Flag::Look});
-	}
+	StrollThroughVillageGoal(Mob& mob, int interval) : _mob(mob), _interval(reducedTickDelay(interval)) { setFlags({Flag::Move}); }
 	bool canUse() override;
-	bool canContinueToUse() override { return canUse(); }
-	void start() override { _attackTime = _interval / 2; }
+	bool canContinueToUse() override;
 	void tick() override;
 
+  protected:
+	Mob& _mob;
+
   private:
-	Mob&	_mob;
-	double	_speed;
-	int		_interval;
-	float	_range;
-	int		_attackTime = 0;
-	void	shoot(Actor& target);
+	int						_interval;
+	std::optional<BlockPos> _wantedPos;
+	void					moveRandomly();
 };
 
-// FollowOwnerGoal (vanilla's): a tamed mob goes back to its owner when it strays beyond `startDistance`, stopping
-// within `stopDistance`
-class FollowOwnerGoal : public Goal {
+// MoveTowardsRestrictionGoal: out of its home, back toward it
+class MoveTowardsRestrictionGoal : public Goal {
   public:
-	FollowOwnerGoal(Mob& mob, double speed, float startDistance, float stopDistance)
-		: _mob(mob), _speed(speed), _startDistance(startDistance), _stopDistance(stopDistance) {
-		setFlags({Flag::Move, Flag::Look});
+	MoveTowardsRestrictionGoal(Mob& mob, double speed) : _mob(mob), _speedModifier(speed) { setFlags({Flag::Move}); }
+	bool canUse() override;
+	bool canContinueToUse() override;
+	void start() override;
+
+  private:
+	Mob&   _mob;
+	double _wantedX = 0, _wantedY = 0, _wantedZ = 0, _speedModifier;
+};
+
+// MoveToBlockGoal (vanilla's): every 10 to 20 seconds, looks for the nearest valid block within searchRange (outward
+// from the mob, by layers), walks onto it and stays there for a while
+class MoveToBlockGoal : public Goal {
+  public:
+	MoveToBlockGoal(Mob& mob, double speed, int searchRange, int verticalSearchRange = 1)
+		: _mob(mob), _speedModifier(speed), _searchRange(searchRange), _verticalSearchRange(verticalSearchRange) {
+		setFlags({Flag::Move, Flag::Jump});
 	}
 	bool canUse() override;
 	bool canContinueToUse() override;
 	void start() override;
+	bool requiresUpdateEveryTick() override { return true; }
+	void tick() override;
+
+  protected:
+	Mob&	 _mob;
+	double	 _speedModifier;
+	int		 _nextStartTick = 0, _tryTicks = 0, _verticalSearchStart = 0;
+	BlockPos _blockPos;
+
+	virtual int		 nextStartTick();
+	virtual void	 moveMobToBlock();
+	virtual double	 acceptedDistance() const { return 1.0; }
+	virtual BlockPos getMoveToTarget() const { return _blockPos.above(); }
+	virtual bool	 shouldRecalculatePath() const { return _tryTicks % 40 == 0; }
+	bool			 isReachedTarget() const { return _reachedTarget; }
+	bool			 findNearestBlock();
+	virtual bool	 isValidTarget(Level& level, const BlockPos& pos) = 0;
+
+  private:
+	int	 _maxStayTicks = 0, _searchRange, _verticalSearchRange;
+	bool _reachedTarget = false;
+};
+
+// RangedAttackGoal (vanilla's): a mob walks up to its target until it is within attackRadius and seen for 5 ticks,
+// and attacks from there (Mob.performRangedAttack) every attackIntervalMin to attackIntervalMax ticks, by the distance
+class RangedAttackGoal : public Goal {
+  public:
+	RangedAttackGoal(Mob& mob, double speed, int attackInterval, float attackRadius) : RangedAttackGoal(mob, speed, attackInterval, attackInterval, attackRadius) {}
+	RangedAttackGoal(Mob& mob, double speed, int attackIntervalMin, int attackIntervalMax, float attackRadius)
+		: _mob(mob), _speedModifier(speed), _attackIntervalMin(attackIntervalMin), _attackIntervalMax(attackIntervalMax), _attackRadius(attackRadius),
+		  _attackRadiusSqr(attackRadius * attackRadius) {
+		setFlags({Flag::Move, Flag::Look});
+	}
+	bool canUse() override;
+	bool canContinueToUse() override;
 	void stop() override;
+	bool requiresUpdateEveryTick() override { return true; }
 	void tick() override;
 
   private:
-	Mob&	_mob;
-	double	_speed;
-	float	_startDistance, _stopDistance;
-	int		_recalculateTicks = 0;
-	float	_oldWaterLevel	 = 0.0F;
-	bool	_startedFollowing = false;
+	Mob&	  _mob;
+	EntityRef _target;
+	double	  _speedModifier;
+	int		  _attackIntervalMin, _attackIntervalMax;
+	float	  _attackRadius, _attackRadiusSqr;
+	int		  _attackTime = -1, _seeTime = 0;
+};
+
+// RangedBowAttackGoal (vanilla's): a mob holding a bow walks up to its target, strafes around it once in range and
+// seen for a second, draws its bow (the item in use) for a second and shoots (Mob.performRangedAttack), then waits
+// attackIntervalMin ticks
+class RangedBowAttackGoal : public Goal {
+  public:
+	RangedBowAttackGoal(Mob& mob, double speed, int attackIntervalMin, float attackRadius)
+		: _mob(mob), _speedModifier(speed), _attackIntervalMin(attackIntervalMin), _attackRadiusSqr(attackRadius * attackRadius) {
+		setFlags({Flag::Move, Flag::Look});
+	}
+	void setMinAttackInterval(int interval) { _attackIntervalMin = interval; }
+	bool canUse() override;
+	bool canContinueToUse() override;
+	void start() override;
+	void stop() override;
+	bool requiresUpdateEveryTick() override { return true; }
+	void tick() override;
+
+  private:
+	Mob&   _mob;
+	double _speedModifier;
+	int	   _attackIntervalMin;
+	float  _attackRadiusSqr;
+	int	   _attackTime = -1, _seeTime = 0, _strafingTime = -1;
+	bool   _strafingClockwise = false, _strafingBackwards = false;
+	bool   isHoldingBow() const;
 };
 
 #endif

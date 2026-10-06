@@ -168,6 +168,9 @@ class Level : public NeighborUpdateTarget {
 	PathTypeCache& pathTypeCache() { return *_pathTypeCache; }
 	// The points of interest of this dimension (nether portals, beds, job sites...)
 	PoiManager& poi() { return *_poi; }
+	// ServerLevel.isCloseToVillage / isVillage: by sections to the nearest occupied point of interest
+	bool isCloseToVillage(const BlockPos& pos, int sections);
+	bool isVillage(const BlockPos& pos) { return isCloseToVillage(pos, 1); }
 	// Saves poi.dat on the I/O threads when it changed (with the autosave)
 	void savePoi();
 	// The chunk at these chunk coordinates if it is loaded, nullptr otherwise
@@ -177,6 +180,8 @@ class Level : public NeighborUpdateTarget {
 	bool shouldTickBlocksAt(const BlockPos& pos);
 	// How much the night takes from the sky light (Level.skyDarken, 0 at noon, 11 at midnight)
 	int	 skyDarken() const { return _skyDarken; }
+	// Level.getTimeOfDay: 0 at noon, 0.5 at midnight
+	float timeOfDay() const;
 	// LevelReader.getMaxLocalRawBrightness: the light with the sky darkened by the time of day
 	int	 getMaxLocalRawBrightness(const BlockPos& pos) { return getRawBrightness(pos, _skyDarken); }
 	// LevelReader.getLightLevelDependentMagicValue: that light made a 0-1 value, raised by the dimension's ambient light
@@ -328,6 +333,9 @@ class Level : public NeighborUpdateTarget {
 	void forEachTickingChunk(const std::function<void(Chunk&)>& f);
 	// The doMobSpawning game rule
 	bool mobSpawning() const { return _mobSpawning; }
+	// PhantomSpawner: every minute or two at night, phantoms above the players under the sky that haven't slept
+	void tickPhantomSpawner();
+	int	 _phantomNextTick = 0;
 	void setMobSpawning(bool spawning) { _mobSpawning = spawning; }
 	void runBlockEvents();
 	// Light and block changes of this tick to the players that have the chunks

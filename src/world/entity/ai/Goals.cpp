@@ -3,6 +3,7 @@
 #include "data/GameData.hpp"
 #include "player.hpp"
 #include "world/Level.hpp"
+#include "world/PoiManager.hpp"
 #include "world/entity/Arrow.hpp"
 #include "world/entity/Mob.hpp"
 #include "world/entity/ai/RandomPos.hpp"
@@ -625,6 +626,11 @@ TemptGoal::TemptGoal(Mob& mob, double speed, std::function<bool(const ItemStack&
 	});
 }
 
+Player* TemptGoal::player() {
+	Actor* actor = _player.isSet() ? _mob.level().actorByRef(_player) : nullptr;
+	return actor ? actor->asPlayer() : nullptr;
+}
+
 bool TemptGoal::canUse() {
 	if (_calmDown > 0) {
 		_calmDown--;
@@ -643,8 +649,8 @@ bool TemptGoal::canUse() {
 }
 
 bool TemptGoal::canContinueToUse() {
-	Player* player = _player.isSet() && _mob.level().actorByRef(_player) ? _mob.level().actorByRef(_player)->asPlayer() : nullptr;
-	if (_canScare && player) {
+	Player* player = this->player();
+	if (canScare() && player) {
 		if (_mob.distanceToSqr(*player) < 36.0) {
 			double dx = player->getX() - _px, dy = player->getY() - _py, dz = player->getZ() - _pz;
 			if (dx * dx + dy * dy + dz * dz > 0.010000000000000002) return false;
@@ -689,84 +695,229 @@ void TemptGoal::tick() {
 
 // ===================== RangedAttackGoal =====================
 
+bool MoveToBlockGoal::canUse() {
+	if (_nextStartTick > 0) {
+		_nextStartTick--;
+		return false;
+	}
+	_nextStartTick = nextStartTick();
+	return findNearestBlock();
+}
+
+int MoveToBlockGoal::nextStartTick() { return reducedTickDelay(200 + _mob.random().nextInt(200)); }
+
+bool MoveToBlockGoal::canContinueToUse() { return _tryTicks >= -_maxStayTicks && _tryTicks <= 1200 && isValidTarget(_mob.level(), _blockPos); }
+
+void MoveToBlockGoal::start() {
+	moveMobToBlock();
+	_tryTicks	  = 0;
+	_maxStayTicks = _mob.random().nextInt(_mob.random().nextInt(1200) + 1200) + 1200;
+}
+
+void MoveToBlockGoal::moveMobToBlock() { _mob.navigation().moveTo(_blockPos.x + 0.5, _blockPos.y + 1, _blockPos.z + 0.5, _speedModifier); }
+
+void MoveToBlockGoal::tick() {
+	BlockPos	target = getMoveToTarget();
+	const Vec3& p	   = _mob.position();
+	double		dx = target.x + 0.5 - p.x, dy = target.y + 0.5 - p.y, dz = target.z + 0.5 - p.z;
+	double		accepted = acceptedDistance();
+	if (!(dx * dx + dy * dy + dz * dz < accepted * accepted)) { // closerToCenterThan
+		_reachedTarget = false;
+		_tryTicks++;
+		if (shouldRecalculatePath()) _mob.navigation().moveTo(target.x + 0.5, target.y, target.z + 0.5, _speedModifier);
+	} else {
+		_reachedTarget = true;
+		_tryTicks--;
+	}
+}
+
+bool MoveToBlockGoal::findNearestBlock() {
+	BlockPos center = _mob.blockPosition();
+	for (int y = _verticalSearchStart; y <= _verticalSearchRange; y = y > 0 ? -y : 1 - y) {
+		for (int range = 0; range < _searchRange; range++) {
+			for (int x = 0; x <= range; x = x > 0 ? -x : 1 - x) {
+				for (int z = x < range && x > -range ? range : 0; z <= range; z = z > 0 ? -z : 1 - z) {
+					BlockPos pos = center.offset(x, y - 1, z);
+					if (_mob.isWithinHome(pos) && isValidTarget(_mob.level(), pos)) {
+						_blockPos = pos;
+						return true;
+					}
+				}
+			}
+		}
+	}
+	return false;
+}
+
 bool RangedAttackGoal::canUse() {
 	Actor* target = _mob.getTarget();
-	return target && target->isAlive() && _mob.distanceToSqr(*target) <= static_cast<double>(_range) * _range;
+	if (!target || !target->isAlive()) return false;
+	_target = EntityRef(*target);
+	return true;
+}
+
+bool RangedAttackGoal::canContinueToUse() {
+	if (canUse()) return true;
+	Actor* target = _target.isSet() ? _mob.level().actorByRef(_target) : nullptr;
+	return target && target->isAlive() && !_mob.navigation().isDone();
+}
+
+void RangedAttackGoal::stop() {
+	_target.clear();
+	_seeTime	= 0;
+	_attackTime = -1;
 }
 
 void RangedAttackGoal::tick() {
+	Actor* target = _target.isSet() ? _mob.level().actorByRef(_target) : nullptr;
+	if (!target) return;
+	double distance = _mob.distanceToSqr(target->position());
+	bool   visible	= _mob.sensing().hasLineOfSight(*target);
+	_seeTime		= visible ? _seeTime + 1 : 0;
+	if (!(distance > _attackRadiusSqr) && _seeTime >= 5) {
+		_mob.navigation().stop();
+	} else {
+		_mob.navigation().moveTo(*target, _speedModifier);
+	}
+	_mob.lookControl().setLookAt(*target, 30.0F, 30.0F);
+	if (--_attackTime == 0) {
+		if (!visible) return;
+		float ratio = static_cast<float>(std::sqrt(distance)) / _attackRadius;
+		_mob.performRangedAttack(*target, std::clamp(ratio, 0.1F, 1.0F));
+		_attackTime = Mth::floor(ratio * (_attackIntervalMax - _attackIntervalMin) + _attackIntervalMin);
+	} else if (_attackTime < 0) {
+		double ratio = std::sqrt(distance) / _attackRadius;
+		_attackTime	 = Mth::floor(_attackIntervalMin + ratio * (static_cast<double>(_attackIntervalMax) - _attackIntervalMin)); // Mth.lerp
+	}
+}
+
+bool RangedBowAttackGoal::isHoldingBow() const { return _mob.isHolding("minecraft:bow"); }
+
+bool RangedBowAttackGoal::canUse() { return _mob.getTarget() != nullptr && isHoldingBow(); }
+
+bool RangedBowAttackGoal::canContinueToUse() { return (canUse() || !_mob.navigation().isDone()) && isHoldingBow(); }
+
+void RangedBowAttackGoal::start() { _mob.setAggressive(true); }
+
+void RangedBowAttackGoal::stop() {
+	_mob.setAggressive(false);
+	_seeTime	= 0;
+	_attackTime = -1;
+	_mob.stopUsingItem();
+}
+
+void RangedBowAttackGoal::tick() {
 	Actor* target = _mob.getTarget();
 	if (!target) return;
-	double distance = _mob.distanceToSqr(*target);
-	bool   visible  = _mob.sensing().hasLineOfSight(*target);
-	_mob.lookControl().setLookAt(*target, 30.0F, 30.0F);
-	// Keep the distance: closer than half the range, walk away; else toward the target
-	if (distance > static_cast<double>(_range) * _range * 0.5) {
-		_mob.navigation().moveTo(*target, _speed);
+	double distance = _mob.distanceToSqr(target->position());
+	bool   visible	= _mob.sensing().hasLineOfSight(*target);
+	if (visible != (_seeTime > 0)) _seeTime = 0;
+	if (visible) {
+		_seeTime++;
 	} else {
+		_seeTime--;
+	}
+	if (!(distance > _attackRadiusSqr) && _seeTime >= 20) {
 		_mob.navigation().stop();
+		_strafingTime++;
+	} else {
+		_mob.navigation().moveTo(*target, _speedModifier);
+		_strafingTime = -1;
 	}
-	if (visible && --_attackTime <= 0) {
-		shoot(*target);
-		_attackTime = _interval + _mob.random().nextInt(10);
+	if (_strafingTime >= 20) {
+		if (_mob.random().nextFloat() < 0.3) _strafingClockwise = !_strafingClockwise;
+		if (_mob.random().nextFloat() < 0.3) _strafingBackwards = !_strafingBackwards;
+		_strafingTime = 0;
 	}
-}
-
-void RangedAttackGoal::shoot(Actor& target) {
-	Level& level = _mob.level();
-	// AbstractSkeleton.shootProjectile: aimed at the target's body, raised by 20 % of the horizontal distance to
-	// clear the arc, at 1.6 blocks/tick with a spread by difficulty
-	double dx = target.position().x - _mob.position().x;
-	double dy = target.position().y + 0.5 - (_mob.position().y + _mob.eyeHeight());
-	double dz = target.position().z - _mob.position().z;
-	double d	= std::sqrt(dx * dx + dz * dz);
-	Vec3	dir{dx, dy + d * 0.2, dz};
-	double length = dir.length();
-	if (length <= 1.0E-4) return;
-	dir = dir.scale(1.6 / length);
-	JavaRandom& random = _mob.random();
-	double		 spread = 14 - level.difficulty() * 4;
-	dir = dir + Vec3{random.nextFloat() * spread / 1000.0 - spread / 2000.0, random.nextFloat() * spread / 1000.0 - spread / 2000.0,
-					random.nextFloat() * spread / 1000.0 - spread / 2000.0};
-	level.entities().add(std::make_unique<Arrow>(level, Vec3{_mob.position().x, _mob.position().y + _mob.eyeHeight(), _mob.position().z}, dir, &_mob));
-	level.playSoundAt(nullptr, _mob.position().x, _mob.position().y, _mob.position().z, "minecraft:entity.skeleton.shoot", Level::SoundSource::Hostile, 1.0F,
-					  1.0F / (_mob.random().nextFloat() * 0.4F + 0.8F));
-}
-
-// ===================== FollowOwnerGoal =====================
-
-bool FollowOwnerGoal::canUse() {
-	Actor* owner = _mob.getOwnerEntity();
-	return owner && owner->isAlive() && _mob.distanceToSqr(*owner) > static_cast<double>(_startDistance) * _startDistance;
-}
-
-bool FollowOwnerGoal::canContinueToUse() {
-	Actor* owner = _mob.getOwnerEntity();
-	return owner && owner->isAlive() && !_mob.navigation().isDone() && _mob.distanceToSqr(*owner) > static_cast<double>(_stopDistance) * _stopDistance;
-}
-
-void FollowOwnerGoal::start() { _recalculateTicks = 0; _startedFollowing = false; }
-
-void FollowOwnerGoal::stop() {
-	_mob.navigation().stop();
-	_startedFollowing = false;
-}
-
-void FollowOwnerGoal::tick() {
-	Actor* owner = _mob.getOwnerEntity();
-	if (!owner) return;
-	_mob.lookControl().setLookAt(*owner, 10.0F, static_cast<float>(_mob.maxHeadXRot()));
-	// FollowOwnerGoal.tryTeleportTo: the owner is too far (144 blocks): teleport next to it (25 % chance a tick)
-	if (_mob.distanceToSqr(*owner) >= 144.0 * 144.0) {
-		if (_mob.random().nextFloat() < 0.25F) {
-			Vec3 at = owner->position();
-			_mob.snapTo({at.x, at.y, at.z}, _mob.yRot(), _mob.xRot());
-			_mob.navigation().stop();
+	if (_strafingTime > -1) {
+		if (distance > _attackRadiusSqr * 0.75F) {
+			_strafingBackwards = false;
+		} else if (distance < _attackRadiusSqr * 0.25F) {
+			_strafingBackwards = true;
 		}
-		return;
+		_mob.moveControl().strafe(_strafingBackwards ? -0.5F : 0.5F, _strafingClockwise ? 0.5F : -0.5F);
+		_mob.lookAt(*target, 30.0F, 30.0F);
+	} else {
+		_mob.lookControl().setLookAt(*target, 30.0F, 30.0F);
 	}
-	if (--_recalculateTicks <= 0) {
-		_recalculateTicks = 10;
-		if (!_mob.navigation().moveTo(*owner, _speed)) _mob.navigation().moveTo(owner->position().x, owner->position().y, owner->position().z, _speed);
+	if (_mob.isUsingItem()) {
+		if (!visible && _seeTime < -60) {
+			_mob.stopUsingItem();
+		} else if (visible) {
+			int ticks = _mob.getTicksUsingItem();
+			if (ticks >= 20) {
+				_mob.stopUsingItem();
+				// BowItem.getPowerForTime
+				float power = ticks / 20.0F;
+				power		= (power * power + power * 2.0F) / 3.0F;
+				if (power > 1.0F) power = 1.0F;
+				_mob.performRangedAttack(*target, power);
+				_attackTime = _attackIntervalMin;
+			}
+		}
+	} else if (--_attackTime <= 0 && _seeTime >= -60) {
+		_mob.startUsingItem(_mob.getMainHandItem().isEmpty() || !_mob.isHolding("minecraft:bow") ||
+									   _mob.getMainHandItem().item == _mob.level().gameData().getStaticId("minecraft:item", "minecraft:bow")
+							   ? 0
+							   : 1); // ProjectileUtil.getWeaponHoldingHand
 	}
+}
+
+
+// ===================== MoveTowardsRestrictionGoal =====================
+
+bool MoveTowardsRestrictionGoal::canUse() {
+	if (_mob.isWithinHome(_mob.blockPosition())) return false;
+	const BlockPos&		home = _mob.getHomePosition();
+	std::optional<Vec3> pos	 = RandomPos::defaultPosTowards(_mob, 16, 7, {home.x + 0.5, static_cast<double>(home.y), home.z + 0.5}, M_PI / 2);
+	if (!pos) return false;
+	_wantedX = pos->x;
+	_wantedY = pos->y;
+	_wantedZ = pos->z;
+	return true;
+}
+
+bool MoveTowardsRestrictionGoal::canContinueToUse() { return !_mob.navigation().isDone(); }
+
+void MoveTowardsRestrictionGoal::start() { _mob.navigation().moveTo(_wantedX, _wantedY, _wantedZ, _speedModifier); }
+
+// ===================== StrollThroughVillageGoal =====================
+
+bool StrollThroughVillageGoal::canUse() {
+	Level& level = _mob.level();
+	if (level.isBrightOutside()) return false;
+	if (_mob.random().nextInt(_interval) != 0) return false;
+	if (!level.isCloseToVillage(_mob.blockPosition(), 6)) return false;
+	std::optional<Vec3> pos = RandomPos::landPos(_mob, 15, 7, [&level](const BlockPos& at) {
+		return -static_cast<double>(level.poi().sectionsToVillage(at.x >> 4, at.y >> 4, at.z >> 4));
+	});
+	_wantedPos = pos ? std::optional<BlockPos>(BlockPos{Mth::floor(pos->x), Mth::floor(pos->y), Mth::floor(pos->z)}) : std::nullopt;
+	return _wantedPos.has_value();
+}
+
+bool StrollThroughVillageGoal::canContinueToUse() {
+	const std::optional<BlockPos>& target = _mob.navigation().getTargetPos();
+	return _wantedPos && !_mob.navigation().isDone() && target && *target == *_wantedPos;
+}
+
+void StrollThroughVillageGoal::tick() {
+	if (!_wantedPos) return;
+	PathNavigation& navigation = _mob.navigation();
+	Vec3			center{_wantedPos->x + 0.5, _wantedPos->y + 0.5, _wantedPos->z + 0.5};
+	if (!navigation.isDone() || (center - _mob.position()).lengthSqr() < 100.0) return;
+	Vec3 bottom{_wantedPos->x + 0.5, static_cast<double>(_wantedPos->y), _wantedPos->z + 0.5};
+	Vec3 position = _mob.position();
+	bottom		  = (position - bottom).scale(0.4) + bottom;
+	Vec3   to	  = (bottom - position).normalize().scale(10.0) + position;
+	Level& level  = _mob.level();
+	int	   x = Mth::floor(to.x), z = Mth::floor(to.z);
+	if (!navigation.moveTo(x, level.getHeight(Level::Heightmap::MotionBlockingNoLeaves, x, z), z, 1.0)) moveRandomly();
+}
+
+void StrollThroughVillageGoal::moveRandomly() {
+	JavaRandom& random = _mob.random();
+	BlockPos	pos	   = _mob.blockPosition();
+	int			x	   = pos.x - 8 + random.nextInt(16);
+	int			z	   = pos.z - 8 + random.nextInt(16);
+	_mob.navigation().moveTo(x, _mob.level().getHeight(Level::Heightmap::MotionBlockingNoLeaves, x, z), z, 1.0);
 }

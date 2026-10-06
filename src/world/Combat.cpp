@@ -27,7 +27,6 @@
 #include <unordered_map>
 
 namespace {
-	constexpr float	  MAX_HEALTH			= 20;
 	constexpr int64_t INVULNERABILITY_TICKS = 10;
 	constexpr int64_t COMBAT_END_TICKS		= 300; // Without damage
 	constexpr double  BASE_KNOCKBACK		= 0.4;
@@ -97,8 +96,11 @@ namespace {
 		if (reachDistance(attacker, target) > range) return std::nullopt;
 
 		const GameData::ItemProperties* item		= server.getGameData().getItemProperties(attacker.getItemInHand(0));
-		float							baseDamage	= 1.0f + (item ? item->attackDamage : 0.0f);
-		float							attackSpeed = std::max(0.1f, 4.0f + (item ? item->attackSpeed : 0.0f));
+		// The attack_damage and attack_speed attributes: the player's base and the item's modifiers, then the effects'
+		// (strength, weakness, haste, mining fatigue)
+		const AttributeIds& ids		   = AttributeIds::get(server.getGameData());
+		float				baseDamage = static_cast<float>(attacker.attributeValueWithBase(ids.attackDamage, 1.0 + (item ? item->attackDamage : 0.0f)));
+		float attackSpeed = std::max(0.1f, static_cast<float>(attacker.attributeValueWithBase(ids.attackSpeed, 4.0 + (item ? item->attackSpeed : 0.0f))));
 		int64_t							now			= currentTick(server);
 		// Vanilla getAttackStrengthScale(0.5): ticks since the last attack against the item's cooldown
 		double strength = std::clamp((now - attacker.getLastAttack() + 0.5) / (20.0 / attackSpeed), 0.0, 1.0);
@@ -246,6 +248,7 @@ namespace Combat {
 		bool  strong = roll->strong, critical = roll->critical;
 
 		DamageSource source{"minecraft:player_attack", &attacker};
+		attacker.setLastHurtMob(target);
 		if (!Combat::damage(server, target, damage, source)) return;
 		Survival::causeFoodExhaustion(attacker, FoodData::EXHAUSTION_ATTACK); // Player.attack
 
@@ -279,6 +282,7 @@ namespace Combat {
 			  level.playSoundAt(nullptr, attacker.getX(), attacker.getY(), attacker.getZ(), name, Level::SoundSource::Players, 1.0F, 1.0F);
 		};
 		if (sprint) sound("minecraft:entity.player.attack.knockback");
+		attacker.setLastHurtMob(target);
 		if (!target.hurtServer({"minecraft:player_attack", &attacker}, roll->damage)) {
 			sound("minecraft:entity.player.attack.nodamage");
 			return;
@@ -304,6 +308,7 @@ namespace Combat {
 		int				typeId	 = gameData.getSyncedId("minecraft:damage_type", source.type);
 		bool bypassesInvulnerability = gameData.isInTag("minecraft:damage_type", "minecraft:bypasses_invulnerability", typeId);
 		if ((victim.getGameMode() == GameMode::Creative || victim.getGameMode() == GameMode::Spectator) && !bypassesInvulnerability) return false;
+		if (victim.hasEffect(MobEffects::FireResistance) && gameData.isInTag("minecraft:damage_type", "minecraft:is_fire", typeId)) return false;
 		// Damage wakes a sleeping player up (LivingEntity.hurt stops the sleep first)
 		if (victim.survival().sleeping) server.wakeUp(victim);
 
@@ -323,11 +328,26 @@ namespace Combat {
 				state.invulnerableUntil = now + INVULNERABILITY_TICKS;
 			}
 			state.lastDamage = amount;
+			// resolveMobResponsibleForDamage: a living attacker is remembered
+			if (source.causing && (source.causing->asLiving() || source.causing->asPlayer()) &&
+				!gameData.isInTag("minecraft:damage_type", "minecraft:no_anger", typeId)) {
+				victim.setLastHurtByMob(source.causing);
+			}
 			if (Player* attacker = source.attackerPlayer()) {
 				state.lastAttacker	 = attacker->getPlayerName();
 				state.lastAttackedAt = now;
 			}
 			if (!gameData.isInTag("minecraft:damage_type", "minecraft:bypasses_armor", typeId)) applied = afterArmor(applied, armor);
+			// LivingEntity.getDamageAfterMagicAbsorb: resistance (5 levels make it immune)
+			int resistance = victim.effects().amplifier(MobEffects::Resistance);
+			if (resistance >= 0 && !gameData.isInTag("minecraft:damage_type", "minecraft:bypasses_effects", typeId) &&
+				!gameData.isInTag("minecraft:damage_type", "minecraft:bypasses_resistance", typeId)) {
+				applied = std::max(applied * (25 - (resistance + 1) * 5) / 25.0F, 0.0F);
+			}
+			// Absorption takes the damage first
+			float absorbed = std::min(applied, victim.absorptionAmount());
+			victim.setAbsorptionAmount(victim.absorptionAmount() - absorbed);
+			applied -= absorbed;
 			// Player.actuallyHurt: the damage type's exhaustion
 			if (applied != 0) Survival::causeFoodExhaustion(victim, gameData.getDamageExhaustion(source.type));
 
@@ -426,7 +446,8 @@ namespace Combat {
 		double landedFrom = 0;
 		{
 			CombatState& combat = player.combat();
-			if (combat.dead || cushioned) {
+			// Slow falling and levitation reset the fall distance every tick (LivingEntity.aiStep)
+			if (combat.dead || cushioned || player.hasEffect(MobEffects::SlowFalling) || player.hasEffect(MobEffects::Levitation)) {
 				combat.fallDistance = 0;
 				return;
 			}
@@ -437,9 +458,11 @@ namespace Combat {
 			landedFrom			= combat.fallDistance;
 			combat.fallDistance = 0;
 		}
-		if (landedFrom > 3.0) {
-			damage(server, player, static_cast<float>(std::ceil(landedFrom - 3.0)), {"minecraft:fall", nullptr});
-		}
+		// LivingEntity.calculateFallDamage: past the safe fall distance (3, more with jump boost)
+		const AttributeIds& ids	   = AttributeIds::get(gameData);
+		int					amount = static_cast<int>(std::floor((landedFrom + 1.0E-6 - player.getAttributeValue(ids.safeFallDistance)) *
+																 player.getAttributeValue(ids.fallDamageMultiplier)));
+		if (amount > 0) damage(server, player, static_cast<float>(amount), {"minecraft:fall", nullptr});
 	}
 
 	void respawn(Server& server, Player& player, bool keepAllData) {
@@ -447,7 +470,11 @@ namespace Combat {
 			CombatState& state = player.combat();
 			if (!state.dead) return;
 			state.dead				= false;
-			state.health			= MAX_HEALTH;
+			// A new ServerPlayer: no effects, its attributes' base values only
+			player.effects().clear();
+			player.resetAttributes();
+			player.setAbsorptionAmount(0.0F);
+			state.health			= player.maxHealth();
 			state.fallDistance		= 0;
 			state.lastDamage		= 0;
 			state.invulnerableUntil = 0;
@@ -511,6 +538,7 @@ namespace Combat {
 		setHeldItemPacket(packet, server);
 		sendHealth(server, player);
 		Xp::send(server, player); // The client's bar reset on respawn, set back to its value
+		player.sendActiveEffects(); // Kept after the credits (PlayerList.respawn: sendActivePlayerEffects)
 		if (rejoin) destination->addPlayer(self);
 
 		// The anchor lost a charge: its sound, to this player only

@@ -321,11 +321,187 @@ void Zombie::load(Buffer& buf) {
 	_dirtyData = 0;
 }
 
+// ----- ZombieVillager -----
+
+namespace {
+	// VillagerType.BY_BIOME
+	const char* villagerTypeOfBiome(const GameData& data, int biome) {
+		static const std::vector<std::pair<const char*, const char*>> byBiome = {
+				{"minecraft:badlands", "minecraft:desert"},			  {"minecraft:desert", "minecraft:desert"},
+				{"minecraft:eroded_badlands", "minecraft:desert"},	  {"minecraft:wooded_badlands", "minecraft:desert"},
+				{"minecraft:bamboo_jungle", "minecraft:jungle"},	  {"minecraft:jungle", "minecraft:jungle"},
+				{"minecraft:sparse_jungle", "minecraft:jungle"},	  {"minecraft:savanna_plateau", "minecraft:savanna"},
+				{"minecraft:savanna", "minecraft:savanna"},			  {"minecraft:windswept_savanna", "minecraft:savanna"},
+				{"minecraft:deep_frozen_ocean", "minecraft:snow"},	  {"minecraft:frozen_ocean", "minecraft:snow"},
+				{"minecraft:frozen_river", "minecraft:snow"},		  {"minecraft:ice_spikes", "minecraft:snow"},
+				{"minecraft:snowy_beach", "minecraft:snow"},		  {"minecraft:snowy_taiga", "minecraft:snow"},
+				{"minecraft:snowy_plains", "minecraft:snow"},		  {"minecraft:grove", "minecraft:snow"},
+				{"minecraft:snowy_slopes", "minecraft:snow"},		  {"minecraft:frozen_peaks", "minecraft:snow"},
+				{"minecraft:jagged_peaks", "minecraft:snow"},		  {"minecraft:swamp", "minecraft:swamp"},
+				{"minecraft:mangrove_swamp", "minecraft:swamp"},	  {"minecraft:old_growth_spruce_taiga", "minecraft:taiga"},
+				{"minecraft:old_growth_pine_taiga", "minecraft:taiga"}, {"minecraft:windswept_gravelly_hills", "minecraft:taiga"},
+				{"minecraft:windswept_hills", "minecraft:taiga"},	  {"minecraft:taiga", "minecraft:taiga"},
+				{"minecraft:windswept_forest", "minecraft:taiga"},
+		};
+		for (const auto& [name, type] : byBiome) {
+			if (data.getSyncedId("minecraft:worldgen/biome", name) == biome) return type;
+		}
+		return "minecraft:plains";
+	}
+	constexpr int ENTITY_EVENT_CURE_START			= 16;
+	constexpr int LEVEL_EVENT_ZOMBIE_VILLAGER_CURED = 1027;
+} // namespace
+
+ZombieVillager::ZombieVillager(Level& level, int typeId) : Zombie(level, typeId) {
+	// initializeVillagerData, when its entity data is defined: a random profession, the type of the biome where it is
+	// made (at 0, 0, 0: it has no position yet)
+	const GameData& data	   = level.gameData();
+	int				professions = 0;
+	while (!data.getStaticName("minecraft:villager_profession", professions).empty()) professions++;
+	_profession = professions > 0 ? _random.nextInt(professions) : 0;
+	_type		= data.getStaticId("minecraft:villager_type", villagerTypeOfBiome(data, level.getBiomeId({0, 0, 0})));
+	_initialType	   = _type;
+	_initialProfession = _profession;
+}
+
+void ZombieVillager::setVillagerData(int type, int profession, int level) {
+	_type		   = type;
+	_profession	   = profession;
+	_villagerLevel = level;
+	markData(DATA_VILLAGER_DATA);
+}
+
+void ZombieVillager::tick() {
+	if (isAlive() && _converting) {
+		_conversionTime -= getConversionProgress();
+		if (_conversionTime <= 0) {
+			finishConversion();
+			return;
+		}
+	}
+	Zombie::tick();
+}
+
+bool ZombieVillager::mobInteract(Player& player, int hand) {
+	const ItemStack& stack = player.getStackInHand(hand);
+	if (!stack.isEmpty() && stack.item == _level.gameData().getStaticId("minecraft:item", "minecraft:golden_apple")) {
+		if (!hasEffect(MobEffects::Weakness)) return false; // CONSUME: nothing happens
+		if (!player.isCreative()) player.inventory().getMutable(player.handSlot(hand)).shrink(1);
+		UUID starter = player.getUUID();
+		startConverting(&starter, _random.nextInt(2401) + 3600);
+		return true;
+	}
+	return Zombie::mobInteract(player, hand);
+}
+
+void ZombieVillager::startConverting(const UUID* starter, int ticks) {
+	_hasStarter = starter != nullptr;
+	if (starter) _conversionStarter = *starter;
+	_conversionTime = ticks;
+	if (!_converting) {
+		_converting = true;
+		markData(DATA_CONVERTING);
+	}
+	removeEffect(MobEffects::Weakness);
+	addEffect(MobEffects::Instance(MobEffects::Strength, ticks, std::min(_level.difficulty() - 1, 0)));
+	broadcastEntityEvent(ENTITY_EVENT_CURE_START); // The cure sound, on the clients
+}
+
+int ZombieVillager::getConversionProgress() {
+	// Iron bars and beds nearby speed it up now and then
+	int progress = 1;
+	if (_random.nextFloat() < 0.01F) {
+		int				count = 0;
+		const GameData& data  = _level.gameData();
+		int				bars  = data.getStaticId("minecraft:block", "minecraft:iron_bars");
+		int				x0 = static_cast<int>(_position.x), y0 = static_cast<int>(_position.y), z0 = static_cast<int>(_position.z);
+		for (int x = x0 - 4; x < x0 + 4 && count < 14; x++) {
+			for (int y = y0 - 4; y < y0 + 4 && count < 14; y++) {
+				for (int z = z0 - 4; z < z0 + 4 && count < 14; z++) {
+					int block = _level.blocks().blockOf(_level.getBlockState({x, y, z}));
+					if (block == bars || data.isInTag("minecraft:block", "minecraft:beds", block)) {
+						if (_random.nextFloat() < 0.3F) progress++;
+						count++;
+					}
+				}
+			}
+		}
+	}
+	return progress;
+}
+
+void ZombieVillager::finishConversion() {
+	// A villager takes its place, with its villager data and equipment (dropPreservedEquipment); nauseous for 10 s
+	BlockPos pos = blockPosition();
+	Level&	 level = _level;
+	int		 type = _type, profession = _profession, villagerLevel = _villagerLevel;
+	std::array<ItemStack, EQUIPMENT_SLOT_COUNT> equipment = _equipment;
+	convertTo(level.gameData().getStaticId("minecraft:entity_type", "minecraft:villager"), false, false, [&](Mob& villager) {
+		for (int slot = 0; slot < EQUIPMENT_SLOT_COUNT; slot++) {
+			if (!equipment[slot].isEmpty() && _dropChances[slot] > 1.0F) villager.setItemSlot(static_cast<EquipmentSlot>(slot), equipment[slot]);
+		}
+		(void)type;
+		(void)profession;
+		(void)villagerLevel; // Villagers have no class of their own yet: their data isn't kept
+		DifficultyInstance difficulty = level.getCurrentDifficultyAt(villager.blockPosition());
+		villager.finalizeSpawn(difficulty, static_cast<int>(MobRegistry::SpawnReason::Conversion));
+		villager.addEffect(MobEffects::Instance(MobEffects::Nausea, 200, 0));
+	});
+	level.levelEvent(nullptr, LEVEL_EVENT_ZOMBIE_VILLAGER_CURED, pos, 0);
+}
+
+void ZombieVillager::writeData(Buffer& buf, uint32_t mask, bool onlyNonDefault) const {
+	Zombie::writeData(buf, mask, onlyNonDefault);
+	if (wantsData(mask, DATA_CONVERTING, onlyNonDefault, !_converting)) writeBoolData(buf, DATA_CONVERTING, _converting);
+	// Always sent: the client draws its own random profession otherwise (vanilla only sends it once it changed, so
+	// each client sees another villager)
+	if (wantsData(mask, DATA_VILLAGER_DATA, onlyNonDefault, false)) {
+		buf.writeUByte(DATA_VILLAGER_DATA);
+		buf.writeVarInt(SERIALIZER_VILLAGER_DATA);
+		buf.writeVarInt(_type);
+		buf.writeVarInt(_profession);
+		buf.writeVarInt(_villagerLevel);
+	}
+}
+
+void ZombieVillager::save(Buffer& buf) const {
+	Zombie::save(buf);
+	buf.writeUByte(SAVE_VERSION);
+	buf.writeString(_level.gameData().getStaticName("minecraft:villager_type", _type));
+	buf.writeString(_level.gameData().getStaticName("minecraft:villager_profession", _profession));
+	buf.writeVarInt(_villagerLevel);
+	buf.writeVarInt(_converting ? _conversionTime : -1);
+	buf.writeBool(_hasStarter);
+	if (_hasStarter) buf.writeUUID(_conversionStarter);
+	buf.writeVarInt(_xp);
+}
+
+void ZombieVillager::load(Buffer& buf) {
+	Zombie::load(buf);
+	if (buf.readUByte() != SAVE_VERSION) throw std::runtime_error("unknown zombie villager data version");
+	int type	   = _level.gameData().getStaticId("minecraft:villager_type", buf.readString());
+	int profession = _level.gameData().getStaticId("minecraft:villager_profession", buf.readString());
+	_type		   = type >= 0 ? type : _type;
+	_profession	   = profession >= 0 ? profession : _profession;
+	_villagerLevel = buf.readVarInt();
+	int time	   = buf.readVarInt();
+	_hasStarter	   = buf.readBool();
+	if (_hasStarter) _conversionStarter = buf.readUUID();
+	_xp			   = buf.readVarInt();
+	_converting	   = time != -1;
+	_conversionTime = time;
+	_dirtyData		= 0;
+}
+
 // ----- Husk -----
 
 bool Husk::doHurtTarget(Actor& target) {
 	bool hurt = Zombie::doHurtTarget(target);
-	// Hunger for 7 seconds per level of effective difficulty: mob effects aren't ported yet
+	// Hunger for 7 seconds per level of effective difficulty, bare-handed only
+	if (hurt && getMainHandItem().isEmpty() && (target.asPlayer() || target.asLiving())) {
+		float effective = _level.getCurrentDifficultyAt(blockPosition()).getEffectiveDifficulty();
+		addEffectTo(target, MobEffects::Instance(MobEffects::Hunger, 140 * static_cast<int>(effective)), this);
+	}
 	return hurt;
 }
 

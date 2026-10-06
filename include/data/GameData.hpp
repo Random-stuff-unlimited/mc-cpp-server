@@ -109,6 +109,17 @@ class GameData {
 	struct ConsumeEffect {
 		std::string type;
 		std::string sound;
+		// apply_effects: MobEffectInstance codecs, applied with this probability
+		struct Effect {
+			std::string id;
+			int			duration = 0, amplifier = 0;
+			bool		ambient = false, showParticles = true, showIcon = true;
+		};
+		std::vector<Effect>		 effects;
+		float					 probability = 1.0F;
+		// remove_effects: effect ids, or "#tag"
+		std::vector<std::string> removeEffects;
+		float					 diameter = 16.0F; // teleport_randomly
 	};
 	// The minecraft:consumable component (Consumable): eaten or drunk over consumeSeconds
 	struct Consumable {

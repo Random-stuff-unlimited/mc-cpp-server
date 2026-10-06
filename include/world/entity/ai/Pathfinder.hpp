@@ -267,6 +267,47 @@ class WalkNodeEvaluator : public NodeEvaluator {
 	std::vector<PathType> getPathTypeWithinMobBB(PathfindingContext& context, int x, int y, int z);
 };
 
+// SwimNodeEvaluator: water mobs, through the water blocks in all six directions (and the air above for dolphins:
+// allowBreaching)
+class SwimNodeEvaluator : public NodeEvaluator {
+  public:
+	explicit SwimNodeEvaluator(bool allowBreaching) : _allowBreaching(allowBreaching) {}
+	void	 prepare(Level& level, Mob& mob) override;
+	void	 done() override;
+	Node*	 getStart() override;
+	Target	 getTarget(double x, double y, double z) override { return getTargetNodeAt(x, y, z); }
+	int		 getNeighbors(Node** neighbors, Node& node) override;
+	PathType getPathTypeOfMob(PathfindingContext& context, int x, int y, int z, Mob& mob) override;
+	PathType getPathType(PathfindingContext& context, int x, int y, int z) override;
+
+  private:
+	bool								  _allowBreaching;
+	std::unordered_map<int64_t, PathType> _pathTypesByPos;
+
+	Node*	 findAcceptedNode(int x, int y, int z);
+	PathType getCachedBlockType(int x, int y, int z);
+};
+
+// AmphibiousNodeEvaluator: mobs at home on land and in water (drowned, turtles, frogs): walking, plus swimming up
+// and down through the water
+class AmphibiousNodeEvaluator : public WalkNodeEvaluator {
+  public:
+	explicit AmphibiousNodeEvaluator(bool prefersShallowSwimming) : _prefersShallowSwimming(prefersShallowSwimming) {}
+	void	 prepare(Level& level, Mob& mob) override;
+	void	 done() override;
+	Node*	 getStart() override;
+	Target	 getTarget(double x, double y, double z) override { return getTargetNodeAt(x, y + 0.5, z); }
+	int		 getNeighbors(Node** neighbors, Node& node) override;
+	PathType getPathType(PathfindingContext& context, int x, int y, int z) override;
+
+  protected:
+	bool isAmphibious() const override { return true; }
+
+  private:
+	bool  _prefersShallowSwimming;
+	float _oldWalkableCost = 0, _oldWaterBorderCost = 0;
+};
+
 // PathFinder: A* from the mob to the closest target it can reach
 class PathFinder {
   public:

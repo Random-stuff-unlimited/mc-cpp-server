@@ -114,5 +114,6 @@ void enterPlay(Packet* packet, Server& server) {
 	server.sendLevelInfo(player->shared_from_this(), *player->level());
 	Combat::sendHealth(server, *player);
 	Xp::send(server, *player);
+	player->sendActiveEffects(); // PlayerList.sendActivePlayerEffects
 	server.addGamePlayer(player->shared_from_this());
 }

@@ -13,9 +13,12 @@
 
 class Buffer;
 class Level;
+class Player;
 namespace Combat {
 	struct DamageSource;
 }
+
+struct FluidState;
 
 // An entity other than a player, on the game thread (vanilla's Entity): position, movement and collisions with
 // blocks, fluids pushing it. Ported from vanilla's Entity.move, collide and updateFluidHeightAndDoFluidPushing
@@ -43,6 +46,9 @@ class Entity : public Actor {
 	void		setDeltaMovement(const Vec3& delta) { _delta = delta; }
 	void		setPos(const Vec3& position) { _position = position; }
 	bool		onGround() const { return _onGround; }
+	bool		horizontalCollision() const { return _horizontalCollision; }
+	// Entity.isInWater, for the others
+	bool		touchingWater() const { return _wasTouchingWater; }
 	void		setOnGround(bool onGround) { _onGround = onGround; }
 	// Rotations in degrees (vanilla's yRot / xRot, the head's for living entities)
 	float		yRot() const override { return _yRot; }
@@ -69,6 +75,24 @@ class Entity : public Actor {
 	void		moveByPiston(Vec3 movement);
 	// Entity.move(SHULKER_BOX): pushed by a shulker box's lid
 	void		moveByShulker(Vec3 movement) { move(movement); }
+	// ----- Riding: a player sits on it (Entity.passengers, for players only) -----
+	bool		hasRider() const { return _riderId != -1; }
+	// The player riding it, null if none (or gone)
+	Player*		rider();
+	// Entity.startRiding, from the vehicle: false if it already has a rider or the player rides something
+	bool		startRiding(Player& player);
+	// Entity.ejectPassengers: the rider is put down where the vehicle is
+	void		ejectRider();
+	// Every tick: the rider follows (Entity.positionRider), or is let go if it left, died...
+	void		positionRider();
+	// getControllingPassenger is the rider: its client moves the vehicle (ServerboundMoveVehiclePacket), the AI rests
+	virtual bool isControlledByRider() { return false; }
+	// Where the rider's feet are (the passenger attachment, less the player's own 0.6)
+	virtual double riderY() const { return _position.y + _height - 0.6; }
+	// ServerGamePacketListenerImpl.handleMoveVehicle
+	virtual void moveFromRider(const Vec3& position, float yRot, float xRot, bool onGround);
+	// ClientboundSetPassengersPacket
+	void		writePassengers(Buffer& buf) const;
 	bool		isRemoved() const { return _removed; }
 	void		discard() { _removed = true; }
 	int			tickCount() const { return _tickCount; }
@@ -99,7 +123,8 @@ class Entity : public Actor {
 		hasImpulse = true;
 	}
 	// Entity.push(Entity): both pushed apart when they overlap
-	void pushAgainst(Entity& other);
+	// Entity.push(Entity): pushed apart from the other
+	virtual void pushAgainst(Entity& other);
 
 	// Saved with its chunk (Entity.shouldBeSaved): mobs are, items aren't
 	virtual bool shouldBeSaved() const { return false; }
@@ -119,6 +144,8 @@ class Entity : public Actor {
 	virtual void writeEntityData(Buffer&) const {}
 	// The value of the Spawn Entity packet's data field (Entity.getData): the XP value of an experience orb, 0 else
 	virtual int entityData() const { return 0; }
+	// Entity.playerTouch: a player touches it (Player.aiStep: items, arrows); what it took, for the pickup animation
+	virtual int touchedByPlayer(Player&) { return 0; }
 	// Changed synced data only (Set Entity Data after a change). Defaults to everything
 	virtual void writeDirtyEntityData(Buffer& buf) const { writeEntityData(buf); }
 	virtual void clearDirtyEntityData() {}
@@ -142,6 +169,7 @@ class Entity : public Actor {
 	bool   _horizontalCollision = false;
 	bool   _verticalCollision	= false;
 	bool   _removed				= false;
+	int	   _riderId				= -1;
 	double	_pistonDeltas[3]	= {0.0, 0.0, 0.0};
 	int64_t _pistonDeltasTime	= 0;
 	bool   _noPhysics			= false;
@@ -164,6 +192,9 @@ class Entity : public Actor {
 	// Entity.onBelowWorld: under the world's bottom by 64 blocks
 	virtual void onBelowWorld() { discard(); }
 	virtual bool fireImmune() const { return false; }
+	// LivingEntity.canStandOnFluid: striders on lava. standsOnFluids: whether it stands on any (so collisions look)
+	virtual bool standsOnFluids() const { return false; }
+	virtual bool canStandOnFluid(const FluidState&) const { return false; }
 	void		 clearFire() { _remainingFireTicks = std::min(0, _remainingFireTicks); }
 	// Entity.moveRelative / getInputVector: input (strafe, up, forward) turned by the entity's yaw, scaled by speed
 	void		 moveRelative(float speed, const Vec3& input);

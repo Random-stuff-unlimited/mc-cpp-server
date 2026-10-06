@@ -23,7 +23,7 @@ class MoveControl {
 
 	bool	  hasWanted() const { return _operation == Operation::MoveTo; }
 	double	  speedModifier() const { return _speedModifier; }
-	void	  setWantedPosition(double x, double y, double z, double speedModifier);
+	virtual void setWantedPosition(double x, double y, double z, double speedModifier);
 	void	  strafe(float forwards, float right);
 	void	  setWait() { _operation = Operation::Wait; }
 	Operation operation() const { return _operation; }
@@ -57,6 +57,9 @@ class LookControl {
 	void setLookAt(Actor& target);
 	void setLookAt(Actor& target, float yMaxRotSpeed, float xMaxRotAngle);
 	bool isLookingAtTarget() const { return _lookAtCooldown > 0; }
+	double getWantedX() const { return _wantedX; }
+	double getWantedY() const { return _wantedY; }
+	double getWantedZ() const { return _wantedZ; }
 	virtual void tick();
 
   protected:
@@ -71,12 +74,38 @@ class LookControl {
 	static float rotateTowards(float from, float to, float maxDelta) { return from + Mth::clamp(Mth::degreesDifference(from, to), -maxDelta, maxDelta); }
 };
 
+// SmoothSwimmingMoveControl: swims toward the wanted position, turning and pitching smoothly (dolphins, axolotls,
+// frogs, tadpoles); slower out of the water
+class SmoothSwimmingMoveControl : public MoveControl {
+  public:
+	SmoothSwimmingMoveControl(Mob& mob, int maxTurnX, int maxTurnY, float inWaterSpeedModifier, float outsideWaterSpeedModifier, bool applyGravity)
+		: MoveControl(mob), _maxTurnX(maxTurnX), _maxTurnY(maxTurnY), _inWaterSpeedModifier(inWaterSpeedModifier),
+		  _outsideWaterSpeedModifier(outsideWaterSpeedModifier), _applyGravity(applyGravity) {}
+	void tick() override;
+
+  private:
+	int	  _maxTurnX, _maxTurnY;
+	float _inWaterSpeedModifier, _outsideWaterSpeedModifier;
+	bool  _applyGravity;
+};
+
+// SmoothSwimmingLookControl: the head leads, the body follows past maxYRotFromCenter
+class SmoothSwimmingLookControl : public LookControl {
+  public:
+	SmoothSwimmingLookControl(Mob& mob, int maxYRotFromCenter) : LookControl(mob), _maxYRotFromCenter(maxYRotFromCenter) {}
+	void tick() override;
+
+  private:
+	int _maxYRotFromCenter;
+};
+
 // JumpControl: a goal asks for a jump, the mob jumps on its next aiStep (ported)
 class JumpControl {
   public:
 	explicit JumpControl(Mob& mob) : _mob(mob) {}
 	virtual ~JumpControl() = default;
 	void		 jump() { _jump = true; }
+	bool		 wantJump() const { return _jump; }
 	virtual void tick();
 
   protected:

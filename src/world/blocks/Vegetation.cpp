@@ -1,3 +1,4 @@
+#include "world/entity/mobs/Turtle.hpp"
 #include "world/blocks/Vegetation.hpp"
 
 #include "world/Level.hpp"
@@ -277,4 +278,45 @@ int DoublePlantBlock::updateShape(Level& level, const BlockPos& pos, int state, 
 		return VegetationBlock::updateShape(level, pos, state, direction, neighborPos, neighborState);
 	}
 	return c.defaultState("minecraft:air");
+}
+
+// ===================== TurtleEggBlock =====================
+
+TurtleEggBlock::TurtleEggBlock(std::shared_ptr<const BlockContext> context) : _context(std::move(context)) {
+	_sand  = _context->tag("minecraft:sand");
+	_hatch = _context->blocks.property("hatch");
+	_eggs  = _context->blocks.property("eggs");
+}
+
+void TurtleEggBlock::onPlace(Level& level, const BlockPos& pos, int, int, bool) const {
+	if (_context->inTag(_sand, level.getBlockState(pos.below()))) level.levelEvent(nullptr, 2012, pos, 15);
+}
+
+void TurtleEggBlock::randomTick(Level& level, const BlockPos& pos, int state) const {
+	JavaRandom& random = level.random();
+	// shouldUpdateHatchLevel: just before dawn, else rarely
+	float time = level.timeOfDay();
+	if (!(time < 0.69 && time > 0.65) && random.nextInt(500) != 0) return;
+	if (!_context->inTag(_sand, level.getBlockState(pos.below()))) return;
+	int hatch = _context->blocks.getInt(state, _hatch);
+	if (hatch < 2) {
+		level.playSound(nullptr, pos, "minecraft:entity.turtle.egg_crack", Level::SoundSource::Blocks, 0.7F, 0.9F + random.nextFloat() * 0.2F);
+		level.setBlock(pos, _context->blocks.withInt(state, _hatch, hatch + 1), Level::UPDATE_CLIENTS);
+		return;
+	}
+	level.playSound(nullptr, pos, "minecraft:entity.turtle.egg_hatch", Level::SoundSource::Blocks, 0.7F, 0.9F + random.nextFloat() * 0.2F);
+	level.removeBlock(pos, false);
+	int turtle = level.gameData().getStaticId("minecraft:entity_type", "minecraft:turtle");
+	int eggs   = _context->blocks.getInt(state, _eggs);
+	for (int i = 0; i < eggs; i++) {
+		level.levelEvent(nullptr, 2001, pos, state);
+		std::unique_ptr<Mob> mob = level.mobs().create(level, turtle);
+		if (!mob) continue;
+		if (auto* baby = dynamic_cast<Turtle*>(mob.get())) {
+			baby->setAge(AgeableMob::BABY_START_AGE);
+			baby->setHomePos(pos);
+		}
+		mob->snapTo({pos.x + 0.3 + i * 0.2, static_cast<double>(pos.y), pos.z + 0.3}, 0.0F, 0.0F);
+		level.addFreshEntity(std::move(mob));
+	}
 }

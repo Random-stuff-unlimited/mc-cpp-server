@@ -71,6 +71,7 @@ struct BlockPos {
 		return {x + offset[0] * distance, y + offset[1] * distance, z + offset[2] * distance};
 	}
 	constexpr BlockPos above() const { return {x, y + 1, z}; }
+	constexpr BlockPos above(int distance) const { return {x, y + distance, z}; }
 	constexpr BlockPos below() const { return {x, y - 1, z}; }
 	constexpr BlockPos north() const { return {x, y, z - 1}; }
 	constexpr BlockPos south() const { return {x, y, z + 1}; }

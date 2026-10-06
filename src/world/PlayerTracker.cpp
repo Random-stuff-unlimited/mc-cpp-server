@@ -336,9 +336,26 @@ void PlayerTracker::show(Tracked& target, Tracked& viewer) {
 	spawn.writeUByte(target.sentYaw); // Head
 	spawn.writeVarInt(0);			  // Entity-specific data
 	Packet::send(viewer.player, PacketId::Play::Clientbound::ADD_ENTITY, spawn, _server);
+	if (target.player->vehicleId() != -1) {
+		// It rides something: the viewer may already know the vehicle
+		Buffer passengers;
+		passengers.writeVarInt(target.player->vehicleId());
+		passengers.writeVarInt(1);
+		passengers.writeVarInt(target.player->getPlayerID());
+		Packet::send(viewer.player, PacketId::Play::Clientbound::SET_PASSENGERS, passengers, _server);
+	}
 	// Its entity data that isn't at the default (air, item in use)
 	Buffer data;
 	if (Survival::writeNonDefaultData(data, *target.player)) Packet::send(viewer.player, PacketId::Play::Clientbound::SET_ENTITY_DATA, data, _server);
+	// ServerEntity.sendPairingData: its syncable attributes that exist (were changed)
+	int count = 0;
+	target.player->attributes().forEachSyncable([&](const AttributeInstance&) { count++; });
+	if (count > 0) {
+		Buffer attributes;
+		attributes.writeVarInt(target.player->getPlayerID());
+		target.player->attributes().writeSyncable(attributes, false);
+		Packet::send(viewer.player, PacketId::Play::Clientbound::UPDATE_ATTRIBUTES, attributes, _server);
+	}
 }
 
 // Encoded once for all the viewers

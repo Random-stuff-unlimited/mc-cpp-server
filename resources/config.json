@@ -6,7 +6,8 @@
 		"max-players": 20,
 		"view-distance": 10,
 		"compression-threshold": 256,
-		"tick-rate": 20
+		"tick-rate": 20,
+		"fill-limit": 32768
 	},
 	"world": {
 		"name": "world",

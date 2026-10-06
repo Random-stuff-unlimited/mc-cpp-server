@@ -4,6 +4,9 @@
 #include "PacketIds.hpp"
 #include "data/GameData.hpp"
 #include "network/buffer.hpp"
+#include "world/entity/Mob.hpp"
+#include "world/entity/SpawnPlacements.hpp"
+#include "world/item/Enchantments.hpp"
 #include "network/packet.hpp"
 #include "network/server.hpp"
 #include "player.hpp"
@@ -499,6 +502,18 @@ void Level::dropResources(int state, const BlockPos& pos, Player* breaker, const
 		if ((*it)->pos() == pos) context.blockEntity = it->get();
 	}
 	for (ItemStack& stack : _loot.blockDrops(context)) popResource(pos, std::move(stack));
+	// InfestedBlock.spawnAfterBreak: its silverfish comes out (not with silk touch: #prevents_infested_spawns)
+	const std::string& name = _gameData.getStaticName("minecraft:block", blocks().blockOf(state));
+	if (name.rfind("minecraft:infested_", 0) == 0 && !(tool && Enchantments::level(_gameData, *tool, "minecraft:silk_touch") > 0)) {
+		if (std::unique_ptr<Mob> silverfish = _mobs.create(*this, _gameData.getStaticId("minecraft:entity_type", "minecraft:silverfish"))) {
+			silverfish->snapTo({pos.x + 0.5, static_cast<double>(pos.y), pos.z + 0.5}, 0.0F, 0.0F);
+			Entity* added = addFreshEntity(std::move(silverfish));
+			Buffer	event; // Mob.spawnAnim
+			event.writeInt(added->id());
+			event.writeByte(20);
+			_entities.broadcast(*added, PacketId::Play::Clientbound::ENTITY_EVENT, event);
+		}
+	}
 }
 
 void Level::popResource(const BlockPos& pos, ItemStack stack) {
@@ -909,6 +924,18 @@ void Level::tickScheduled() {
 	_fluidTicks.tick(getGameTime(), MAX_TICKS_PER_TICK, [this](const BlockPos& pos, int fluid) { tickFluid(pos, fluid); });
 }
 
+bool Level::isCloseToVillage(const BlockPos& pos, int sections) {
+	return sections <= 6 && _poi->sectionsToVillage(pos.x >> 4, pos.y >> 4, pos.z >> 4) <= sections;
+}
+
+float Level::timeOfDay() const {
+	int64_t time  = _dimensionType->fixedTime ? *_dimensionType->fixedTime : _world.getDayTime();
+	double	frac  = time / 24000.0 - 0.25;
+	frac		 -= std::floor(frac);
+	double eased  = 0.5 - std::cos(frac * M_PI) / 2.0;
+	return static_cast<float>(frac * 2.0 + eased) / 3.0F;
+}
+
 void Level::updateSkyBrightness() {
 	// DimensionType.timeOfDay: the nether and the end have a fixed time
 	int64_t time = _dimensionType->fixedTime ? *_dimensionType->fixedTime : _world.getDayTime();
@@ -953,6 +980,7 @@ void Level::tickChunks() {
 	}
 	// NaturalSpawner, before the random ticks (ServerChunkCache.tickChunks): monsters unless peaceful
 	if (_mobSpawning && !_players.empty()) NaturalSpawner::tick(*this, true, difficulty() != 0);
+	if (_mobSpawning && difficulty() != 0) tickPhantomSpawner();
 	if (_randomTickSpeed <= 0) return;
 	for (const auto& [key, chunk] : _chunks) {
 		if (!chunk->isUnloaded() && chunk->isTicking()) tickChunk(*chunk, _randomTickSpeed);
@@ -1121,4 +1149,34 @@ const FuelValues& Level::fuelValues() {
 const PotionBrewing& Level::potionBrewing() {
 	if (!_potionBrewing) _potionBrewing = std::make_shared<PotionBrewing>(_gameData);
 	return *_potionBrewing;
+}
+
+void Level::tickPhantomSpawner() {
+	if (--_phantomNextTick > 0) return;
+	_phantomNextTick += (60 + _random.nextInt(60)) * 20;
+	bool skyLight = _dimensionType->hasSkyLight;
+	if (_skyDarken < 5 && skyLight) return;
+	int phantom = _gameData.getStaticId("minecraft:entity_type", "minecraft:phantom");
+	for (const auto& player : _players) {
+		if (player->isSpectator() || player->isDisconnected()) continue;
+		BlockPos pos{Mth::floor(player->getX()), Mth::floor(player->getY()), Mth::floor(player->getZ())};
+		if (skyLight && !(pos.y >= seaLevel() && canSeeSky(pos))) continue;
+		DifficultyInstance difficulty = getCurrentDifficultyAt(pos);
+		if (!difficulty.isHarderThan(_random.nextFloat() * 3.0F)) continue;
+		int rest = std::max(1, player->survival().timeSinceRest);
+		if (_random.nextInt(rest) < 72000) continue;
+		BlockPos at = pos.above(20 + _random.nextInt(15));
+		at.x += -10 + _random.nextInt(21);
+		at.z += -10 + _random.nextInt(21);
+		if (!SpawnPlacements::isValidEmptySpawnBlock(*this, at, getBlockState(at), phantom)) continue;
+		std::shared_ptr<SpawnGroupData> group;
+		int								count = 1 + _random.nextInt(this->difficulty() + 1);
+		for (int i = 0; i < count; i++) {
+			std::unique_ptr<Mob> mob = _mobs.create(*this, phantom);
+			if (!mob) break;
+			mob->snapTo({at.x + 0.5, static_cast<double>(at.y), at.z + 0.5}, 0.0F, 0.0F);
+			group = mob->finalizeSpawn(difficulty, static_cast<int>(MobRegistry::SpawnReason::Natural), group);
+			addFreshEntity(std::move(mob));
+		}
+	}
 }

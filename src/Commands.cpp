@@ -84,6 +84,7 @@ namespace Commands {
 		registerKill();
 		registerDifficulty();
 		registerWeather();
+		registerEffect();
 		registerHelp();
 	}
 

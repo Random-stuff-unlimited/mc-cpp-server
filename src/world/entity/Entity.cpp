@@ -1,5 +1,9 @@
 #include "world/entity/Entity.hpp"
 
+#include "commands/CommandSupport.hpp"
+#include "player.hpp"
+#include "world/ChunkStreamer.hpp"
+#include "network/PacketIds.hpp"
 #include "network/buffer.hpp"
 
 #include "data/GameData.hpp"
@@ -288,6 +292,25 @@ Vec3 Entity::collide(const Vec3& movement) {
 	std::vector<AABB>& boxes = collisionScratch();
 	boxes.clear();
 	forEachBlockCollision(_level, box.expandTowards(movement), [&](const BlockPos&, const AABB& b) { boxes.push_back(b); });
+	if (standsOnFluids()) {
+		// LiquidBlock.getCollisionShape: a source it can stand on, with none of it above, is solid up to its half
+		// for an entity above that
+		AABB		  query	 = box.expandTowards(movement);
+		const Fluids& fluids = _level.fluids();
+		for (int x = Mth::floor(query.minX); x <= Mth::floor(query.maxX); x++) {
+			for (int z = Mth::floor(query.minZ); z <= Mth::floor(query.maxZ); z++) {
+				for (int y = Mth::floor(query.minY); y <= Mth::floor(query.maxY); y++) {
+					if (!(_position.y > y + 0.5 - 1.0E-5F)) continue;
+					FluidState fluid = fluids.stateOf(_level.getBlockState({x, y, z}));
+					if (fluid.isEmpty() || !fluids.isSource(fluid) || fluid.falling || !canStandOnFluid(fluid)) continue;
+					FluidState above = fluids.stateOf(_level.getBlockState({x, y + 1, z}));
+					if (!above.isEmpty() && canStandOnFluid(above)) continue;
+					AABB stable{static_cast<double>(x), static_cast<double>(y), static_cast<double>(z), x + 1.0, y + 0.5, z + 1.0};
+					if (stable.intersects(query)) boxes.push_back(stable);
+				}
+			}
+		}
+	}
 	if (boxes.empty()) return movement;
 	// Direction.axisStepOrder: y first, then the larger horizontal axis
 	int	 order[3] = {1, 0, 2};
@@ -460,4 +483,69 @@ bool Entity::updateFluidHeightAndDoFluidPushing(bool lava, double pushStrength) 
 	}
 	(lava ? _lavaHeight : _waterHeight) = height;
 	return inside;
+}
+
+// ===================== Riding =====================
+
+Player* Entity::rider() {
+	if (_riderId == -1) return nullptr;
+	Actor*	actor  = _level.actorById(_riderId);
+	Player* player = actor ? actor->asPlayer() : nullptr;
+	return player && player->vehicleId() == _id ? player : nullptr;
+}
+
+void Entity::writePassengers(Buffer& buf) const {
+	buf.writeVarInt(_id);
+	buf.writeVarInt(_riderId == -1 ? 0 : 1);
+	if (_riderId != -1) buf.writeVarInt(_riderId);
+}
+
+bool Entity::startRiding(Player& player) {
+	if (hasRider() || player.vehicleId() != -1 || _removed) return false;
+	_riderId = player.id();
+	player.setVehicleId(_id);
+	Buffer passengers;
+	writePassengers(passengers);
+	_level.entities().broadcast(*this, PacketId::Play::Clientbound::SET_PASSENGERS, passengers);
+	positionRider();
+	return true;
+}
+
+void Entity::ejectRider() {
+	Player* player = rider();
+	_riderId	   = -1;
+	Buffer passengers;
+	writePassengers(passengers);
+	_level.entities().broadcast(*this, PacketId::Play::Clientbound::SET_PASSENGERS, passengers);
+	if (!player) return;
+	player->setVehicleId(-1);
+	if (!player->isDisconnected()) Commands::teleport(_level.server(), *player, _position.x, _position.y, _position.z);
+}
+
+void Entity::positionRider() {
+	if (_riderId == -1) return;
+	Player* player = rider();
+	if (!player || player->isDisconnected() || player->combat().dead || player->isSpectator()) {
+		// Gone, dead or in another level: just let go
+		if (player) player->setVehicleId(-1);
+		_riderId = -1;
+		Buffer passengers;
+		writePassengers(passengers);
+		_level.entities().broadcast(*this, PacketId::Play::Clientbound::SET_PASSENGERS, passengers);
+		return;
+	}
+	player->setPosition(_position.x, riderY(), _position.z);
+	player->setOnGround(true);
+	player->combat().fallDistance = 0;
+	if (ChunkStreamer* streamer = player->getChunkStreamer()) streamer->onPlayerMove(_position.x, _position.z);
+	_level.server().getPlayerTracker().move(player);
+}
+
+void Entity::moveFromRider(const Vec3& position, float yRot, float xRot, bool onGround) {
+	_position	  = position;
+	_yRot		  = yRot;
+	_xRot		  = xRot;
+	_onGround	  = onGround;
+	_fallDistance = 0;
+	positionRider();
 }

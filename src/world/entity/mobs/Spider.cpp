@@ -32,7 +32,7 @@ namespace {
 
 	// Spider.SpiderEffectsGroupData
 	struct SpiderEffectsGroupData : SpawnGroupData {
-		std::string effect; // Empty: none
+		MobEffects::Effect effect = MobEffects::Count; // Count: none
 	};
 } // namespace
 
@@ -73,12 +73,15 @@ std::shared_ptr<SpawnGroupData> Spider::finalizeSpawn(DifficultyInstance& diffic
 	if (!group) {
 		auto effects = std::make_shared<SpiderEffectsGroupData>();
 		if (_level.difficulty() == 3 && random.nextFloat() < 0.1F * difficulty.getSpecialMultiplier()) {
-			int n			= random.nextInt(5);
-			effects->effect = n <= 1 ? "minecraft:speed" : n <= 2 ? "minecraft:strength" : n <= 3 ? "minecraft:regeneration" : "minecraft:invisibility";
+			int n			= random.nextInt(5); // setRandomEffect
+			effects->effect = n <= 1 ? MobEffects::Speed : n <= 2 ? MobEffects::Strength : n <= 3 ? MobEffects::Regeneration : MobEffects::Invisibility;
 		}
 		group = effects;
 	}
-	// The permanent effect of the group isn't applied yet: mob effects aren't ported
+	// The pack's effect, for good
+	if (auto* effects = dynamic_cast<SpiderEffectsGroupData*>(group.get()); effects && effects->effect != MobEffects::Count) {
+		addEffect(MobEffects::Instance(effects->effect, MobEffects::INFINITE_DURATION));
+	}
 	return group;
 }
 
@@ -91,6 +94,8 @@ void Spider::writeData(Buffer& buf, uint32_t mask, bool onlyNonDefault) const {
 
 bool CaveSpider::doHurtTarget(Actor& target) {
 	if (!Spider::doHurtTarget(target)) return false;
-	// Poison for 7 (normal) or 15 (hard) seconds: mob effects aren't ported yet
+	// Poison for 7 (normal) or 15 (hard) seconds
+	int seconds = _level.difficulty() == 2 ? 7 : _level.difficulty() == 3 ? 15 : 0;
+	if (seconds > 0) addEffectTo(target, MobEffects::Instance(MobEffects::Poison, seconds * 20, 0), this);
 	return true;
 }

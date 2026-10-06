@@ -16,7 +16,6 @@
 #include <optional>
 
 namespace {
-	constexpr float MAX_HEALTH			= 20;
 	constexpr int	ENTITY_EVENT_DROWN	= 67; // EntityEvent: bubbles around a drowning entity
 	constexpr int	AIR_DATA_INDEX		= 1;  // Entity.DATA_AIR_SUPPLY_ID
 	constexpr int	POSE_DATA_INDEX		= 6;  // Entity.DATA_POSE_ID
@@ -24,6 +23,12 @@ namespace {
 	constexpr int	BYTE_SERIALIZER		= 0;  // EntityDataSerializers.BYTE
 	constexpr int	INT_SERIALIZER		= 1;  // EntityDataSerializers.INT
 	constexpr int	POSE_SERIALIZER		= 20; // EntityDataSerializers.POSE
+	constexpr int	FLOAT_SERIALIZER	= 3;  // EntityDataSerializers.FLOAT
+	constexpr int	BOOLEAN_SERIALIZER	= 8;  // EntityDataSerializers.BOOLEAN
+	constexpr int	PARTICLES_SERIALIZER = 17; // EntityDataSerializers.PARTICLES
+	constexpr int	EFFECT_PARTICLES_INDEX = 10; // LivingEntity.DATA_EFFECT_PARTICLES
+	constexpr int	EFFECT_AMBIENCE_INDEX  = 11; // LivingEntity.DATA_EFFECT_AMBIENCE_ID
+	constexpr int	ABSORPTION_INDEX	   = 17; // Player.DATA_PLAYER_ABSORPTION_ID
 	constexpr int	HEAD_SLOT			= 5;  // Inventory window slot of the helmet
 
 	bool invulnerable(const Player& player) { return player.getGameMode() == GameMode::Creative || player.getGameMode() == GameMode::Spectator; }
@@ -115,7 +120,8 @@ namespace {
 		double	 eyeY = player.getY() + Survival::eyeHeight(player);
 		BlockPos eye{Mth::floor(player.getX()), Mth::floor(eyeY), Mth::floor(player.getZ())};
 		if (state.eyeInWater && level.blocks().blockOf(level.getBlockState(eye)) != level.bubbleColumnBlock()) {
-			if (!invulnerable(player)) { // canBreatheUnderwater, water breathing: no effects yet
+			// canBreatheUnderwater: MobEffectUtil.hasWaterBreathing, and not invulnerable (abilities)
+			if (!invulnerable(player) && !player.hasEffect(MobEffects::WaterBreathing) && !player.hasEffect(MobEffects::ConduitPower)) {
 				player.setAirSupply(decreaseAirSupply(level.gameData(), player, player.getAirSupply()));
 				if (player.getAirSupply() <= -20) { // shouldTakeDrowningDamage
 					player.setAirSupply(0);
@@ -131,6 +137,7 @@ namespace {
 		} else if (player.getAirSupply() < Survival::MAX_AIR_SUPPLY) {
 			player.setAirSupply(increaseAirSupply(player.getAirSupply()));
 		}
+		player.effects().tick(player); // LivingEntity.tickEffects
 	}
 
 	// ServerPlayer.tickRegeneration: in peaceful, health and saturation every second, food every half second
@@ -139,7 +146,7 @@ namespace {
 		FoodData& food = player.foodData();
 		int64_t	  tick = player.survival().tickCount;
 		if (tick % 20 == 0) {
-			if (player.combat().health < MAX_HEALTH) Survival::heal(player, 1.0F);
+			if (player.combat().health < player.maxHealth()) Survival::heal(player, 1.0F);
 			float saturation = food.getSaturationLevel();
 			if (saturation < FoodData::MAX_SATURATION) food.setSaturation(saturation + 1.0F);
 		}
@@ -176,11 +183,25 @@ namespace {
 		data.writeVarInt(BYTE_SERIALIZER);
 		data.writeUByte(player.survival().sharedFlags);
 	}
-	// Entity's shared flags: 1 on fire, 2 crouching, 8 sprinting, 16 swimming
+	void writeEffects(Buffer& data, const Player& player) {
+		data.writeUByte(EFFECT_PARTICLES_INDEX);
+		data.writeVarInt(PARTICLES_SERIALIZER);
+		player.effects().writeParticles(data, player.effectGameData());
+		data.writeUByte(EFFECT_AMBIENCE_INDEX);
+		data.writeVarInt(BOOLEAN_SERIALIZER);
+		data.writeBool(player.survival().effectAmbience);
+	}
+	void writeAbsorption(Buffer& data, const Player& player) {
+		data.writeUByte(ABSORPTION_INDEX);
+		data.writeVarInt(FLOAT_SERIALIZER);
+		data.writeFloat(player.absorptionAmount());
+	}
+	// Entity's shared flags: 1 on fire, 2 crouching, 8 sprinting, 16 swimming, 32 invisible, 64 glowing (the effects)
 	uint8_t computeSharedFlags(const Player& player) {
 		const SurvivalState& state = player.survival();
 		return static_cast<uint8_t>((state.remainingFireTicks > 0 && !invulnerable(player) ? 1 : 0) | (state.pose == Pose::Crouching ? 2 : 0) |
-									(const_cast<Player&>(player).isSprinting() ? 8 : 0) | (state.swimming ? 16 : 0));
+									(const_cast<Player&>(player).isSprinting() ? 8 : 0) | (state.swimming ? 16 : 0) |
+									(player.hasEffect(MobEffects::Invisibility) ? 32 : 0) | (player.hasEffect(MobEffects::Glowing) ? 64 : 0));
 	}
 
 	// LivingEntity.applyEffectsFromBlocks for the player: fire and lava burn it, water puts it out (its box moves on its
@@ -248,7 +269,7 @@ namespace Survival {
 
 	void heal(Player& player, float amount) {
 		CombatState& combat = player.combat();
-		if (combat.health > 0.0F) combat.health = std::clamp(combat.health + amount, 0.0F, MAX_HEALTH);
+		if (combat.health > 0.0F) combat.health = std::clamp(combat.health + amount, 0.0F, player.maxHealth());
 	}
 
 	void setPose(Player& player, Pose pose) {
@@ -260,7 +281,7 @@ namespace Survival {
 
 	bool isHurt(const Player& player) {
 		float health = player.combat().health;
-		return health > 0.0F && health < MAX_HEALTH;
+		return health > 0.0F && health < const_cast<Player&>(player).maxHealth();
 	}
 
 	double eyeHeight(const Player& player) { return poseEyeHeight(player.survival().pose); }
@@ -339,8 +360,10 @@ namespace Survival {
 	void tick(Level& level, Player& player) {
 		SurvivalState& state = player.survival();
 		state.tickCount++;
+		if (!player.combat().dead) state.timeSinceRest++;
 		if (!player.combat().dead) {
-			// A sleeping player just waits: no baseTick, no used item, no regeneration, no pose update
+			// A sleeping player just waits: no baseTick (but its effects), no used item, no regeneration, no pose update
+			if (state.sleeping) player.effects().tick(player);
 			if (!state.sleeping) {
 				// Player.tick: LivingEntity.baseTick, LivingEntity.tick's updatingUsingItem, aiStep's tickRegeneration, the pose
 				baseTick(level, player);
@@ -379,6 +402,7 @@ namespace Survival {
 
 	void sendDirtyData(Server& server, Player& player) {
 		SurvivalState& state = player.survival();
+		sendDirtyAttributes(server, player);
 		if (!state.dirtyData) return;
 		Buffer data;
 		data.writeVarInt(player.getPlayerID());
@@ -386,21 +410,40 @@ namespace Survival {
 		if (state.dirtyData & DATA_LIVING_FLAGS) writeLivingFlags(data, player);
 		if (state.dirtyData & DATA_POSE) writePose(data, player);
 		if (state.dirtyData & DATA_SHARED_FLAGS) writeSharedFlags(data, player);
+		if (state.dirtyData & DATA_EFFECTS) writeEffects(data, player);
+		if (state.dirtyData & DATA_ABSORPTION) writeAbsorption(data, player);
 		data.writeUByte(0xFF); // End of the entity data
 		state.dirtyData = 0;
 		// ServerEntity.sendDirtyEntityData: to the viewers and the player itself
 		server.getPlayerTracker().broadcast(&player, PacketId::Play::Clientbound::SET_ENTITY_DATA, data, true);
 	}
 
+	void sendDirtyAttributes(Server& server, Player& player) {
+		// ServerEntity.sendDirtyEntityData: the syncable attributes that changed (the effects' speed...), to the viewers
+		// and the player itself
+		AttributeMap& attributes = player.attributes();
+		if (!attributes.hasDirtySyncable()) return;
+		Buffer buf;
+		buf.writeVarInt(player.getPlayerID());
+		attributes.writeSyncable(buf, true);
+		attributes.clearDirty();
+		server.getPlayerTracker().broadcast(&player, PacketId::Play::Clientbound::UPDATE_ATTRIBUTES, buf, true);
+	}
+
 	bool writeNonDefaultData(Buffer& data, const Player& player) {
 		bool air = player.getAirSupply() != MAX_AIR_SUPPLY, flags = player.survival().livingFlags != 0,
 			 pose = player.survival().pose != Pose::Standing, shared = player.survival().sharedFlags != 0;
-		if (!air && !flags && !pose && !shared) return false;
+		bool particles = false;
+		for (const MobEffects::Instance& i : player.effects().all()) particles |= i.visible;
+		bool effects = particles || player.survival().effectAmbience, absorption = player.absorptionAmount() != 0.0F;
+		if (!air && !flags && !pose && !shared && !effects && !absorption) return false;
 		data.writeVarInt(player.getPlayerID());
 		if (air) writeAir(data, player);
 		if (flags) writeLivingFlags(data, player);
 		if (pose) writePose(data, player);
 		if (shared) writeSharedFlags(data, player);
+		if (effects) writeEffects(data, player);
+		if (absorption) writeAbsorption(data, player);
 		data.writeUByte(0xFF);
 		return true;
 	}
@@ -425,6 +468,8 @@ namespace Survival {
 		state.swimming	   = false;
 		state.lastSentHealth = -1.0F;
 		state.lastSentFood	 = -1;
+		state.effectAmbience = false;
+		state.timeSinceRest	 = 0;
 	}
 
 } // namespace Survival

@@ -6,6 +6,7 @@
 #include "world/Fluids.hpp"
 #include "world/entity/Entity.hpp"
 #include "world/entity/EquipmentSlot.hpp"
+#include "world/entity/MobEffects.hpp"
 #include "world/item/ItemStack.hpp"
 
 #include <array>
@@ -24,12 +25,16 @@ class Player;
 // skipped as long as nothing can change the outcome: same position and movement, no input, not in a fluid, and no
 // block changed in the chunks around it (Chunk::version). Anything else (a push, a hit, a block broken under it)
 // wakes it up. Only the pressure plates and tripwires it rests on aren't told again (they stay powered anyway)
-class LivingEntity : public Entity {
+class LivingEntity : public Entity, public MobEffects::Host {
   public:
 	// Entity data (SynchedEntityData ids of Entity and LivingEntity) and their serializers
-	static constexpr int DATA_SHARED_FLAGS = 0, DATA_AIR_SUPPLY = 1, DATA_POSE = 6, DATA_LIVING_FLAGS = 8, DATA_HEALTH = 9;
-	static constexpr int SERIALIZER_BYTE = 0, SERIALIZER_INT = 1, SERIALIZER_FLOAT = 3, SERIALIZER_POSE = 20;
-	static constexpr int POSE_STANDING = 0, POSE_DYING = 7;
+	static constexpr int DATA_SHARED_FLAGS = 0, DATA_AIR_SUPPLY = 1, DATA_POSE = 6, DATA_LIVING_FLAGS = 8, DATA_HEALTH = 9, DATA_EFFECT_PARTICLES = 10,
+						 DATA_EFFECT_AMBIENCE = 11;
+	static constexpr int SERIALIZER_BYTE = 0, SERIALIZER_INT = 1, SERIALIZER_FLOAT = 3, SERIALIZER_PARTICLES = 17, SERIALIZER_POSE = 20;
+	// Entity.DATA_SHARED_FLAGS_ID bits
+	static constexpr int SHARED_FLAG_ON_FIRE = 0, SHARED_FLAG_INVISIBLE = 5, SHARED_FLAG_GLOWING = 6;
+	static constexpr int POSE_STANDING = 0, POSE_CROUCHING = 5, POSE_DYING = 7;
+	static constexpr int SHARED_FLAG_SPRINTING = 3;
 	static constexpr int DEATH_DURATION = 20;
 	// ClientboundEntityEventPacket ids (EntityEvent)
 	static constexpr int EVENT_DEATH = 3, EVENT_POOF = 60, EVENT_DROWN_PARTICLES = 67;
@@ -71,12 +76,58 @@ class LivingEntity : public Entity {
 	float eyeHeight() const override { return _eyeHeightOverride >= 0.0F ? _eyeHeightOverride : _type.eyeHeight; }
 
 	// Movement input, set by the AI (vanilla's xxa, yya, zza, jumping, speed)
+	// moveRelative with its current input, then move (BreathAirGoal)
+	void  moveWithInput(float speed) {
+		moveRelative(speed, {_xxa, _yya, _zza});
+		move(_delta);
+	}
+	void  moveFromRider(const Vec3& position, float yRot, float xRot, bool onGround) override {
+		_yBodyRot = _yHeadRot = yRot;
+		Entity::moveFromRider(position, yRot, xRot, onGround);
+	}
+	// Entity.isInPowderSnow: a powder snow block inside its box
+	bool  inPowderSnow();
+	// Entity.setPose, and LivingEntity.setSprinting (with its 30 % speed modifier)
+	int	  pose() const { return _pose; }
+	void  setPose(int pose);
+	bool  isSprinting() const { return _sharedFlags & (1 << SHARED_FLAG_SPRINTING); }
+	void  setSprinting(bool sprinting);
+	// LivingEntity.getMaxAirSupply and increaseAirSupply
+	virtual int maxAirSupply() const { return 300; }
+	virtual int increaseAirSupply(int air) { return std::min(air + 4, maxAirSupply()); }
 	void  setXxa(float value) { _xxa = value; }
 	void  setYya(float value) { _yya = value; }
 	void  setZza(float value) { _zza = value; }
-	void  setJumping(bool jumping) { _jumping = jumping; }
+	virtual void setJumping(bool jumping) { _jumping = jumping; }
+	bool  isJumping() const { return _jumping; }
 	float speed() const { return _speed; }
 	virtual void setSpeed(float speed) { _speed = speed; }
+
+	// ----- Effects -----
+
+	MobEffects::Active&		  effects() { return _effects; }
+	const MobEffects::Active& effects() const { return _effects; }
+	bool					  hasEffect(MobEffects::Effect effect) const { return _effects.has(effect); }
+	// LivingEntity.addEffect (source: the entity responsible, if any)
+	bool					  addEffect(const MobEffects::Instance& instance, Actor* source = nullptr) { return _effects.add(*this, instance, source != nullptr); }
+	bool					  removeEffect(MobEffects::Effect effect) { return _effects.remove(*this, effect); }
+	// addEffect on a player or a living entity (a mob's target), false for anything else
+	static bool				  addEffectTo(Actor& target, const MobEffects::Instance& instance, Actor* source);
+	bool					  removeAllEffects() { return _effects.removeAll(*this); }
+	// LivingEntity.canBeAffected: the type's tags (subclasses: spiders ignore poison...)
+	virtual bool			  canBeAffected(MobEffects::Effect effect) const;
+	float					  absorptionAmount() const { return _absorption; }
+	// LivingEntity.setAbsorptionAmount: clamped to max_absorption
+	void					  setAbsorptionAmount(float amount);
+	// LivingEntity.randomTeleport: onto the first solid block under (x, y, z), if it fits there out of any liquid
+	// (broadcast: the teleport particles of EntityEvent 46). False, and unmoved, otherwise
+	bool					  randomTeleport(double x, double y, double z, bool broadcast);
+	// LivingEntity.isSensitiveToWater: water and rain hurt it (endermen, blazes, snow golems, striders)
+	virtual bool			  isSensitiveToWater() const { return false; }
+	// Entity.isInWaterOrRain
+	bool					  isInWaterOrRain();
+	// LivingEntity.isInvisible (the invisibility effect)
+	bool					  isInvisible() const { return _sharedFlags & (1 << SHARED_FLAG_INVISIBLE); }
 
 	// ----- Equipment -----
 
@@ -84,6 +135,20 @@ class LivingEntity : public Entity {
 	// setItemSlot: the item's attribute modifiers and the viewers follow at the next tick (detectEquipmentUpdates)
 	virtual void	 setItemSlot(EquipmentSlot slot, ItemStack stack) { _equipment[static_cast<int>(slot)] = std::move(stack); }
 	const ItemStack& getMainHandItem() const { return getItemBySlot(EquipmentSlot::MainHand); }
+	// LivingEntity.getItemInHand (0 main hand, 1 off hand)
+	const ItemStack& getItemInHand(int hand) const { return getItemBySlot(hand == 0 ? EquipmentSlot::MainHand : EquipmentSlot::OffHand); }
+	// LivingEntity.isHolding: in either hand
+	bool			 isHolding(const std::string& item) const;
+
+	// ----- Using an item (a mob drawing its bow) -----
+
+	// LivingEntity.startUsingItem: the item in that hand, for its use duration (the viewers see it)
+	void startUsingItem(int hand);
+	void stopUsingItem();
+	bool isUsingItem() const { return _livingFlags & 1; }
+	int	 getUsedItemHand() const { return _livingFlags & 2 ? 1 : 0; }
+	// LivingEntity.getTicksUsingItem
+	int	 getTicksUsingItem() const;
 	// Set Equipment entries for every slot that isn't empty (the pairing data of a new viewer); false if none
 	bool			 writeEquipment(Buffer& buf) const;
 
@@ -92,6 +157,7 @@ class LivingEntity : public Entity {
 	// getLastHurtByMob: who last hurt it (for 100 ticks), null if gone
 	Actor* getLastHurtByMob();
 	int	   getLastHurtByMobTimestamp() const { return _lastHurtByMobTimestamp; }
+	int	   getLastHurtMobTimestamp() const { return _lastHurtMobTimestamp; }
 	void   setLastHurtByMob(Actor* attacker);
 	// getLastHurtMob: the last one it hurt
 	Actor* getLastHurtMob();
@@ -104,11 +170,13 @@ class LivingEntity : public Entity {
 	bool   hasLineOfSight(Actor& target);
 	// Entity.isInWater, public (pathfinding asks)
 	bool   isInWaterNow() const { return isInWater(); }
+	// Entity.isEyeInFluid(WATER)
+	bool   isEyeInWater() const { return _eyeInWater; }
 	// Entity.isInLiquid
 	bool   isInLiquid() const { return isInWater() || isInLava(); }
 	virtual bool isAffectedByFluids() const { return true; }
 	// LivingEntity.canStandOnFluid: striders on lava
-	virtual bool canStandOnFluid(const FluidState&) const { return false; }
+	bool canStandOnFluid(const FluidState&) const override { return false; }
 	// LivingEntity.maxUpStep: the step_height attribute
 	float		 maxUpStep() const { return static_cast<float>(getAttributeValue(_ids.stepHeight)); }
 	// LivingEntity.getMaxFallDistance
@@ -139,7 +207,35 @@ class LivingEntity : public Entity {
 	void save(Buffer& buf) const override;
 	void load(Buffer& buf) override;
 
+	// MobEffects::Host
+	Level&		  effectLevel() override { return _level; }
+	const GameData& effectGameData() const override;
+	int			  effectEntityId() const override { return _id; }
+	int			  effectTypeId() const override { return _typeId; }
+	int64_t		  effectTickCount() const override { return _tickCount; }
+	float		  effectHealth() const override { return _health; }
+	float		  effectMaxHealth() const override { return maxHealth(); }
+	void		  effectHeal(float amount) override { heal(amount); }
+	bool		  effectHurt(const Combat::DamageSource& source, float amount) override { return hurtServer(source, amount); }
+	AttributeMap* effectAttributes() override { return &_attributes; }
+	bool		  effectCanBeAffected(MobEffects::Effect effect) const override { return canBeAffected(effect); }
+	void		  onEffectAttributesChanged() override;
+	float		  effectAbsorption() const override { return _absorption; }
+	void		  setEffectAbsorption(float amount) override { setAbsorptionAmount(amount); }
+	void		  updateEffectVisuals() override;
+	void		  playEffectSound(const std::string& sound) override;
+
   protected:
+	MobEffects::Active _effects;
+	ItemStack		   _useItem;
+	int				   _useItemRemaining = 0;
+	uint8_t			   _livingFlags		 = 0; // DATA_LIVING_ENTITY_FLAGS: 1 using an item, 2 with the off hand
+	// LivingEntity.updatingUsingItem: the use goes on while the same item is in the hand
+	void			   updatingUsingItem();
+	// The item's use duration (Item.getUseDuration): 72000 for bows, crossbows, shields and tridents
+	int				   useDuration(const ItemStack& stack) const;
+	float			   _absorption	   = 0.0F;
+	bool			   _effectAmbience = false; // DATA_EFFECT_AMBIENCE_ID
 	std::array<ItemStack, EQUIPMENT_SLOT_COUNT> _equipment, _lastEquipment;
 	EntityRef									_lastHurtByMob, _lastHurtMob;
 	int											_lastHurtByMobTimestamp = 0, _lastHurtMobTimestamp = 0;
@@ -206,10 +302,25 @@ class LivingEntity : public Entity {
 	virtual void tickHeadTurn(float bodyTarget);
 	virtual int	 maxHeadYRot() const { return 75; }
 	virtual void travel(const Vec3& input);
-	void		 jumpFromGround();
+	// LivingEntity.travelFlying: no gravity, a drag of 0.91 (0.8 in water, 0.5 in lava)
+	void		 travelFlying(const Vec3& input, float speed);
+	virtual void jumpFromGround();
+	// The factor of LivingEntity.getJumpPower(float): 1 by default (rabbits hop lower or higher)
+	virtual float jumpPowerFactor() { return 1.0F; }
+	// LivingEntity.getJumpPower
+	float		  jumpPower();
+	// LivingEntity.jumpInLiquid: swimming up (magma cubes leap out of lava)
+	virtual void  jumpInLiquid(bool) { _delta.y += 0.04F; }
+	// LivingEntity.getBaseExperienceReward: the experience it leaves when a player kills it
+	virtual int	  baseExperienceReward() { return 0; }
+	// LivingEntity.getEffectiveGravity: slow falling caps it while falling
+	double		 effectiveGravity() const;
+	// LivingEntity.getDamageAfterMagicAbsorb: resistance (enchantments aren't ported for mobs)
+	virtual float damageAfterMagicAbsorb(const Combat::DamageSource& source, float amount, int damageType) const;
+	void		 setSharedFlag(int flag, bool value);
 	virtual void tickDeath();
 	virtual void dropAllDeathLoot(const Combat::DamageSource& source);
-	void		 actuallyHurt(const Combat::DamageSource& source, float amount, int damageType);
+	virtual void actuallyHurt(const Combat::DamageSource& source, float amount, int damageType);
 	bool		 causeFallDamage(double distance, float multiplier) override;
 	void		 checkFallDamage(double dy, bool onGround, const BlockPos& onPos) override;
 	void		 onBelowWorld() override;
@@ -217,14 +328,25 @@ class LivingEntity : public Entity {
 	// Burning, lava and water from the blocks it is inside (the fire and fluid effects of applyEffectsFromBlocks)
 	void		 applyFireEffectsFromBlocks();
 	void		 pushEntities();
+	// LivingEntity.getWaterSlowDown: how much of its speed it keeps in water each tick
+	virtual float waterSlowDown() const { return 0.8F; }
+	// LivingEntity.doPush: another entity it touches (iron golems pick monsters as targets)
+	virtual void doPush(Entity&) {}
+	// LivingEntity.decreaseAirSupply returning the same air: it never drowns (iron golems)
+	virtual bool keepsAirSupply() const { return false; }
 	// LivingEntity.onClimbable: in a climbable block (spiders: against a wall)
 	virtual bool onClimbable();
 	// Sounds of its type: "minecraft:entity.<type>.<name>" when the game has one, else the fallback
 	std::string	 typeSound(const char* name, const char* fallback) const;
 	void		 playSound(const std::string& sound, float volume, float pitch);
-	float		 voicePitch();
+	// LivingEntity.getVoicePitch (higher for babies) and getSoundVolume
+	virtual float voicePitch();
+	virtual float soundVolume() const { return 1.0F; }
 	void		 broadcastEntityEvent(int event);
 	virtual void playHurtSound();
+	// LivingEntity.getHurtSound / getDeathSound: its type's by default
+	virtual std::string hurtSoundName() const { return typeSound("hurt", "minecraft:entity.generic.hurt"); }
+	virtual std::string deathSoundName() const { return typeSound("death", "minecraft:entity.generic.death"); }
 
   private:
 	// The resting state: what the last tick ended with, and the chunks whose blocks it depends on

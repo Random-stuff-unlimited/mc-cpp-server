@@ -149,6 +149,37 @@ namespace {
 		if (name == "clear" || name == "kill") return t.literal(name, true, {t.players("targets", false, true)});
 		if (name == "difficulty") return t.literal("difficulty", true, t.choices({"peaceful", "easy", "normal", "hard"}));
 		if (name == "weather") return t.literal("weather", false, t.choices({"clear", "rain", "thunder"}));
+		if (name == "effect") {
+			Buffer registry;
+			registry.writeString("minecraft:mob_effect"); // ResourceArgument's registry
+			int hide	  = t.argument("hideParticles", "brigadier:bool", true);
+			int amplifier = t.argument("amplifier", "brigadier:integer", true, {hide}, [] {
+				Buffer props;
+				props.writeUByte(3); // Min and max
+				props.writeInt(0);
+				props.writeInt(255);
+				return props;
+			}());
+			int seconds = t.argument("seconds", "brigadier:integer", true, {amplifier}, [] {
+				Buffer props;
+				props.writeUByte(3);
+				props.writeInt(1);
+				props.writeInt(1000000);
+				return props;
+			}());
+			int infinite = t.literal("infinite", true, {t.argument("amplifier", "brigadier:integer", true, {t.argument("hideParticles", "brigadier:bool", true)}, [] {
+				Buffer props;
+				props.writeUByte(3);
+				props.writeInt(0);
+				props.writeInt(255);
+				return props;
+			}())});
+			Buffer registry2;
+			registry2.writeString("minecraft:mob_effect");
+			int give  = t.literal("give", false, {t.players("targets", false, false, {t.argument("effect", "minecraft:resource", true, {seconds, infinite}, std::move(registry))})});
+			int clear = t.literal("clear", true, {t.players("targets", false, true, {t.argument("effect", "minecraft:resource", true, {}, std::move(registry2))})});
+			return t.literal("effect", false, {give, clear});
+		}
 		if (name == "help") return t.literal("help", true, {t.askServer(t.word("command", true))});
 		return t.literal(name, true);
 	}

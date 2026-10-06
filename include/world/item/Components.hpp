@@ -39,6 +39,9 @@ namespace Components {
 	// minecraft:potion_contents with only a potion (minecraft:potion id), and the potion of one (-1 if none)
 	std::vector<uint8_t> encodePotion(int potion);
 	int					 decodePotion(const std::vector<uint8_t>& value);
+	// minecraft:suspicious_stew_effects (SuspiciousStewEffects): mob_effect ids and durations
+	std::vector<uint8_t>							   encodeStewEffects(const std::vector<std::pair<int, int>>& effects);
+	std::optional<std::vector<std::pair<int, int>>> decodeStewEffects(const std::vector<uint8_t>& value);
 
 	// The component of a stack, if its patch can be read
 	std::optional<std::vector<uint8_t>> get(const ItemStack& stack, const GameData& gameData, const std::string& name);

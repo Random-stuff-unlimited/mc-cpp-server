@@ -39,6 +39,7 @@ namespace Commands {
 	void registerKill();
 	void registerDifficulty();
 	void registerWeather();
+	void registerEffect();
 } // namespace Commands
 
 #endif

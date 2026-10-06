@@ -26,7 +26,7 @@ namespace {
 	constexpr size_t MAX_FILE_SIZE = 64 * 1024 * 1024; // Uncompressed
 
 	// Values of what the server doesn't simulate yet. Once it does, the value is saved and read like Health
-	constexpr float	  MAX_HEALTH	   = 20;  // LivingEntity.getMaxHealth
+	constexpr float	  MAX_HEALTH	   = 20;  // LivingEntity.getMaxHealth, by default
 	constexpr int	  ENDER_CHEST_SIZE = 27;
 
 	// EquipmentSlot names (EntityEquipment.CODEC) and their slot in the inventory window
@@ -44,6 +44,75 @@ namespace {
 
 	Tag compoundTag(TagCompound compound) { return Tag(std::make_shared<TagCompound>(std::move(compound))); }
 	Tag listTag(TagList list) { return Tag(std::make_shared<TagList>(std::move(list))); }
+
+	// The saved "attributes" (AttributeInstance.Packed list, kept from the file) with the modifiers of the current
+	// effects in place of the saved effects' ("minecraft:effect.*"): the rest isn't simulated and stays as it was
+	void putEffectModifiers(TagCompound& data, const Player& player, const GameData& gameData) {
+		static const char* OPERATIONS[] = {"add_value", "add_multiplied_base", "add_multiplied_total"};
+		TagList			   attributes;
+		if (data.contains("attributes")) {
+			if (auto* saved = std::get_if<std::shared_ptr<TagList>>(&data.at("attributes").data); saved && *saved) attributes = **saved;
+		}
+		auto entryOf = [&](const std::string& id) -> TagCompound* {
+			for (size_t i = 0; i < attributes.size(); i++) {
+				auto* entry = std::get_if<std::shared_ptr<TagCompound>>(&attributes[i].data);
+				if (!entry || !*entry || !(*entry)->contains("id")) continue;
+				auto* name = std::get_if<std::string>(&(*entry)->at("id").data);
+				if (name && *name == id) return entry->get();
+			}
+			return nullptr;
+		};
+		// Saved effect modifiers out
+		for (size_t i = 0; i < attributes.size(); i++) {
+			auto* entry = std::get_if<std::shared_ptr<TagCompound>>(&attributes[i].data);
+			if (!entry || !*entry || !(*entry)->contains("modifiers")) continue;
+			auto* modifiers = std::get_if<std::shared_ptr<TagList>>(&(*entry)->at("modifiers").data);
+			if (!modifiers || !*modifiers) continue;
+			TagList kept;
+			for (size_t m = 0; m < (*modifiers)->size(); m++) {
+				auto* modifier = std::get_if<std::shared_ptr<TagCompound>>(&(**modifiers)[m].data);
+				std::string id;
+				if (modifier && *modifier && (*modifier)->contains("id")) {
+					if (auto* name = std::get_if<std::string>(&(*modifier)->at("id").data)) id = *name;
+				}
+				if (id.rfind("minecraft:effect.", 0) != 0) kept.push_back((**modifiers)[m]);
+			}
+			**entry = TagCompound(**entry);
+			(**entry)["modifiers"] = listTag(std::move(kept));
+		}
+		// The current ones in
+		const GameData::EntityTypeInfo* type = gameData.getEntityType(gameData.getStaticId("minecraft:entity_type", "minecraft:player"));
+		for (const MobEffects::Instance& instance : player.effects().all()) {
+			for (const MobEffects::AttributeTemplate& t : MobEffects::info(instance.effect).modifiers) {
+				TagCompound* entry = entryOf(t.attribute);
+				if (!entry) {
+					auto   created = std::make_shared<TagCompound>();
+					double base	   = 0.0;
+					int attribute = gameData.getStaticId("minecraft:attribute", t.attribute);
+					if (type && attribute >= 0 && static_cast<size_t>(attribute) < type->attributes.size() && !std::isnan(type->attributes[attribute])) {
+						base = type->attributes[attribute];
+					}
+					(*created)["id"]		= std::string(t.attribute);
+					(*created)["base"]		= nbt::TagDouble(base);
+					(*created)["modifiers"] = listTag(TagList());
+					attributes.push_back(Tag(created));
+					entry = created.get();
+				}
+				auto* modifiers = std::get_if<std::shared_ptr<TagList>>(&(*entry)["modifiers"].data);
+				if (!modifiers || !*modifiers) {
+					(*entry)["modifiers"] = listTag(TagList());
+					modifiers			  = std::get_if<std::shared_ptr<TagList>>(&(*entry)["modifiers"].data);
+				}
+				TagCompound modifier;
+				modifier["id"]		  = std::string(t.id);
+				modifier["amount"]	  = nbt::TagDouble(t.amount * (instance.amplifier + 1));
+				modifier["operation"] = std::string(OPERATIONS[static_cast<int>(t.operation)]);
+				(*modifiers)->push_back(compoundTag(std::move(modifier)));
+			}
+		}
+		data.data.erase("attributes");
+		if (attributes.size() > 0) data["attributes"] = listTag(std::move(attributes));
+	}
 
 	// ----- Reading, with the codecs' defaults when a value is missing or of the wrong type -----
 
@@ -160,7 +229,14 @@ namespace PlayerData {
 		data["HurtTime"]		= nbt::TagShort(0);
 		data["HurtByTimestamp"] = nbt::TagInt(0);
 		data["DeathTime"]		= nbt::TagShort(0);
-		putIfMissing(data, "AbsorptionAmount", nbt::TagFloat(0));
+		data["AbsorptionAmount"] = nbt::TagFloat(player.absorptionAmount());
+		data.data.erase("active_effects");
+		if (!player.effects().empty()) {
+			TagList effects;
+			player.effects().saveNbt(effects);
+			data["active_effects"] = listTag(std::move(effects));
+		}
+		putEffectModifiers(data, player, gameData);
 		data["FallFlying"] = nbt::TagByte(0);
 		// EntityEquipment.CODEC: the non-empty slots by name. PlayerEquipment.isEmpty counts the selected item
 		TagCompound equipment;
@@ -268,7 +344,17 @@ data["XpP"]		 = nbt::TagFloat(player.getXpProgress());
 		player.setSeenCredits(boolOr(data, "seenCredits", false));
 
 		// LivingEntity.readAdditionalSaveData
-		combat.health = std::min(floatOr(data, "Health", MAX_HEALTH), MAX_HEALTH);
+		// The effects, then their modifiers (the saved attributes aren't read), then the absorption and the health
+		// within their maximums
+		player.resetAttributes();
+		if (const TagList* effects = list(data, "active_effects")) {
+			player.effects().loadNbt(*effects);
+			player.effects().reapplyModifiers(player);
+		} else {
+			player.effects().clear();
+		}
+		player.setAbsorptionAmount(floatOr(data, "AbsorptionAmount", 0));
+		combat.health = std::min(floatOr(data, "Health", MAX_HEALTH), player.maxHealth());
 		player.setAirSupply(intOr(data, "Air", 300)); // Entity.load
 		combat.dead	  = combat.health <= 0;
 		if (combat.dead) combat.health = 0;
