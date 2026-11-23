@@ -1,13 +1,13 @@
 #ifndef VILLAGERS_HPP
 #define VILLAGERS_HPP
 
+#include "world/entity/Trading.hpp"
 #include "world/entity/mobs/Animal.hpp"
 
 #include <optional>
 
-// AbstractVillager: villagers and wandering traders. Its unhappy counter makes it shake its head on the clients.
-// Trading (MERCHANT_OFFERS, the merchant menu, the offers of each profession) isn't ported yet: a click makes it
-// shake its head
+// AbstractVillager: villagers and wandering traders, merchants. A click opens its trades (the merchant menu) when it
+// has some, else it shakes its head (its unhappy counter, on the clients)
 class AbstractVillager : public AgeableMob {
   public:
 	static constexpr int DATA_UNHAPPY_COUNTER = 16;
@@ -16,19 +16,44 @@ class AbstractVillager : public AgeableMob {
 
 	int	 unhappyCounter() const { return _unhappy; }
 	void setUnhappy();
+
+	// ----- Merchant -----
+
+	// Its offers, made the first time they are asked for (updateTrades)
+	std::vector<MerchantOffer>& offers();
+	// The player trading with it, null if none
+	Player*						tradingPlayer();
+	void						setTradingPlayer(Player* player);
+	bool						isTrading() { return tradingPlayer() != nullptr; }
+	// AbstractVillager.notifyTrade: an offer was used (its experience, the merchant's reaction)
+	virtual void				notifyTrade(MerchantOffer& offer);
+	virtual int					merchantLevel() const { return 0; }
+	virtual int					merchantXp() const { return 0; }
+	virtual bool				showProgressBar() const { return false; }
+	virtual bool				canRestock() const { return false; }
+	// The sound of a trade, and of an item put in a payment slot (yes/no)
+	virtual std::string			tradeSound() const = 0;
+	virtual std::string			notifyTradeSound(bool yes) const = 0;
 	// The mobs villagers flee (VillagerHostilesSensor: zombies, illagers, ravagers, vexes, zoglins)
 	static bool isHostile(Level& level, Actor& actor);
 	using AgeableMob::playSound;
 
 	bool mobInteract(Player& player, int hand) override;
 	bool removeWhenFarAway(double) const override { return false; }
+	void save(Buffer& buf) const override;
+	void load(Buffer& buf) override;
 
   protected:
-	void customServerAiStep() override;
-	void writeData(Buffer& buf, uint32_t mask, bool onlyNonDefault) const override;
+	std::vector<MerchantOffer> _offers;
+
+	// The offers it gets (a villager: two of its level; a wandering trader: its six)
+	virtual void updateTrades() = 0;
+	void		 customServerAiStep() override;
+	void		 writeData(Buffer& buf, uint32_t mask, bool onlyNonDefault) const override;
 
   private:
-	int _unhappy = 0;
+	int		  _unhappy = 0;
+	EntityRef _tradingPlayer;
 };
 
 // Villager: it finds a job (the nearest free job site block gives its profession) and a bed, and lives by the clock:
@@ -68,6 +93,15 @@ class Villager : public AbstractVillager {
 	void						   addFood(int item, int count);
 
 	void							registerGoals() override;
+	void							notifyTrade(MerchantOffer& offer) override;
+	int								merchantLevel() const override { return _villagerLevel; }
+	int								merchantXp() const override { return _villagerXp; }
+	bool							showProgressBar() const override { return true; }
+	bool							canRestock() const override { return true; }
+	std::string						tradeSound() const override { return "minecraft:entity.villager.trade"; }
+	std::string						notifyTradeSound(bool yes) const override { return yes ? "minecraft:entity.villager.yes" : "minecraft:entity.villager.no"; }
+	// Villager.restock: its offers in stock again (twice a day at its job site)
+	void							restock();
 	bool							hurtServer(const Combat::DamageSource& source, float amount) override;
 	bool							wantsToPickUp(const ItemStack& stack) override;
 	std::shared_ptr<SpawnGroupData> finalizeSpawn(DifficultyInstance& difficulty, int reason, std::shared_ptr<SpawnGroupData> group) override;
@@ -82,11 +116,16 @@ class Villager : public AbstractVillager {
 	void writeData(Buffer& buf, uint32_t mask, bool onlyNonDefault) const override;
 
   private:
-	int						_villagerType = 0, _profession = 0, _villagerLevel = 1;
+	int						_villagerType = 0, _profession = 0, _villagerLevel = 1, _villagerXp = 0;
+	int						_updateMerchantTimer = 0, _restocksToday = 0;
+	int64_t					_lastRestockGameTime = 0, _lastRestockCheckDay = -1;
+	bool					_increaseProfessionLevelOnUpdate = false;
 	std::optional<BlockPos> _jobSite, _home, _meetingPoint, _sleeping;
 	std::vector<ItemStack>	_food;
 	int						_lookCooldown = 0, _breedCooldown = 0;
 
+	void updateTrades() override;
+	void increaseMerchantCareer();
 	void acquirePoi();
 	void releasePoi(std::optional<BlockPos>& pos);
 	void tryBreed();
@@ -104,12 +143,15 @@ class WanderingTrader : public AbstractVillager {
 	void setWanderTarget(const BlockPos& pos) { _wanderTarget = pos; }
 
 	void		registerGoals() override;
+	std::string tradeSound() const override { return "minecraft:entity.wandering_trader.trade"; }
+	std::string notifyTradeSound(bool yes) const override { return yes ? "minecraft:entity.wandering_trader.yes" : "minecraft:entity.wandering_trader.no"; }
 	std::string ambientSoundName() override { return "minecraft:entity.wandering_trader.ambient"; }
 	void		save(Buffer& buf) const override;
 	void		load(Buffer& buf) override;
 
   protected:
 	void customServerAiStep() override;
+	void updateTrades() override;
 
   private:
 	int						_despawnDelay = 48000, _drinkTicks = 0;

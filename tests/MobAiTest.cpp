@@ -9,6 +9,7 @@
 #include "world/entity/mobs/Amphibians.hpp"
 #include "network/buffer.hpp"
 #include "world/entity/mobs/Bosses.hpp"
+#include "world/inventory/MerchantMenu.hpp"
 #include "world/entity/mobs/Camelids.hpp"
 #include "world/entity/mobs/Slime.hpp"
 #include "world/entity/mobs/Creeper.hpp"
@@ -1077,3 +1078,37 @@ TEST(every_mob_ticks_saves_and_loads) {
 	CHECK(loaded > 60);
 }
 
+
+// A librarian's trades open on a click; selecting an offer moves its payment in, taking the result pays and counts
+TEST(villager_trading) {
+	LevelFixture f(1);
+	auto player = addPlayer(f, 1.5, 0.5);
+	f.level->setBlock({3, Y, 0}, f.data.getDefaultBlockState("minecraft:lectern"), Level::UPDATE_ALL);
+	auto* villager = dynamic_cast<Villager*>(spawn(f, "minecraft:villager", {0, Y, 0}));
+	CHECK(villager);
+	if (!villager) return;
+	villager->setBaby(false);
+	f.world->setDayTime(3000);
+	f.tick(60);
+	CHECK(villager->hasJob());
+	// PlayerInventory's slots are the window's: 9-35 the main inventory, 36-44 the hotbar
+	player->inventory().set(9, ItemStack(f.item("minecraft:paper"), 64));
+	player->inventory().set(10, ItemStack(f.item("minecraft:emerald"), 64));
+	player->inventory().set(11, ItemStack(f.item("minecraft:book"), 64));
+	player->setSelectedSlot(8); // An empty hand
+	CHECK(villager->mobInteract(*player, 0));
+	auto* menu = dynamic_cast<MerchantMenu*>(player->openMenuSlot().get());
+	CHECK(menu);
+	if (!menu) return;
+	CHECK(villager->tradingPlayer() == player.get());
+	CHECK_EQ(static_cast<int>(villager->offers().size()), 2);
+	menu->selectTrade(0);
+	CHECK(!menu->slots()[2].item().isEmpty());
+	ItemStack result = menu->slots()[2].item();
+	menu->clicked(2, 0, ClickType::QuickMove);
+	CHECK(villager->offers()[0].uses >= 1);
+	CHECK(villager->merchantXp() > 0);
+	bool got = false;
+	for (int slot = 12; slot <= 44; slot++) got |= player->inventory().get(slot).item == result.item;
+	CHECK(got || result.item == f.item("minecraft:emerald"));
+}

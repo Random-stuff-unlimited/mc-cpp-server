@@ -6,10 +6,12 @@
 #include "world/Combat.hpp"
 #include "world/Level.hpp"
 #include "world/PoiManager.hpp"
+#include "world/entity/ExperienceOrb.hpp"
 #include "world/entity/ItemEntity.hpp"
 #include "world/entity/MobRegistry.hpp"
 #include "world/entity/ai/Goals.hpp"
 #include "world/entity/mobs/Zombie.hpp"
+#include "world/inventory/MerchantMenu.hpp"
 #include "world/item/Components.hpp"
 
 #include <cmath>
@@ -93,6 +95,20 @@ namespace {
 		}
 	};
 
+	// LookAndFollowTradingPlayerSink / TradeWithPlayerGoal: it stays and looks at its customer
+	class TradeWithPlayerGoal : public Goal {
+	  public:
+		explicit TradeWithPlayerGoal(AbstractVillager& merchant) : _merchant(merchant) { setFlags({Flag::Move, Flag::Look, Flag::Jump}); }
+		bool canUse() override { return _merchant.isAlive() && _merchant.tradingPlayer() != nullptr; }
+		void start() override { _merchant.navigation().stop(); }
+		void tick() override {
+			if (Player* player = _merchant.tradingPlayer()) _merchant.lookControl().setLookAt(*player);
+		}
+
+	  private:
+		AbstractVillager& _merchant;
+	};
+
 	// A sleeping villager does nothing else
 	class VillagerSleepingGoal : public Goal {
 	  public:
@@ -153,14 +169,67 @@ void AbstractVillager::setUnhappy() {
 }
 
 bool AbstractVillager::mobInteract(Player& player, int hand) {
-	// Trading isn't ported: it shakes its head (as vanilla does without offers)
-	if (!player.getStackInHand(hand).isEmpty() && player.getStackInHand(hand).item == _level.gameData().getStaticId("minecraft:item", "minecraft:villager_spawn_egg")) {
+	// Villager.mobInteract: spawn eggs and name tags as usual; else its trades, or a shake of the head
+	const ItemStack& held = player.getStackInHand(hand);
+	if (!held.isEmpty() && (_level.gameData().getSpawnEggType(held.item) >= 0 || held.item == _level.gameData().getStaticId("minecraft:item", "minecraft:name_tag"))) {
 		return AgeableMob::mobInteract(player, hand);
 	}
-	if (hand != 0 || !isAlive()) return false;
-	lookControl().setLookAt(player);
-	setUnhappy();
+	if (!isAlive() || isBaby() || isTrading() || player.isShiftKeyDown()) {
+		if (hand == 0 && isAlive()) setUnhappy();
+		return hand == 0;
+	}
+	if (hand == 1) return false; // The main hand opens it
+	if (offers().empty()) {
+		setUnhappy();
+		return true;
+	}
+	navigation().stop();
+	Menus::openMerchant(player, _level, *this);
 	return true;
+}
+
+std::vector<MerchantOffer>& AbstractVillager::offers() {
+	if (_offers.empty()) updateTrades();
+	return _offers;
+}
+
+Player* AbstractVillager::tradingPlayer() {
+	Actor*	actor  = _tradingPlayer.isSet() ? _level.actorByRef(_tradingPlayer) : nullptr;
+	Player* player = actor ? actor->asPlayer() : nullptr;
+	return player && player->isAlive() ? player : nullptr;
+}
+
+void AbstractVillager::setTradingPlayer(Player* player) {
+	if (player) {
+		_tradingPlayer = EntityRef(*player);
+	} else {
+		_tradingPlayer.clear();
+	}
+}
+
+void AbstractVillager::notifyTrade(MerchantOffer& offer) {
+	// AbstractVillager.notifyTrade: one more use, the trade sound, and some experience for the player (rewardTradeXp)
+	offer.uses++;
+	_ambientSoundTime = -ambientSoundInterval();
+	playSound(tradeSound(), 1.0F, 1.0F);
+	if (offer.rewardExp) {
+		if (auto orb = ExperienceOrb::create(_level, {_position.x, _position.y + 0.5, _position.z}, 3 + _random.nextInt(4))) _level.entities().add(std::move(orb));
+	}
+}
+
+void AbstractVillager::save(Buffer& buf) const {
+	AgeableMob::save(buf);
+	buf.writeUByte(SAVE_VERSION);
+	buf.writeVarInt(static_cast<int>(_offers.size()));
+	for (const MerchantOffer& offer : _offers) offer.save(buf);
+}
+
+void AbstractVillager::load(Buffer& buf) {
+	AgeableMob::load(buf);
+	if (buf.readUByte() != SAVE_VERSION) throw std::runtime_error("unknown merchant data version");
+	_offers.clear();
+	int count = buf.readVarInt();
+	for (int i = 0; i < count; i++) _offers.push_back(MerchantOffer::load(buf));
 }
 
 void AbstractVillager::customServerAiStep() {
@@ -183,6 +252,7 @@ Villager::Villager(Level& level, int typeId) : AbstractVillager(level, typeId) {
 
 void Villager::registerGoals() {
 	_goalSelector.addGoal(0, std::make_unique<VillagerSleepingGoal>(*this));
+	_goalSelector.addGoal(1, std::make_unique<TradeWithPlayerGoal>(*this));
 	_goalSelector.addGoal(1, std::make_unique<FloatGoal>(*this));
 	_goalSelector.addGoal(2, std::make_unique<AvoidEntityGoal>(*this, "LivingEntity", 8.0F, 0.6, 0.6,
 															   [this](Actor& actor) { return AbstractVillager::isHostile(_level, actor); }));
@@ -314,7 +384,10 @@ void Villager::acquirePoi() {
 		const PoiManager::Record* record = poi.get(*_jobSite);
 		if (!record || static_cast<int>(record->type) >= PROFESSION_COUNT || PROFESSIONS[static_cast<int>(record->type)] != professionName()) {
 			_jobSite.reset();
-			if (_villagerLevel <= 1) setVillagerData(_villagerType, _level.gameData().getStaticId("minecraft:villager_profession", "minecraft:none"), 1);
+			if (_villagerLevel <= 1 && _villagerXp == 0) {
+				setVillagerData(_villagerType, _level.gameData().getStaticId("minecraft:villager_profession", "minecraft:none"), 1);
+				_offers.clear();
+			}
 		}
 	}
 	if (_home && !poi.get(*_home)) _home.reset();
@@ -356,6 +429,40 @@ void Villager::acquirePoi() {
 	if (!_meetingPoint) _meetingPoint = nearest(PoiManager::Type::Meeting, PoiManager::Occupancy::Any);
 }
 
+void Villager::updateTrades() {
+	// Villager.updateTrades: two offers of each level it reached
+	if (!hasJob()) return;
+	for (int level = static_cast<int>(_offers.size()) / 2 + 1; level <= _villagerLevel; level++) {
+		VillagerTrades::addOffers(_level, _random, professionName(), level, _offers);
+	}
+}
+
+void Villager::notifyTrade(MerchantOffer& offer) {
+	AbstractVillager::notifyTrade(offer);
+	// Villager.rewardTradeXp: its own experience; enough of it, and it will reach the next level (5 more for the player)
+	_villagerXp += offer.xp;
+	if (_villagerLevel < 5 && _villagerXp >= VillagerTrades::xpForLevel(_villagerLevel + 1)) {
+		_updateMerchantTimer			 = 40;
+		_increaseProfessionLevelOnUpdate = true;
+		if (auto orb = ExperienceOrb::create(_level, {_position.x, _position.y + 0.5, _position.z}, 5)) _level.entities().add(std::move(orb));
+	}
+	markData(DATA_VILLAGER_DATA);
+}
+
+void Villager::increaseMerchantCareer() {
+	setVillagerData(_villagerType, _profession, _villagerLevel + 1);
+	updateTrades();
+}
+
+void Villager::restock() {
+	for (MerchantOffer& offer : _offers) {
+		offer.updateDemand();
+		offer.resetUses();
+	}
+	_lastRestockGameTime = _level.getGameTime();
+	_restocksToday++;
+}
+
 void Villager::tryBreed() {
 	// VillagerMakeLove: two willing adults (enough food) and a free bed: a baby
 	if (isBaby() || _age != 0 || isSleeping() || foodPoints() < BREEDING_FOOD) return;
@@ -386,6 +493,25 @@ void Villager::tryBreed() {
 }
 
 void Villager::customServerAiStep() {
+	// Leveling up, once its customer left: new offers and a moment of regeneration
+	if (!isTrading() && _updateMerchantTimer > 0 && --_updateMerchantTimer <= 0) {
+		if (_increaseProfessionLevelOnUpdate) {
+			increaseMerchantCareer();
+			_increaseProfessionLevelOnUpdate = false;
+		}
+		addEffect({MobEffects::Regeneration, 200, 0});
+	}
+	// Villager.shouldRestock: at its job site during work, at most twice a day, 2 minutes apart
+	int64_t day = _level.getDayTime() / 24000;
+	if (day != _lastRestockCheckDay) {
+		_lastRestockCheckDay = day;
+		_restocksToday		 = 0;
+	}
+	if (activity() == Activity::Work && _jobSite && _restocksToday < 2 && _level.getGameTime() - _lastRestockGameTime > 2400) {
+		Vec3 site{_jobSite->x + 0.5, static_cast<double>(_jobSite->y), _jobSite->z + 0.5};
+		bool used = std::any_of(_offers.begin(), _offers.end(), [](const MerchantOffer& offer) { return offer.uses > 0; });
+		if (used && (site - _position).lengthSqr() < 2.5 * 2.5) restock();
+	}
 	if (_sleeping) {
 		navigation().stop();
 		if (activity() != Activity::Rest || !_home || *_home != *_sleeping) stopSleeping();
@@ -452,6 +578,7 @@ void Villager::save(Buffer& buf) const {
 	buf.writeString(data.getStaticName("minecraft:villager_type", _villagerType));
 	buf.writeString(data.getStaticName("minecraft:villager_profession", _profession));
 	buf.writeVarInt(_villagerLevel);
+	buf.writeVarInt(_villagerXp);
 	for (const std::optional<BlockPos>* pos : {&_jobSite, &_home}) {
 		buf.writeBool(pos->has_value());
 		if (*pos) buf.writeLong((*pos)->asLong());
@@ -470,6 +597,7 @@ void Villager::load(Buffer& buf) {
 	int				type	   = data.getStaticId("minecraft:villager_type", buf.readString());
 	int				profession = data.getStaticId("minecraft:villager_profession", buf.readString());
 	int				level	   = buf.readVarInt();
+	_villagerXp				   = buf.readVarInt();
 	setVillagerData(type >= 0 ? type : _villagerType, profession >= 0 ? profession : _profession, level);
 	for (std::optional<BlockPos>* pos : {&_jobSite, &_home}) {
 		if (buf.readBool()) {
@@ -492,6 +620,7 @@ WanderingTrader::WanderingTrader(Level& level, int typeId) : AbstractVillager(le
 
 void WanderingTrader::registerGoals() {
 	_goalSelector.addGoal(0, std::make_unique<FloatGoal>(*this));
+	_goalSelector.addGoal(1, std::make_unique<TradeWithPlayerGoal>(*this));
 	_goalSelector.addGoal(1, std::make_unique<AvoidEntityGoal>(*this, "LivingEntity", 8.0F, 0.5, 0.5,
 															   [this](Actor& actor) { return AbstractVillager::isHostile(_level, actor); }));
 	_goalSelector.addGoal(1, std::make_unique<PanicGoal>(*this, 0.5));
@@ -533,6 +662,8 @@ void WanderingTrader::customServerAiStep() {
 		_drinkTicks = 32;
 	}
 }
+
+void WanderingTrader::updateTrades() { VillagerTrades::addWanderingTraderOffers(_level, _random, _offers); }
 
 void WanderingTrader::save(Buffer& buf) const {
 	AbstractVillager::save(buf);

@@ -1,3 +1,4 @@
+#include "world/inventory/MerchantMenu.hpp"
 #include "world/entity/mobs/Horses.hpp"
 #include "world/entity/Fireballs.hpp"
 #include "PacketIds.hpp"
@@ -190,6 +191,12 @@ void handlePlayState(Packet* packet, Server& server) {
 		packet->getData().readVarInt(); // Container id
 		std::string name = packet->getData().readString(50);
 		if (auto* anvil = dynamic_cast<AnvilMenu*>(&Menus::current(*player, server.levelOf(*player)))) anvil->renameItem(name);
+		break;
+	}
+	case PacketId::Play::Serverbound::SELECT_TRADE: {
+		// The offer clicked in the merchant's list
+		int index = packet->getData().readVarInt();
+		if (auto* merchant = dynamic_cast<MerchantMenu*>(&Menus::current(*player, server.levelOf(*player)))) merchant->selectTrade(index);
 		break;
 	}
 	case PacketId::Play::Serverbound::PLACE_RECIPE:
