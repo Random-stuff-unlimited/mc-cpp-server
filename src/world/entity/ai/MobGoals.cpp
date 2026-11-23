@@ -1,5 +1,6 @@
 #include "world/entity/Mob.hpp"
 #include "world/entity/MobRegistry.hpp"
+#include "world/entity/mobs/Amphibians.hpp"
 #include "world/entity/mobs/Bat.hpp"
 #include "world/entity/mobs/Blaze.hpp"
 #include "world/entity/mobs/Camelids.hpp"
@@ -112,4 +113,7 @@ void registerVanillaMobs(MobRegistry& registry) {
 	registry.setFactory("minecraft:goat", factory<Goat>());
 	registry.setFactory("minecraft:armadillo", factory<Armadillo>());
 	registry.setFactory("minecraft:sniffer", factory<Sniffer>());
+	registry.setFactory("minecraft:frog", factory<Frog>());
+	registry.setFactory("minecraft:tadpole", factory<Tadpole>());
+	registry.setFactory("minecraft:axolotl", factory<Axolotl>());
 }

@@ -6,7 +6,9 @@
 #include "world/Combat.hpp"
 #include "world/entity/ItemEntity.hpp"
 #include "world/entity/Mob.hpp"
+#include "world/entity/mobs/Amphibians.hpp"
 #include "world/entity/mobs/Camelids.hpp"
+#include "world/entity/mobs/Slime.hpp"
 #include "world/entity/mobs/Creeper.hpp"
 #include "world/entity/mobs/Critters.hpp"
 #include "world/entity/mobs/FarmAnimals.hpp"
@@ -644,4 +646,79 @@ TEST(sniffer_digs_seed) {
 		});
 	}
 	CHECK(found);
+}
+
+namespace {
+	// A pool of water, 9 by 9 and 3 deep, dug into the ground around (0, 0)
+	void digPool(LevelFixture& f) {
+		int water = f.data.getDefaultBlockState("minecraft:water");
+		for (int x = -4; x <= 4; x++) {
+			for (int z = -4; z <= 4; z++) {
+				for (int y = Y - 3; y < Y; y++) f.level->setBlock({x, y, z}, water, Level::UPDATE_ALL);
+			}
+		}
+	}
+
+	int countOf(LevelFixture& f, const char* type) {
+		int id = f.data.getStaticId("minecraft:entity_type", type), count = 0;
+		f.level->entities().forEach([&](Entity& entity) {
+			if (entity.typeId() == id && !entity.isRemoved()) count++;
+		});
+		return count;
+	}
+} // namespace
+
+// A frog catches a tiny slime with its tongue
+TEST(frog_eats_tiny_slime) {
+	LevelFixture f(1);
+	Mob*   frog	 = spawn(f, "minecraft:frog", {0, Y, 0});
+	auto*  slime = dynamic_cast<Slime*>(spawn(f, "minecraft:slime", {4, Y, 0}));
+	CHECK(frog && slime);
+	if (!frog || !slime) return;
+	frog->setBaby(false);
+	slime->setSize(1, true);
+	slime->goalSelector().removeAllGoals();
+	int id = slime->id();
+	for (int t = 0; t < 600 && f.level->actorById(id) && f.level->actorById(id)->isAlive(); t++) f.tick();
+	CHECK(!f.level->actorById(id) || !f.level->actorById(id)->isAlive());
+}
+
+// A tadpole about to grow up turns into a frog
+TEST(tadpole_grows_into_frog) {
+	LevelFixture f(1);
+	digPool(f);
+	auto* tadpole = dynamic_cast<Tadpole*>(spawn(f, "minecraft:tadpole", {0, Y - 2, 0}));
+	CHECK(tadpole);
+	if (!tadpole) return;
+	tadpole->setAge(Tadpole::MAX_AGE - 10);
+	f.tick(20);
+	CHECK_EQ(countOf(f, "minecraft:tadpole"), 0);
+	CHECK_EQ(countOf(f, "minecraft:frog"), 1);
+}
+
+// An axolotl hunts a cod in the water
+TEST(axolotl_hunts_fish) {
+	LevelFixture f(1);
+	digPool(f);
+	Mob* axolotl = spawn(f, "minecraft:axolotl", {-2, Y - 2, 0});
+	Mob* cod	 = spawn(f, "minecraft:cod", {2, Y - 2, 0});
+	CHECK(axolotl && cod);
+	if (!axolotl || !cod) return;
+	axolotl->setBaby(false);
+	cod->goalSelector().removeAllGoals();
+	float health = cod->health();
+	for (int t = 0; t < 600 && cod->isAlive() && cod->health() >= health; t++) f.tick();
+	CHECK(!cod->isAlive() || cod->health() < health);
+}
+
+// Out of the water, an axolotl dries out
+TEST(axolotl_dries_out) {
+	LevelFixture f(1);
+	Mob* axolotl = spawn(f, "minecraft:axolotl", {0, Y, 0});
+	CHECK(axolotl);
+	if (!axolotl) return;
+	axolotl->setAirSupply(5);
+	float health = axolotl->health();
+	f.tick(40);
+	CHECK(axolotl->health() < health);
 }
