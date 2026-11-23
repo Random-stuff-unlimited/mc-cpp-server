@@ -46,35 +46,51 @@ Implémentées : `tp`, `gamemode`/`gm`, `spawn`, `setworldspawn`, `spawnpoint`, 
 
 ## Mobs & IA
 
-Solide : goals (19), pathfinding, équipement (`SET_EQUIPMENT`), élevage (amour/bébés/nourriture), spawn naturel,
-despawn, conversion (`convertTo`), combat à distance (flèches + boules de feu), vol (bat/blaze), sauts
-(slime/rabbit), grimpe (araignée). Mobs spécifiques : zombie/husk/drowned, creeper, spider/cave spider, enderman,
-slime/magma cube, cow/pig/chicken/sheep/rabbit, skeleton/stray, wolf (apprivoisable), zombified piglin, polar bear,
-bat, blaze, hoglin, iron golem, snow golem, silverfish.
+Les 85 types de mobs vanilla ont leur classe et leur IA (`src/world/entity/mobs`, enregistrés dans
+`src/world/entity/ai/MobGoals.cpp`) ; un test les fait tous spawner, tourner, sauvegarder et recharger. Les mobs à
+« Brain » vanilla sont approchés par des goals. Infra : goals, pathfinding sol/eau/amphibie/**vol** (`FlyNodeEvaluator`,
+`FlyingPathNavigation`, `FlyingMoveControl`, `Entity::setNoGravity`), `RangedCrossbowAttackGoal` partagé, barre de boss
+(`BossBar`, `BOSS_EVENT`), ids consécutifs pour les entités à parties (`IdManager::allocateRange`).
 
-- [ ] Mobs « brain » : villageois (jobs, horaires, commerce `MERCHANT_OFFERS`), piglins (bartering), axolotls, grenouilles, renards
-- [ ] Mobs volants restants : ghast (fireball + vol), phantom (plonge), perroquet (perchoir), bee (ruche)
-- [ ] Mobs aquatiques : navigation sous-marine (squid, poissons, guardian, dauphin), trident du drowned
-- [ ] Boss : Wither et Ender Dragon (`BOSS_EVENT`, combat multi-segment, invocations, drops)
-- [ ] Mobs emblématiques : witch (potions), zombie villager, cheval/montures, ocelot/chat, panda, golem de cuivre, allay
-- [ ] Montures/apprivoisement étendus : chevaux, chats, perroquets, selles ; laisses (lead) ; loup : protéger son maître
-      (`OwnerHurtByTargetGoal`), élevage, changement de couleur du collier
-- [ ] Comportements : creeper chargé (foudre), conversion zombie→villageois, `CrossbowAttackGoal`, flèches qui restent plantées
+- [x] Monstres : zoglin, giant, hoglin (animal, zombifie hors du Nether), breeze (charges de vent, sauts), creaking
+      (figé quand on le regarde), shulker (balles à lévitation, téléportation), warden (vibrations, colère, rayon sonique,
+      obscurité, émerge/creuse)
+- [x] Illagers : vindicator, pillager (arbalète), evoker (crocs, vex, wololo), illusioner, vex, ravager
+- [x] Animaux : llama/trader llama (crachat), camel (s'assoit, selle sans dressage), goat (coup de tête), parrot,
+      bee (pollinisation, miel, cultures, piqûre), armadillo, sniffer (graines anciennes, œuf), frog/tadpole, axolotl
+- [x] Aides : allay (ramène les objets), golem de cuivre (trie les coffres de cuivre, oxydation), happy ghast (harnais)
+- [x] Piglins (troc, or, arbalète/épée, zombification), piglin brute
+- [x] Villageois (métier par poste de travail, lit, emploi du temps, sommeil, fuite, reproduction), wandering trader
+- [x] Boss : wither (invocation par motif, 3 têtes, crânes, barre de boss), ender dragon (phases de vol, charge,
+      boules de feu, atterrissage, mort, parties)
+- [ ] Commerce villageois : `MERCHANT_OFFERS`, `SELECT_TRADE`, menu marchand, offres par métier/niveau, XP de métier
+- [ ] Villageois : ragots, fermiers (récolte/plantation), invocation de golems de fer, conversion par les zombies
+- [ ] Éclosion des œufs (frai de grenouille, œufs de tortue et de renifleur) : comportements de blocs manquants
+- [ ] Ruches : abeilles qui entrent/sortent (block entity des occupants), fumée, récolte du miel
+- [ ] Dragon : cristaux de l'End (entité), combat de l'End (`EndDragonFight`), portail de sortie, œuf ; dégâts par
+      partie touchée (tête/corps)
+- [ ] Spawners : marchand ambulant (`WanderingTraderSpawner`), patrouilles et raids (bannières, vagues), golems
+      (citrouille + fer/neige/cuivre)
+- [ ] Montures/apprivoisement étendus : inventaire des chevaux/lamas (`HORSE_SCREEN_OPEN`), caravanes et laisses,
+      perroquets sur l'épaule, plusieurs passagers (happy ghast, chameau)
+- [ ] Comportements : creeper chargé (foudre), danse des piglins/allays (jukebox), duplication d'allay, piglins chasseurs
+      de hoglins et colère aux coffres ouverts, cornes de chèvre, sauts longs (chèvre, grenouille), dash du chameau
 - [ ] Réglages de spawn : caps par dimension, spawn par biome (tableaux), `SpawnPlacements` étendus, groupes
 - [ ] Sons par type (ambient/hurt/death/step) complets
 
 ## Villageois & commerce
 
-- [ ] IA villageoise (professions, emplois, horaires, dormir)
+- [x] IA villageoise (professions, emplois, horaires, dormir)
 - [ ] Commerce : `MERCHANT_OFFERS`, `SELECT_TRADE`, offres par profession et niveau
-- [ ] Golem de fer, reproduction villageoise
-- [ ] Viande de ravitaillement, moissons, stockage communautaire
+- [ ] Golem de fer invoqué par les villageois
+- [ ] Fermiers : moissons, partage de nourriture
 
 ## Boss
 
-- [ ] Wither : invocation (3 têtes de wither + sable des âmes), `BOSS_EVENT`, attaques, drop du Nether Star
-- [ ] Ender Dragon : combat de l'End, cristaux de l'End, `BOSS_EVENT`, porte de sortie
-- [ ] Particules/sons propres aux boss, récompenses (dragon egg, gateway)
+- [x] Wither : invocation (3 têtes de wither + sable des âmes), `BOSS_EVENT`, attaques, drop du Nether Star (loot table)
+- [x] Ender Dragon : vol, charge, boules de feu, atterrissage, `BOSS_EVENT`, mort
+- [ ] Ender Dragon : cristaux de l'End, combat de l'End, portail de sortie, œuf
+- [ ] Souffle persistant du dragon (nuage d'effet de zone), fioles de souffle
 
 ## Véhicules & montures
 
@@ -126,6 +142,9 @@ bat, blaze, hoglin, iron golem, snow golem, silverfish.
 - [ ] Horloge de sauvegarde plus fine, sauvegarde des block entities (partiel)
 
 ## Qualité / infra
+
+- [ ] Tests d'IA instables par moments (hasard du niveau non fixé, chunks chargés en asynchrone) : `strider_stands_on_lava`,
+      `fish_swims_and_suffocates_on_land` ont déjà échoué une fois sur plusieurs passes ; graine du `Level` à fixer en test
 
 - [ ] Corriger `make debug` : `-DDEBUG` (Makefile) entre en collision avec `enum LogLevel { DEBUG, ... }`
       (`include/logger.hpp:13`) → renommer l'enum ou le flag
