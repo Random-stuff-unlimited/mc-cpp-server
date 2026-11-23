@@ -10,6 +10,7 @@
 #include "network/buffer.hpp"
 #include "world/entity/mobs/Bosses.hpp"
 #include "world/inventory/MerchantMenu.hpp"
+#include "world/blocks/Eggs.hpp"
 #include "world/entity/mobs/Camelids.hpp"
 #include "world/entity/mobs/Slime.hpp"
 #include "world/entity/mobs/Creeper.hpp"
@@ -1111,4 +1112,25 @@ TEST(villager_trading) {
 	bool got = false;
 	for (int slot = 12; slot <= 44; slot++) got |= player->inventory().get(slot).item == result.item;
 	CHECK(got || result.item == f.item("minecraft:emerald"));
+}
+
+// Frogspawn on water hatches into tadpoles; a sniffer egg cracks twice and hatches a snifflet
+TEST(eggs_hatch) {
+	LevelFixture f(1);
+	digPool(f);
+	BlockPos spawnPos{0, Y, 0};
+	int		 frogspawn = f.data.getDefaultBlockState("minecraft:frogspawn");
+	f.level->setBlock(spawnPos, frogspawn, Level::UPDATE_ALL);
+	CHECK_EQ(f.level->getBlockState(spawnPos), frogspawn);
+	FrogspawnBlock{}.tick(*f.level, spawnPos, frogspawn); // Its scheduled tick, without waiting 10 minutes
+	f.tick();
+	CHECK(f.level->blocks().isAir(f.level->getBlockState(spawnPos)));
+	CHECK(countOf(f, "minecraft:tadpole") >= 2);
+
+	BlockPos eggPos{6, Y, 6};
+	f.level->setBlock(eggPos, f.data.getDefaultBlockState("minecraft:sniffer_egg"), Level::UPDATE_ALL);
+	for (int i = 0; i < 3; i++) SnifferEggBlock{}.tick(*f.level, eggPos, f.level->getBlockState(eggPos));
+	f.tick();
+	CHECK(f.level->blocks().isAir(f.level->getBlockState(eggPos)));
+	CHECK_EQ(countOf(f, "minecraft:sniffer"), 1);
 }
