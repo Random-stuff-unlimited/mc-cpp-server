@@ -74,6 +74,18 @@ class LookControl {
 	static float rotateTowards(float from, float to, float maxDelta) { return from + Mth::clamp(Mth::degreesDifference(from, to), -maxDelta, maxDelta); }
 };
 
+// FlyingMoveControl: flies toward the wanted position (no gravity meanwhile), pitching up or down at most maxTurn
+// degrees; once there, gravity is back unless it hovers in place
+class FlyingMoveControl : public MoveControl {
+  public:
+	FlyingMoveControl(Mob& mob, int maxTurn, bool hoversInPlace) : MoveControl(mob), _maxTurn(maxTurn), _hoversInPlace(hoversInPlace) {}
+	void tick() override;
+
+  private:
+	int	 _maxTurn;
+	bool _hoversInPlace;
+};
+
 // SmoothSwimmingMoveControl: swims toward the wanted position, turning and pitching smoothly (dolphins, axolotls,
 // frogs, tadpoles); slower out of the water
 class SmoothSwimmingMoveControl : public MoveControl {

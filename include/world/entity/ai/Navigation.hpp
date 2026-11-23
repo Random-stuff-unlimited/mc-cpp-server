@@ -160,6 +160,21 @@ class AmphibiousPathNavigation : public PathNavigation {
 	virtual bool				prefersShallowSwimming() const { return false; }
 };
 
+// FlyingPathNavigation: mobs that fly; straight to the target when nothing is in the way
+class FlyingPathNavigation : public PathNavigation {
+  public:
+	using PathNavigation::PathNavigation;
+	bool isStableDestination(const BlockPos& pos) override;
+	bool canNavigateGround() const override { return false; }
+
+  protected:
+	std::unique_ptr<PathFinder> createPathFinder(int maxVisitedNodes) override;
+	Vec3						getTempMobPos() override;
+	bool						canUpdatePath() override { return true; }
+	double						getGroundY(const Vec3& position) override { return position.y; }
+	bool						canMoveDirectly(const Vec3& from, const Vec3& to) override;
+};
+
 // WallClimberNavigation: spiders, which climb straight to where they couldn't find a path to
 class WallClimberNavigation : public GroundPathNavigation {
   public:

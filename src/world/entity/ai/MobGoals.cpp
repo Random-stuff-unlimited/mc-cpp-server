@@ -11,6 +11,7 @@
 #include "world/entity/mobs/Enderman.hpp"
 #include "world/entity/mobs/FarmAnimals.hpp"
 #include "world/entity/mobs/Felines.hpp"
+#include "world/entity/mobs/FlyingAnimals.hpp"
 #include "world/entity/mobs/Fox.hpp"
 #include "world/entity/mobs/Ghast.hpp"
 #include "world/entity/mobs/Guardian.hpp"
@@ -116,4 +117,6 @@ void registerVanillaMobs(MobRegistry& registry) {
 	registry.setFactory("minecraft:frog", factory<Frog>());
 	registry.setFactory("minecraft:tadpole", factory<Tadpole>());
 	registry.setFactory("minecraft:axolotl", factory<Axolotl>());
+	registry.setFactory("minecraft:parrot", factory<Parrot>());
+	registry.setFactory("minecraft:bee", factory<Bee>());
 }

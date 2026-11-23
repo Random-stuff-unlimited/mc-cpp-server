@@ -288,6 +288,27 @@ class SwimNodeEvaluator : public NodeEvaluator {
 	PathType getCachedBlockType(int x, int y, int z);
 };
 
+// FlyNodeEvaluator: mobs that fly (parrots, bees, allays): any open cell around, in all 26 directions, the cells
+// right above the ground counted as walkable
+class FlyNodeEvaluator : public NodeEvaluator {
+  public:
+	void	 prepare(Level& level, Mob& mob) override;
+	void	 done() override;
+	Node*	 getStart() override;
+	Target	 getTarget(double x, double y, double z) override { return getTargetNodeAt(x, y, z); }
+	int		 getNeighbors(Node** neighbors, Node& node) override;
+	PathType getPathTypeOfMob(PathfindingContext& context, int x, int y, int z, Mob& mob) override;
+	PathType getPathType(PathfindingContext& context, int x, int y, int z) override;
+
+  private:
+	std::unordered_map<int64_t, PathType> _pathTypesByPos;
+	float								  _oldWaterCost = 0.0F;
+
+	Node*	 findAcceptedNode(int x, int y, int z);
+	PathType getCachedPathType(int x, int y, int z);
+	bool	 isOpen(Node* node) const { return node && node->costMalus >= 0.0F; }
+};
+
 // AmphibiousNodeEvaluator: mobs at home on land and in water (drowned, turtles, frogs): walking, plus swimming up
 // and down through the water
 class AmphibiousNodeEvaluator : public WalkNodeEvaluator {

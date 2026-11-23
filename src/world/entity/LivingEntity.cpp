@@ -167,6 +167,7 @@ void LivingEntity::updateEffectVisuals() {
 void LivingEntity::playEffectSound(const std::string& sound) { playSound(sound, 1.0F, 1.0F); }
 
 double LivingEntity::effectiveGravity() const {
+	if (_noGravity) return 0.0;
 	double gravity = getAttributeValue(_ids.gravity);
 	return _delta.y <= 0.0 && _effects.has(MobEffects::SlowFalling) ? std::min(gravity, 0.01) : gravity;
 }

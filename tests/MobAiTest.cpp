@@ -12,6 +12,7 @@
 #include "world/entity/mobs/Creeper.hpp"
 #include "world/entity/mobs/Critters.hpp"
 #include "world/entity/mobs/FarmAnimals.hpp"
+#include "world/entity/mobs/FlyingAnimals.hpp"
 #include "world/entity/mobs/Skeleton.hpp"
 #include "world/entity/mobs/Spider.hpp"
 #include "world/entity/mobs/Wolf.hpp"
@@ -721,4 +722,52 @@ TEST(axolotl_dries_out) {
 	float health = axolotl->health();
 	f.tick(40);
 	CHECK(axolotl->health() < health);
+}
+
+// A parrot flies around: it gets off the ground
+TEST(parrot_flies) {
+	LevelFixture f(1);
+	Mob* parrot = spawn(f, "minecraft:parrot", {0, Y, 0});
+	CHECK(parrot);
+	if (!parrot) return;
+	double highest = 0;
+	for (int t = 0; t < 1200 && highest < Y + 1.5; t++) {
+		f.tick();
+		highest = std::max(highest, parrot->position().y);
+	}
+	CHECK(highest >= Y + 1.5);
+}
+
+// A bee pollinates the flower next to its hive and brings the nectar home: the hive's honey level rises
+TEST(bee_makes_honey) {
+	LevelFixture f(1);
+	f.level->setBlock({4, Y, 0}, f.data.getDefaultBlockState("minecraft:beehive"), Level::UPDATE_ALL);
+	f.level->setBlock({1, Y, 2}, f.data.getDefaultBlockState("minecraft:dandelion"), Level::UPDATE_ALL);
+	auto* bee = dynamic_cast<Bee*>(spawn(f, "minecraft:bee", {0, Y + 1, 0}));
+	CHECK(bee);
+	if (!bee) return;
+	bee->setBaby(false);
+	bool honey = false, nectar = false;
+	for (int t = 0; t < 6000 && !honey; t++) {
+		f.tick();
+		nectar |= bee->hasNectar();
+		honey = f.data.getProperty(f.level->getBlockState({4, Y, 0}), "honey_level") != "0";
+	}
+	CHECK(nectar);
+	CHECK(honey);
+}
+
+// Hit by a player, a bee stings back and loses its stinger
+TEST(bee_stings_attacker) {
+	LevelFixture f(1);
+	auto  player = addPlayer(f, 3.5, 0.5);
+	auto* bee	 = dynamic_cast<Bee*>(spawn(f, "minecraft:bee", {0, Y + 1, 0}));
+	CHECK(bee);
+	if (!bee) return;
+	bee->setBaby(false);
+	bee->hurtServer({"minecraft:player_attack", player.get(), nullptr, std::nullopt}, 1.0F);
+	float health = player->combat().health;
+	for (int t = 0; t < 400 && !bee->hasStung(); t++) f.tick();
+	CHECK(bee->hasStung());
+	CHECK(player->combat().health < health);
 }

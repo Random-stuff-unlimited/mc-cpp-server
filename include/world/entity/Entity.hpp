@@ -53,6 +53,9 @@ class Entity : public Actor {
 	// Rotations in degrees (vanilla's yRot / xRot, the head's for living entities)
 	float		yRot() const override { return _yRot; }
 	float		xRot() const { return _xRot; }
+	// Entity.isNoGravity / setNoGravity: no gravity at all (flying mobs while they fly)
+	bool		isNoGravity() const { return _noGravity; }
+	void		setNoGravity(bool noGravity) { _noGravity = noGravity; }
 	void		setYRot(float yRot) { _yRot = yRot; }
 	void		setXRot(float xRot) { _xRot = xRot; }
 	virtual float yHeadRot() const { return 0.0F; }
@@ -173,6 +176,7 @@ class Entity : public Actor {
 	double	_pistonDeltas[3]	= {0.0, 0.0, 0.0};
 	int64_t _pistonDeltasTime	= 0;
 	bool   _noPhysics			= false;
+	bool   _noGravity			= false; // Entity.isNoGravity (DATA_NO_GRAVITY isn't synced: mobs are moved by the server)
 	bool   _firstTick			= true;
 	bool   _wasTouchingWater	= false;
 	int	   _tickCount			= 0;
