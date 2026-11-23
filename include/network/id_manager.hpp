@@ -17,6 +17,8 @@ class IdManager {
 	~IdManager();
 
 	uint32_t allocate();
+	// `count` consecutive fresh ids (never freed ones), the first returned: an entity with parts (the ender dragon's)
+	uint32_t allocateRange(uint32_t count);
 	void	 release(uint32_t id);
 	size_t	 getAllocatedCount() const;
 	size_t	 getFreedCount() const;

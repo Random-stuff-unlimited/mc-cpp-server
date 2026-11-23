@@ -3,6 +3,7 @@
 #include "world/entity/mobs/Amphibians.hpp"
 #include "world/entity/mobs/Bat.hpp"
 #include "world/entity/mobs/Blaze.hpp"
+#include "world/entity/mobs/Bosses.hpp"
 #include "world/entity/mobs/Camelids.hpp"
 #include "world/entity/mobs/Creeper.hpp"
 #include "world/entity/mobs/Critters.hpp"
@@ -136,4 +137,6 @@ void registerVanillaMobs(MobRegistry& registry) {
 	registry.setFactory("minecraft:piglin_brute", factory<PiglinBrute>());
 	registry.setFactory("minecraft:villager", factory<Villager>());
 	registry.setFactory("minecraft:wandering_trader", factory<WanderingTrader>());
+	registry.setFactory("minecraft:wither", factory<WitherBoss>());
+	registry.setFactory("minecraft:ender_dragon", factory<EnderDragon>());
 }

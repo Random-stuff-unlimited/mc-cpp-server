@@ -1,3 +1,4 @@
+#include "world/entity/mobs/Bosses.hpp"
 #include "world/blocks/VanillaBlocks.hpp"
 
 #include "data/GameData.hpp"
@@ -62,6 +63,8 @@ void registerVanillaBlocks(Level& level, const GameData& gameData) {
 	// Vanilla class -> behavior. A block takes the first class it is an instance of: subclasses come first
 	std::vector<std::pair<std::string, Factory>> classes = {
 			{"LiquidBlock", [](int) { return std::make_unique<LiquidBlock>(); }},
+			{"WitherSkullBlock", [](int) { return std::make_unique<WitherSkullBehavior>(); }},
+			{"WitherWallSkullBlock", [](int) { return std::make_unique<WitherSkullBehavior>(); }},
 
 			// Fire, portals, TNT
 			{"SoulFireBlock", make<SoulFireBlock>(context)},

@@ -22,6 +22,13 @@ uint32_t IdManager::allocate() {
 	return newId;
 }
 
+uint32_t IdManager::allocateRange(uint32_t count) {
+	std::lock_guard<std::mutex> lock(_mutex);
+	uint32_t					first = _nextId;
+	_nextId += count;
+	return first;
+}
+
 void IdManager::release(uint32_t id) {
 	std::lock_guard<std::mutex> lock(_mutex);
 	if (id >= _nextId) {

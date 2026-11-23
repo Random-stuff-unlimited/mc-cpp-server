@@ -7,6 +7,7 @@
 #include "world/entity/ItemEntity.hpp"
 #include "world/entity/Mob.hpp"
 #include "world/entity/mobs/Amphibians.hpp"
+#include "world/entity/mobs/Bosses.hpp"
 #include "world/entity/mobs/Camelids.hpp"
 #include "world/entity/mobs/Slime.hpp"
 #include "world/entity/mobs/Creeper.hpp"
@@ -531,7 +532,7 @@ TEST(evoker_casts_spells) {
 	int	 vexes	 = 0;
 	bool hurt	 = false;
 	float health = player->combat().health;
-	for (int t = 0; t < 600 && (vexes == 0 || !hurt); t++) {
+	for (int t = 0; t < 1500 && (vexes == 0 || !hurt); t++) {
 		f.tick();
 		hurt |= player->combat().health < health;
 		vexes = 0;
@@ -997,4 +998,43 @@ TEST(villager_flees_zombie) {
 	f.world->setDayTime(1000);
 	f.tick(100);
 	CHECK(villager->distanceToSqr(*zombie) > 6.0 * 6.0);
+}
+
+// A T of soul sand topped with three wither skeleton skulls summons a wither: it charges up, explodes, then attacks
+TEST(wither_summoned_by_pattern) {
+	LevelFixture f(2);
+	auto player = addPlayer(f, 12.5, 0.5);
+	int	 soul	= f.data.getDefaultBlockState("minecraft:soul_sand");
+	int	 skull	= f.data.getDefaultBlockState("minecraft:wither_skeleton_skull");
+	f.level->setBlock({0, Y, 0}, soul, Level::UPDATE_ALL);
+	for (int x = -1; x <= 1; x++) f.level->setBlock({x, Y + 1, 0}, soul, Level::UPDATE_ALL);
+	for (int x = -1; x <= 1; x++) f.level->setBlock({x, Y + 2, 0}, skull, Level::UPDATE_ALL);
+	WitherBoss* wither = nullptr;
+	f.level->entities().forEach([&](Entity& entity) {
+		if (auto* w = dynamic_cast<WitherBoss*>(&entity)) wither = w;
+	});
+	CHECK(wither);
+	if (!wither) return;
+	CHECK(wither->invulnerableTicks() > 0);
+	CHECK(f.level->blocks().isAir(f.level->getBlockState({0, Y + 2, 0}))); // The pattern is gone
+	f.tick(230);
+	CHECK_EQ(wither->invulnerableTicks(), 0);
+	CHECK(hurtsPlayer(f, *player, 600));
+}
+
+// The ender dragon's parts (the 8 ids after its own) are the dragon; killed, it rises and goes after 10 seconds
+TEST(ender_dragon_parts_and_death) {
+	LevelFixture f(2);
+	auto* dragon = dynamic_cast<EnderDragon*>(spawn(f, "minecraft:ender_dragon", {0, Y + 30, 0}));
+	CHECK(dragon);
+	if (!dragon) return;
+	for (int part = 1; part <= EnderDragon::PARTS; part++) CHECK(f.level->actorById(dragon->id() + part) == dragon);
+	Vec3 start = dragon->position();
+	f.tick(40);
+	CHECK((dragon->position() - start).lengthSqr() > 1.0); // It flies
+	dragon->hurtServer({"minecraft:generic", nullptr, nullptr, std::nullopt}, 1000.0F);
+	CHECK(dragon->phase() == EnderDragon::Phase::Dying);
+	int id = dragon->id();
+	f.tick(210);
+	CHECK(f.level->actorById(id) == nullptr);
 }

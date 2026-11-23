@@ -819,6 +819,10 @@ Actor* Level::actorById(int id) {
 	for (const auto& player : _players) {
 		if (player->getPlayerID() == id && !player->isDisconnected()) return player.get();
 	}
+	// A part of a multipart entity (the ender dragon's): its owner, a few ids before
+	for (int k = 1; k <= 8; k++) {
+		if (Entity* owner = _entities.byId(id - k); owner && owner->partCount() >= k) return owner;
+	}
 	return nullptr;
 }
 

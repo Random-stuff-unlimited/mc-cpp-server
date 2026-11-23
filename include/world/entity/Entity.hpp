@@ -118,6 +118,8 @@ class Entity : public Actor {
 	// Entity.hurtServer: damage from a source. Returns whether it hurt (non-living entities ignore it here)
 	bool hurtServer(const Combat::DamageSource&, float) override { return false; }
 	virtual bool isLiving() const { return false; }
+	// The parts that follow it on the clients (EnderDragonPart), with the ids right after its own
+	virtual int	 partCount() const { return 0; }
 	// Entity.push(Entity) needs it: pushed by the entities it touches
 	virtual bool isPushable() const { return false; }
 	// Entity.push(x, y, z)
