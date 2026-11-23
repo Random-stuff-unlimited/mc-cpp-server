@@ -1,4 +1,5 @@
 #include "world/EndDragonFight.hpp"
+#include "world/VillageEvents.hpp"
 #include "world/Level.hpp"
 #include "world/NaturalSpawner.hpp"
 
@@ -76,6 +77,7 @@ Level::Level(Server& server, World& world, const GameData& gameData)
 	if (!_dimensionType) throw std::runtime_error("Unknown dimension type " + world.getDimensionName());
 	_ultraWarm		   = _dimensionType->ultraWarm;
 	_poi			   = std::make_unique<PoiManager>(gameData, world.directory() / "poi.dat");
+	if (_dimensionType->hasRaids) _villageEvents = std::make_unique<VillageEvents>(*this);
 	if (_dimensionType->effects == "minecraft:the_end") _endFight = std::make_unique<EndDragonFight>(*this, world.directory() / "end_fight.dat");
 	_pathTypeCache	   = std::make_unique<PathTypeCache>();
 	_slimeBlock		   = block("minecraft:slime_block");
@@ -986,6 +988,7 @@ void Level::tickChunks() {
 		}
 	}
 	if (_endFight) _endFight->tick();
+	if (_villageEvents) _villageEvents->tick(_mobSpawning && difficulty() != 0);
 	// NaturalSpawner, before the random ticks (ServerChunkCache.tickChunks): monsters unless peaceful
 	if (_mobSpawning && !_players.empty()) NaturalSpawner::tick(*this, true, difficulty() != 0);
 	if (_mobSpawning && difficulty() != 0) tickPhantomSpawner();

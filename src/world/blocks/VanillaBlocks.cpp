@@ -1,3 +1,4 @@
+#include "world/VillageEvents.hpp"
 #include "world/blocks/Eggs.hpp"
 #include "world/entity/mobs/Bosses.hpp"
 #include "world/blocks/VanillaBlocks.hpp"
@@ -66,6 +67,7 @@ void registerVanillaBlocks(Level& level, const GameData& gameData) {
 			{"LiquidBlock", [](int) { return std::make_unique<LiquidBlock>(); }},
 			{"WitherSkullBlock", [](int) { return std::make_unique<WitherSkullBehavior>(); }},
 			{"FrogspawnBlock", [](int) { return std::make_unique<FrogspawnBlock>(); }},
+			{"CarvedPumpkinBlock", [](int) { return std::make_unique<CarvedPumpkinBehavior>(); }},
 			{"SnifferEggBlock", [](int) { return std::make_unique<SnifferEggBlock>(); }},
 			{"WitherWallSkullBlock", [](int) { return std::make_unique<WitherSkullBehavior>(); }},
 

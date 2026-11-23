@@ -13,6 +13,10 @@
 #include "world/blocks/Eggs.hpp"
 #include "world/blockentity/BeehiveBlockEntity.hpp"
 #include "world/EndDragonFight.hpp"
+#include "world/VillageEvents.hpp"
+#include "world/entity/mobs/Illagers.hpp"
+#include "world/entity/mobs/IronGolem.hpp"
+#include "world/entity/mobs/HelperMobs.hpp"
 #include "world/entity/EndCrystal.hpp"
 #include "world/entity/mobs/Camelids.hpp"
 #include "world/entity/mobs/Slime.hpp"
@@ -1179,4 +1183,85 @@ TEST(end_dragon_fight) {
 	BlockPos portal = fight->portalLocation();
 	CHECK(f.data.getStaticName("minecraft:block", f.level->blocks().blockOf(f.level->getBlockState(portal.offset(1, 0, 0)))) == "minecraft:end_portal");
 	CHECK(f.data.getStaticName("minecraft:block", f.level->blocks().blockOf(f.level->getBlockState(portal.offset(0, 4, 0)))) == "minecraft:dragon_egg");
+}
+
+// A carved pumpkin on top of a T of iron blocks makes an iron golem; on two snow blocks a snow golem; on oxidized
+// copper an oxidized copper golem
+TEST(golems_built_from_patterns) {
+	LevelFixture f(1);
+	int pumpkin = f.data.getDefaultBlockState("minecraft:carved_pumpkin");
+	int iron	= f.data.getDefaultBlockState("minecraft:iron_block");
+	f.level->setBlock({0, Y, 0}, iron, Level::UPDATE_ALL);
+	for (int x = -1; x <= 1; x++) f.level->setBlock({x, Y + 1, 0}, iron, Level::UPDATE_ALL);
+	f.level->setBlock({0, Y + 2, 0}, pumpkin, Level::UPDATE_ALL);
+	int snow = f.data.getDefaultBlockState("minecraft:snow_block");
+	f.level->setBlock({6, Y, 0}, snow, Level::UPDATE_ALL);
+	f.level->setBlock({6, Y + 1, 0}, snow, Level::UPDATE_ALL);
+	f.level->setBlock({6, Y + 2, 0}, pumpkin, Level::UPDATE_ALL);
+	f.level->setBlock({-6, Y, 0}, f.data.getDefaultBlockState("minecraft:oxidized_copper"), Level::UPDATE_ALL);
+	f.level->setBlock({-6, Y + 1, 0}, pumpkin, Level::UPDATE_ALL);
+	IronGolem*	 ironGolem	 = nullptr;
+	CopperGolem* copperGolem = nullptr;
+	int			 snowGolems	 = countOf(f, "minecraft:snow_golem");
+	f.level->entities().forEach([&](Entity& entity) {
+		if (auto* golem = dynamic_cast<IronGolem*>(&entity)) ironGolem = golem;
+		if (auto* golem = dynamic_cast<CopperGolem*>(&entity)) copperGolem = golem;
+	});
+	CHECK(ironGolem && ironGolem->isPlayerCreated());
+	CHECK_EQ(snowGolems, 1);
+	CHECK(copperGolem && copperGolem->weather() == CopperGolem::Weather::Oxidized);
+	CHECK(f.level->blocks().isAir(f.level->getBlockState({0, Y + 1, 0})));
+}
+
+// A patrol: its captain carries the banner and leads it far away, the others follow; killing the captain gives Bad Omen
+TEST(patrol_and_bad_omen) {
+	LevelFixture f(2);
+	auto player = addPlayer(f, 30.5, 30.5);
+	player->setGameMode(GameMode::Creative); // Not their target
+	VillageEvents* events = f.level->villageEvents();
+	CHECK(events);
+	if (!events) return;
+	CHECK_EQ(events->spawnPatrol({0, Y, 0}, 3), 3);
+	Raider* captain = nullptr;
+	f.level->entities().forEach([&](Entity& entity) {
+		if (auto* raider = dynamic_cast<Raider*>(&entity); raider && raider->isPatrolLeader()) captain = raider;
+	});
+	CHECK(captain);
+	if (!captain) return;
+	CHECK(captain->patrolTarget().has_value());
+	CHECK(!captain->getItemBySlot(EquipmentSlot::Head).isEmpty());
+	Vec3 start = captain->position();
+	f.tick(200);
+	CHECK((captain->position() - start).horizontalDistanceSqr() > 4.0);
+	player->setGameMode(GameMode::Survival);
+	captain->hurtServer({"minecraft:player_attack", player.get(), nullptr, std::nullopt}, 1000.0F);
+	CHECK(player->hasEffect(MobEffects::BadOmen));
+}
+
+// Bad Omen in a village: Raid Omen, then the raid; its first wave comes
+TEST(raid_starts_in_village) {
+	LevelFixture f(3);
+	f.level->setBlock({0, Y, 0}, f.data.getDefaultBlockState("minecraft:bell"), Level::UPDATE_ALL);
+	auto* villager = dynamic_cast<Villager*>(spawn(f, "minecraft:villager", {2, Y, 2}));
+	CHECK(villager);
+	if (!villager) return;
+	villager->setBaby(false);
+	f.world->setDayTime(1000);
+	f.tick(60);
+	CHECK(villager->meetingPoint().has_value());
+	CHECK(f.level->isVillage({0, Y, 0}));
+	auto player = addPlayer(f, 1.5, 1.5);
+	player->addEffect({MobEffects::BadOmen, 120000, 0});
+	f.tick(40);
+	CHECK(player->hasEffect(MobEffects::RaidOmen));
+	CHECK(!player->hasEffect(MobEffects::BadOmen));
+	player->removeEffect(MobEffects::RaidOmen); // Its 30 seconds run out (players' effects don't tick in the fixture)
+	f.tick(40);													  // The raid starts
+	VillageEvents* events = f.level->villageEvents();
+	CHECK(events && !events->raids().empty());
+	if (!events || events->raids().empty()) return;
+	Raid* raid = events->raids().begin()->second.get();
+	f.tick(320);
+	CHECK_EQ(raid->groupsSpawned(), 1);
+	CHECK(raid->raidersAlive() > 0);
 }

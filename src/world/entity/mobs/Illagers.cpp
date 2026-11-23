@@ -10,6 +10,7 @@
 #include "world/entity/MobRegistry.hpp"
 #include "world/entity/ai/CrossbowAttack.hpp"
 #include "world/entity/mobs/FarmAnimals.hpp"
+#include "world/VillageEvents.hpp"
 
 #include <cmath>
 #include <stdexcept>
@@ -38,6 +39,79 @@ namespace {
 		arrow->shoot(dx, dy + d * 0.2F, dz, velocity, static_cast<float>(14 - level.difficulty() * 4));
 		level.entities().add(std::move(arrow));
 	}
+
+	// ----- Patrols and raids -----
+
+	// PatrollingMonster.LongDistancePatrolGoal: the leader walks toward its far target (a new one once there), the
+	// others follow it
+	class PatrolGoal : public Goal {
+	  public:
+		explicit PatrolGoal(Raider& raider) : _raider(raider) { setFlags({Flag::Move}); }
+		bool canUse() override { return _raider.isPatrolling() && _raider.raidId() < 0 && !_raider.getTarget() && _raider.random().nextInt(reducedTickDelay(10)) == 0; }
+		bool canContinueToUse() override { return _raider.isPatrolling() && _raider.raidId() < 0 && !_raider.getTarget(); }
+		void tick() override {
+			if (_raider.isPatrolLeader()) {
+				const std::optional<BlockPos>& target = _raider.patrolTarget();
+				if (!target || (Vec3{target->x + 0.5, _raider.position().y, target->z + 0.5} - _raider.position()).horizontalDistanceSqr() < 100.0) {
+					_raider.findPatrolTarget();
+					return;
+				}
+				if (_raider.navigation().isDone()) moveToward(*target, 0.7);
+				return;
+			}
+			// A follower: toward its leader's target, keeping close to it
+			Raider* leader = nullptr;
+			for (Actor* actor : _raider.level().actorsIn(_raider.boundingBox().inflate(16.0), &_raider)) {
+				auto* other = dynamic_cast<Raider*>(actor);
+				if (other && other->isPatrolLeader() && other->isAlive()) leader = other;
+			}
+			if (!leader) {
+				_raider.setPatrolLeader(true); // The leader is gone: it leads
+				return;
+			}
+			if (leader->patrolTarget()) _raider.setPatrolTarget(*leader->patrolTarget());
+			if (_raider.navigation().isDone()) {
+				if (_raider.distanceToSqr(*leader) > 8.0 * 8.0) {
+					_raider.navigation().moveTo(*leader, 0.9);
+				} else if (_raider.patrolTarget()) {
+					moveToward(*_raider.patrolTarget(), 0.7);
+				}
+			}
+		}
+
+	  private:
+		Raider& _raider;
+		void	moveToward(const BlockPos& target, double speed) {
+			   // Ten blocks at a time toward it
+			   Vec3 to	 = Vec3{target.x + 0.5, _raider.position().y, target.z + 0.5} - _raider.position();
+			   Vec3 step = to.lengthSqr() > 100.0 ? to.normalize().scale(10.0) : to;
+			   Vec3 at	 = _raider.position() + step;
+			   _raider.navigation().moveTo(at.x, at.y, at.z, speed);
+		}
+	};
+
+	// Raider.RaiderMoveThroughVillageGoal (simplified): in a raid, it marches on the village's center
+	class RaiderMoveToRaidGoal : public Goal {
+	  public:
+		explicit RaiderMoveToRaidGoal(Raider& raider) : _raider(raider) { setFlags({Flag::Move}); }
+		bool canUse() override {
+			const Raid* raid = this->raid();
+			return raid && raid->isOngoing() && !_raider.getTarget() && !_raider.isCelebrating() &&
+				   (Vec3{raid->center().x + 0.5, _raider.position().y, raid->center().z + 0.5} - _raider.position()).horizontalDistanceSqr() > 64.0;
+		}
+		void tick() override {
+			const Raid* raid = this->raid();
+			if (!raid || (_raider.navigation().isInProgress() && _raider.tickCount() % 40 != 0)) return;
+			_raider.navigation().moveTo(raid->center().x + 0.5, raid->center().y, raid->center().z + 0.5, 1.0);
+		}
+
+	  private:
+		Raider&		_raider;
+		const Raid* raid() {
+			VillageEvents* events = _raider.level().villageEvents();
+			return events && _raider.raidId() >= 0 ? events->raid(_raider.raidId()) : nullptr;
+		}
+	};
 
 	// ----- Evoker's spells -----
 
@@ -352,7 +426,80 @@ bool Raider::isAlliedTo(Actor& other) const {
 	return _level.gameData().isInTag("minecraft:entity_type", "minecraft:raiders", other.typeId());
 }
 
+void Raider::setPatrolLeader(bool leader) {
+	_patrolLeader = leader;
+	_patrolling	  = _patrolling || leader;
+	if (leader && getItemBySlot(EquipmentSlot::Head).isEmpty()) {
+		// Raid.getOminousBannerInstance: the captain's banner (here a plain white one)
+		setItemSlot(EquipmentSlot::Head, ItemStack(_level.gameData().getStaticId("minecraft:item", "minecraft:white_banner"), 1));
+		setGuaranteedDrop(EquipmentSlot::Head);
+	}
+}
+
+void Raider::findPatrolTarget() {
+	BlockPos here = blockPosition();
+	_patrolTarget = here.offset(-500 + _random.nextInt(1000), 0, -500 + _random.nextInt(1000));
+	_patrolling	  = true;
+}
+
+void Raider::setCelebrating(bool celebrating) {
+	if (celebrating == _celebrating) return;
+	_celebrating = celebrating;
+	markData(DATA_IS_CELEBRATING);
+}
+
+void Raider::die(const Combat::DamageSource& source) {
+	// A captain killed by a player (outside raids): Bad Omen, one level more (vanilla 1.21 drops an ominous bottle that
+	// gives it: bottles aren't drinkable here yet)
+	if (isCaptain() && _raidId < 0 && source.attackerPlayer()) {
+		Player*						player = source.attackerPlayer();
+		const MobEffects::Instance* omen   = player->effects().get(MobEffects::BadOmen);
+		int							level  = omen ? std::min(omen->amplifier + 1, 4) : 0;
+		player->removeEffect(MobEffects::BadOmen);
+		player->addEffect({MobEffects::BadOmen, 120000, level});
+	}
+	if (VillageEvents* events = _level.villageEvents(); events && _raidId >= 0) events->onRaiderDied(*this);
+	Monster::die(source);
+}
+
+bool Raider::removeWhenFarAway(double distanceSqr) const {
+	// Patrols and raids stay (vanilla: a patrol only within 128 blocks)
+	if (_raidId >= 0) return false;
+	if (_patrolling && distanceSqr <= 128.0 * 128.0) return false;
+	return Monster::removeWhenFarAway(distanceSqr);
+}
+
+void Raider::addRaiderGoals() {
+	_goalSelector.addGoal(3, std::make_unique<RaiderMoveToRaidGoal>(*this));
+	_goalSelector.addGoal(4, std::make_unique<PatrolGoal>(*this));
+}
+
+void Raider::writeData(Buffer& buf, uint32_t mask, bool onlyNonDefault) const {
+	Monster::writeData(buf, mask, onlyNonDefault);
+	if (wantsData(mask, DATA_IS_CELEBRATING, onlyNonDefault, !_celebrating)) writeBoolData(buf, DATA_IS_CELEBRATING, _celebrating);
+}
+
+void Raider::save(Buffer& buf) const {
+	Monster::save(buf);
+	buf.writeUByte(SAVE_VERSION);
+	buf.writeBool(_patrolLeader);
+	buf.writeBool(_patrolling);
+	buf.writeBool(_patrolTarget.has_value());
+	if (_patrolTarget) buf.writeLong(_patrolTarget->asLong());
+	buf.writeInt(_raidId);
+}
+
+void Raider::load(Buffer& buf) {
+	Monster::load(buf);
+	if (buf.readUByte() != SAVE_VERSION) throw std::runtime_error("unknown raider data version");
+	_patrolLeader = buf.readBool();
+	_patrolling	  = buf.readBool();
+	if (buf.readBool()) _patrolTarget = BlockPos::fromLong(buf.readLong());
+	_raidId = buf.readInt();
+}
+
 void Raider::addRaiderTargets(bool villagersMustSee) {
+	addRaiderGoals();
 	auto hurtBy = std::make_unique<HurtByTargetGoal>(*this, std::vector<std::string>{"Raider"});
 	hurtBy->setAlertOthers();
 	_targetSelector.addGoal(1, std::move(hurtBy));
@@ -403,6 +550,7 @@ void Pillager::registerGoals() {
 	_goalSelector.addGoal(0, std::make_unique<FloatGoal>(*this));
 	_goalSelector.addGoal(2, std::make_unique<AvoidEntityGoal>(*this, "Creaking", 8.0F, 1.0, 1.2));
 	_goalSelector.addGoal(3, std::make_unique<RangedCrossbowAttackGoal>(*this, *this, 1.0, 8.0F));
+	addRaiderGoals();
 	_goalSelector.addGoal(8, std::make_unique<RandomStrollGoal>(*this, 0.6));
 	_goalSelector.addGoal(9, std::make_unique<LookAtPlayerGoal>(*this, "Player", 15.0F, 1.0F));
 	_goalSelector.addGoal(10, std::make_unique<LookAtPlayerGoal>(*this, "Mob", 15.0F));
@@ -644,6 +792,7 @@ Ravager::Ravager(Level& level, int typeId) : Raider(level, typeId) {
 void Ravager::registerGoals() {
 	_goalSelector.addGoal(0, std::make_unique<FloatGoal>(*this));
 	_goalSelector.addGoal(4, std::make_unique<RavagerMeleeAttackGoal>(*this));
+	addRaiderGoals();
 	_goalSelector.addGoal(5, std::make_unique<WaterAvoidingRandomStrollGoal>(*this, 0.4));
 	_goalSelector.addGoal(6, std::make_unique<LookAtPlayerGoal>(*this, "Player", 6.0F));
 	_goalSelector.addGoal(10, std::make_unique<LookAtPlayerGoal>(*this, "Mob", 8.0F));

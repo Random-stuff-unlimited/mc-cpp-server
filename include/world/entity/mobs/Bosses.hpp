@@ -16,7 +16,8 @@ class BossBar {
 	// BossEvent.BossBarColor / BossBarOverlay, and its flags (darken screen 1, boss music 2, world fog 4)
 	enum Color { Pink = 0, Blue = 1, Red = 2, Green = 3, Yellow = 4, Purple = 5, White = 6 };
 
-	BossBar(Level& level, std::string titleKey, Color color, uint8_t flags);
+	// overlay: BossBarOverlay (0 progress, 1 to 4: 6, 10, 12 or 20 notches)
+	BossBar(Level& level, std::string titleKey, Color color, uint8_t flags, int overlay = 0);
 
 	void  setProgress(float progress) { _progress = std::max(0.0F, std::min(1.0F, progress)); }
 	float progress() const { return _progress; }
@@ -31,6 +32,7 @@ class BossBar {
 	std::string	  _titleKey;
 	Color		  _color;
 	uint8_t		  _flags;
+	int			  _overlay;
 	float		  _progress = 1.0F, _sentProgress = 1.0F;
 	std::set<int> _players; // Ids of the players that see it
 

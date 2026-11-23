@@ -2,12 +2,15 @@
 #define ILLAGERS_HPP
 
 #include "world/entity/Entity.hpp"
+
+#include <optional>
 #include "world/entity/ai/CrossbowAttack.hpp"
 #include "world/entity/ai/Goals.hpp"
 #include "world/entity/mobs/Monster.hpp"
 
-// Raider: the mobs of raids and patrols. Raids (waves, banners, captains, celebrating) aren't ported: raiders are
-// plain monsters that don't fight each other (AbstractIllager.isAlliedTo: the #raiders)
+// Raider (PatrollingMonster and Raider): the mobs of patrols and raids, which don't fight each other
+// (AbstractIllager.isAlliedTo: the #raiders). A patrol follows its leader (the captain, with a banner on its head) far
+// across the land; killing a captain gives the player Bad Omen. In a raid (VillageEvents) they march on the village
 class Raider : public Monster {
   public:
 	static constexpr int DATA_IS_CELEBRATING = 16;
@@ -18,9 +21,41 @@ class Raider : public Monster {
 	bool isAlliedTo(Actor& other) const;
 	bool canAttack(Actor& target) override { return !isAlliedTo(target) && Monster::canAttack(target); }
 
+	// ----- Patrols -----
+	bool						   isPatrolLeader() const { return _patrolLeader; }
+	void						   setPatrolLeader(bool leader);
+	bool						   isPatrolling() const { return _patrolling; }
+	void						   setPatrolling(bool patrolling) { _patrolling = patrolling; }
+	const std::optional<BlockPos>& patrolTarget() const { return _patrolTarget; }
+	void						   setPatrolTarget(const BlockPos& pos) { _patrolTarget = pos, _patrolling = true; }
+	// PatrollingMonster.findPatrolTarget: somewhere up to 500 blocks away
+	void						   findPatrolTarget();
+	// Raider.isCaptain: the leader of its patrol or raid wave
+	bool						   isCaptain() const { return _patrolLeader; }
+
+	// ----- Raids -----
+	int	 raidId() const { return _raidId; }
+	void setRaidId(int id) { _raidId = id; }
+	bool isCelebrating() const { return _celebrating; }
+	void setCelebrating(bool celebrating);
+
+	void die(const Combat::DamageSource& source) override;
+	bool removeWhenFarAway(double distanceSqr) const override;
+	void save(Buffer& buf) const override;
+	void load(Buffer& buf) override;
+
   protected:
-	// The raiders' common targets: what hurt them (the others join in), players, villagers and iron golems
+	// The raiders' common targets: what hurt them (the others join in), players, villagers and iron golems; and their
+	// patrol and raid goals
 	void addRaiderTargets(bool villagersMustSee);
+	// The patrol and raid goals (PatrolGoal, RaiderMoveThroughVillageGoal)
+	void addRaiderGoals();
+	void writeData(Buffer& buf, uint32_t mask, bool onlyNonDefault) const override;
+
+  private:
+	bool					_patrolLeader = false, _patrolling = false, _celebrating = false;
+	std::optional<BlockPos> _patrolTarget;
+	int						_raidId = -1;
 };
 
 // Vindicator: an illager with an iron axe that charges its targets (named "Johnny", it attacks everything)

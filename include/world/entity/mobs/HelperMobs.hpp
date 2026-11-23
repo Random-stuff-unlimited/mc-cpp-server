@@ -61,6 +61,7 @@ class CopperGolem : public Mob {
 	Weather weather() const { return _weather; }
 	void	setWeather(Weather weather);
 	bool	isWaxed() const { return _waxed; }
+	void	setWaxed(bool waxed) { _waxed = waxed; }
 	State	golemState() const { return _state; }
 	void	setGolemState(State state);
 	// The chests it uses: the copper chests it takes from, the plain chests it fills

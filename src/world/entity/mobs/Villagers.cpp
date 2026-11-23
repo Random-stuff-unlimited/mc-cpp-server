@@ -426,7 +426,10 @@ void Villager::acquirePoi() {
 	if (!_home) {
 		if (std::optional<BlockPos> bed = nearest(PoiManager::Type::Home, PoiManager::Occupancy::HasSpace); bed && poi.take(*bed)) _home = bed;
 	}
-	if (!_meetingPoint) _meetingPoint = nearest(PoiManager::Type::Meeting, PoiManager::Occupancy::Any);
+	if (!_meetingPoint) {
+		// A ticket of the bell (32 of them): the village is occupied
+		if (std::optional<BlockPos> bell = nearest(PoiManager::Type::Meeting, PoiManager::Occupancy::HasSpace); bell && poi.take(*bell)) _meetingPoint = bell;
+	}
 }
 
 void Villager::updateTrades() {
@@ -537,6 +540,7 @@ void Villager::dropAllDeathLoot(const Combat::DamageSource& source) {
 	if (_sleeping) stopSleeping();
 	releasePoi(_jobSite);
 	releasePoi(_home);
+	releasePoi(_meetingPoint);
 	for (const ItemStack& stack : _food) spawnAtLocation(stack);
 	_food.clear();
 }

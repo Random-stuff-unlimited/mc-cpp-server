@@ -65,9 +65,9 @@ namespace {
 
 // ===================== BossBar =====================
 
-BossBar::BossBar(Level& level, std::string titleKey, Color color, uint8_t flags)
+BossBar::BossBar(Level& level, std::string titleKey, Color color, uint8_t flags, int overlay)
 	: _level(level), _uuid(static_cast<uint64_t>(level.random().nextLong()), static_cast<uint64_t>(level.random().nextLong())),
-	  _titleKey(std::move(titleKey)), _color(color), _flags(flags) {}
+	  _titleKey(std::move(titleKey)), _color(color), _flags(flags), _overlay(overlay) {}
 
 void BossBar::sendAdd(Player& player) {
 	Buffer data;
@@ -76,7 +76,7 @@ void BossBar::sendAdd(Player& player) {
 	TextComponent::writeTranslatable(data, _titleKey, {});
 	data.writeFloat(_progress);
 	data.writeVarInt(_color);
-	data.writeVarInt(0); // BossBarOverlay.PROGRESS
+	data.writeVarInt(_overlay); // BossBarOverlay
 	data.writeUByte(_flags);
 	Packet::send(player.shared_from_this(), PacketId::Play::Clientbound::BOSS_EVENT, data, _level.server());
 }
