@@ -63,14 +63,18 @@ Les 85 types de mobs vanilla ont leur classe et leur IA (`src/world/entity/mobs`
 - [x] Villageois (métier par poste de travail, lit, emploi du temps, sommeil, fuite, reproduction), wandering trader
 - [x] Boss : wither (invocation par motif, 3 têtes, crânes, barre de boss), ender dragon (phases de vol, charge,
       boules de feu, atterrissage, mort, parties)
-- [ ] Commerce villageois : `MERCHANT_OFFERS`, `SELECT_TRADE`, menu marchand, offres par métier/niveau, XP de métier
+- [x] Commerce villageois : `MERCHANT_OFFERS`, `SELECT_TRADE`, menu marchand, offres des 13 métiers et du marchand ambulant,
+      demande et réapprovisionnement, XP et niveaux de métier (cartes d'exploration, armures teintes, ragots non portés)
 - [ ] Villageois : ragots, fermiers (récolte/plantation), invocation de golems de fer, conversion par les zombies
-- [ ] Éclosion des œufs (frai de grenouille, œufs de tortue et de renifleur) : comportements de blocs manquants
-- [ ] Ruches : abeilles qui entrent/sortent (block entity des occupants), fumée, récolte du miel
-- [ ] Dragon : cristaux de l'End (entité), combat de l'End (`EndDragonFight`), portail de sortie, œuf ; dégâts par
-      partie touchée (tête/corps)
-- [ ] Spawners : marchand ambulant (`WanderingTraderSpawner`), patrouilles et raids (bannières, vagues), golems
-      (citrouille + fer/neige/cuivre)
+- [x] Éclosion des œufs (frai de grenouille → têtards, œuf de renifleur ; tortue déjà en place)
+- [x] Ruches : abeilles qui entrent/sortent (`BeehiveBlockEntity`), nuit/pluie, miel à la sortie, essaim en colère si cassée
+- [ ] Ruches : fumée de feu de camp, récolte au flacon/cisailles
+- [x] Cristaux de l'End, combat de l'End (piliers, cages, portail de sortie, œuf, `end_fight.dat`)
+- [ ] Dragon : réinvocation avec 4 cristaux, portails de passage (gateways), dégâts par partie touchée
+- [x] Spawners : marchand ambulant, patrouilles (capitaine à bannière), raids (Mauvais présage → Présage de raid →
+      vagues, barre de raid, Héros du village), golems par motif (fer/neige/cuivre)
+- [ ] Raids : fiole sinistre (le capitaine donne directement Mauvais présage ici), bannière sinistre à motifs, laisses
+      des lamas du marchand, état des spawners non sauvegardé
 - [ ] Montures/apprivoisement étendus : inventaire des chevaux/lamas (`HORSE_SCREEN_OPEN`), caravanes et laisses,
       perroquets sur l'épaule, plusieurs passagers (happy ghast, chameau)
 - [ ] Comportements : creeper chargé (foudre), danse des piglins/allays (jukebox), duplication d'allay, piglins chasseurs
@@ -81,7 +85,8 @@ Les 85 types de mobs vanilla ont leur classe et leur IA (`src/world/entity/mobs`
 ## Villageois & commerce
 
 - [x] IA villageoise (professions, emplois, horaires, dormir)
-- [ ] Commerce : `MERCHANT_OFFERS`, `SELECT_TRADE`, offres par profession et niveau
+- [x] Commerce : `MERCHANT_OFFERS`, `SELECT_TRADE`, offres par profession et niveau
+- [x] Golem de fer construit par motif
 - [ ] Golem de fer invoqué par les villageois
 - [ ] Fermiers : moissons, partage de nourriture
 
@@ -89,7 +94,7 @@ Les 85 types de mobs vanilla ont leur classe et leur IA (`src/world/entity/mobs`
 
 - [x] Wither : invocation (3 têtes de wither + sable des âmes), `BOSS_EVENT`, attaques, drop du Nether Star (loot table)
 - [x] Ender Dragon : vol, charge, boules de feu, atterrissage, `BOSS_EVENT`, mort
-- [ ] Ender Dragon : cristaux de l'End, combat de l'End, portail de sortie, œuf
+- [x] Ender Dragon : cristaux de l'End, combat de l'End, portail de sortie, œuf
 - [ ] Souffle persistant du dragon (nuage d'effet de zone), fioles de souffle
 
 ## Véhicules & montures
