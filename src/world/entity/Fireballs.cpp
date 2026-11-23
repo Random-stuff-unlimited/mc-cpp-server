@@ -13,8 +13,6 @@
 #include <cmath>
 
 namespace {
-	constexpr float INERTIA = 0.95F, LIQUID_INERTIA = 0.8F;
-
 	int typeOf(Level& level, const char* type) { return level.gameData().getStaticId("minecraft:entity_type", type); }
 } // namespace
 
@@ -35,7 +33,7 @@ HurtingProjectile::HurtingProjectile(Level& level, const char* type, float size,
 void HurtingProjectile::tick() {
 	Actor* owner = this->owner();
 	// applyInertia: it speeds up along its movement
-	_delta = (_delta + _delta.normalize().scale(accelerationPower)).scale(isInWater() ? LIQUID_INERTIA : INERTIA);
+	_delta = (_delta + _delta.normalize().scale(accelerationPower)).scale(isInWater() ? liquidInertia() : inertia());
 	if (owner && !owner->isAlive() && owner->asEntity() && owner->asEntity()->isRemoved()) {
 		discard();
 		return;
@@ -63,7 +61,7 @@ void HurtingProjectile::tick() {
 	_level.checkInsideBlocks(boundingBox(), this);
 	Projectile::tick();
 	if (isRemoved()) return;
-	igniteForTicks(20); // shouldBurn
+	if (shouldBurn()) igniteForTicks(20);
 	if (!miss) {
 		Hit hit;
 		hit.location = _position;

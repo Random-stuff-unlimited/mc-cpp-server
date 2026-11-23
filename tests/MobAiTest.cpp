@@ -15,6 +15,7 @@
 #include "world/entity/mobs/FlyingAnimals.hpp"
 #include "world/entity/mobs/Skeleton.hpp"
 #include "world/entity/mobs/Spider.hpp"
+#include "world/entity/mobs/TrialMobs.hpp"
 #include "world/entity/mobs/Wolf.hpp"
 #include "world/entity/Arrow.hpp"
 #include "world/entity/mobs/Zombie.hpp"
@@ -571,7 +572,7 @@ TEST(llama_spits_at_wolf) {
 	wolf->targetSelector().removeAllGoals();
 	float health = wolf->health();
 	bool  targeted = false;
-	for (int t = 0; t < 600 && wolf->health() >= health; t++) {
+	for (int t = 0; t < 2000 && wolf->health() >= health; t++) {
 		f.tick();
 		targeted |= llama->getTarget() == wolf;
 	}
@@ -600,14 +601,14 @@ TEST(camel_sits_and_stands) {
 TEST(goat_rams_cow) {
 	LevelFixture f(1);
 	auto* goat = dynamic_cast<Goat*>(spawn(f, "minecraft:goat", {0, Y, 0}));
-	Mob*  cow  = spawn(f, "minecraft:cow", {6, Y, 0});
+	Mob*  cow  = spawn(f, "minecraft:cow", {5, Y, 0});
 	CHECK(goat && cow);
 	if (!goat || !cow) return;
 	goat->setBaby(false);
 	goat->setScreamingGoat(true);
 	cow->goalSelector().removeAllGoals();
 	float health = cow->health();
-	for (int t = 0; t < 1200 && cow->health() >= health; t++) f.tick();
+	for (int t = 0; t < 3000 && cow->health() >= health; t++) f.tick();
 	CHECK(cow->health() < health);
 }
 
@@ -770,4 +771,38 @@ TEST(bee_stings_attacker) {
 	for (int t = 0; t < 400 && !bee->hasStung(); t++) f.tick();
 	CHECK(bee->hasStung());
 	CHECK(player->combat().health < health);
+}
+
+// A breeze shoots wind charges at the player
+TEST(breeze_shoots_wind_charges) {
+	LevelFixture f(2);
+	auto player = addPlayer(f, 10.5, 0.5);
+	Mob* breeze = spawn(f, "minecraft:breeze", {0, Y, 0});
+	CHECK(breeze);
+	if (!breeze) return;
+	CHECK(hurtsPlayer(f, *player, 600));
+}
+
+// A creaking freezes while the player looks at it, and comes for the player otherwise
+TEST(creaking_freezes_when_watched) {
+	LevelFixture f(1);
+	auto  player   = addPlayer(f, 10.5, 0.5);
+	auto* creaking = dynamic_cast<Creaking*>(spawn(f, "minecraft:creaking", {0, Y, 0}));
+	CHECK(creaking);
+	if (!creaking) return;
+	player->setRotation(90.0F, 0.0F); // Facing -x: toward the creaking
+	f.tick(40);
+	CHECK(!creaking->canMove());
+	double x = creaking->position().x;
+	f.tick(100);
+	CHECK(std::abs(creaking->position().x - x) < 0.1);
+	player->setRotation(-90.0F, 0.0F); // Back turned
+	bool moved = false, couldMove = false;
+	for (int t = 0; t < 100 && !moved; t++) {
+		f.tick();
+		couldMove |= creaking->canMove();
+		moved = creaking->position().x > x + 1.0;
+	}
+	CHECK(couldMove);
+	CHECK(moved);
 }

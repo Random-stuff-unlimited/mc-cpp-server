@@ -46,8 +46,7 @@ namespace {
 			TargetingConditions conditions = TargetingConditions::forCombat().withRange(16.0).withSelector([this](Actor& actor, Level&) {
 				const GameData::EntityTypeInfo* type = _goat.level().gameData().getEntityType(actor.typeId());
 				if (type && type->is("Goat")) return false;
-				double d = actor.distanceToSqr(_goat);
-				return d >= 16.0 && notCreativeOrSpectator(actor);
+				return notCreativeOrSpectator(actor);
 			});
 			std::vector<Actor*> candidates = actorsOfClass(_goat.level(), "LivingEntity", _goat.boundingBox().inflate(16.0));
 			for (Actor* player : _goat.level().actorsIn(_goat.boundingBox().inflate(16.0))) {
@@ -63,10 +62,18 @@ namespace {
 		}
 		bool canContinueToUse() override { return _phase != Phase::Done; }
 		void start() override {
-			_phase = Phase::Preparing;
 			_ticks = 0;
-			_goat.navigation().stop();
-			_goat.playSound(_goat.isScreamingGoat() ? "minecraft:entity.goat.screaming.prepare_ram" : "minecraft:entity.goat.prepare_ram", 1.0F, 1.0F);
+			Actor* target = _goat.level().actorByRef(_target);
+			if (target && _goat.distanceToSqr(*target) < 16.0) {
+				// PrepareRamNearestTarget: too close, it first backs off to 5 blocks from its target
+				Vec3 away = Vec3{_goat.position().x - target->position().x, 0.0, _goat.position().z - target->position().z}.normalize();
+				if (away.lengthSqr() == 0.0) away = {1.0, 0.0, 0.0};
+				Vec3 spot = target->position() + away.scale(5.0);
+				_goat.navigation().moveTo(spot.x, spot.y, spot.z, 1.25);
+				_phase = Phase::Positioning;
+				return;
+			}
+			startPreparing();
 		}
 		void stop() override {
 			_goat.navigation().stop();
@@ -78,6 +85,15 @@ namespace {
 		void tick() override {
 			Actor* target = _target.isSet() ? _goat.level().actorByRef(_target) : nullptr;
 			_ticks++;
+			if (_phase == Phase::Positioning) {
+				if (!target || !target->isAlive()) {
+					_phase = Phase::Done;
+				} else if (_goat.distanceToSqr(*target) >= 16.0 || _goat.navigation().isDone() || _ticks > 80) {
+					_goat.navigation().stop();
+					startPreparing();
+				}
+				return;
+			}
 			if (_phase == Phase::Preparing) {
 				if (!target || !target->isAlive()) {
 					_phase = Phase::Done;
@@ -110,12 +126,19 @@ namespace {
 		}
 
 	  private:
-		enum class Phase { Preparing, Charging, Done };
+		enum class Phase { Positioning, Preparing, Charging, Done };
 		Goat&	  _goat;
 		EntityRef _target;
 		Phase	  _phase	= Phase::Done;
 		int		  _cooldown = -1, _ticks = 0;
 		Vec3	  _direction, _end;
+
+		void startPreparing() {
+			_phase = Phase::Preparing;
+			_ticks = 0;
+			_goat.navigation().stop();
+			_goat.playSound(_goat.isScreamingGoat() ? "minecraft:entity.goat.screaming.prepare_ram" : "minecraft:entity.goat.prepare_ram", 1.0F, 1.0F);
+		}
 
 		void ram(Actor& target) {
 			float damage = static_cast<float>(_goat.getAttributeValue(_goat.attributeIds().attackDamage));

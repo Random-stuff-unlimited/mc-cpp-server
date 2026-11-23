@@ -29,6 +29,7 @@
 #include "world/entity/mobs/SnowGolem.hpp"
 #include "world/entity/mobs/Spider.hpp"
 #include "world/entity/mobs/Strider.hpp"
+#include "world/entity/mobs/TrialMobs.hpp"
 #include "world/entity/mobs/Turtle.hpp"
 #include "world/entity/mobs/WaterAnimals.hpp"
 #include "world/entity/mobs/Witch.hpp"
@@ -119,4 +120,6 @@ void registerVanillaMobs(MobRegistry& registry) {
 	registry.setFactory("minecraft:axolotl", factory<Axolotl>());
 	registry.setFactory("minecraft:parrot", factory<Parrot>());
 	registry.setFactory("minecraft:bee", factory<Bee>());
+	registry.setFactory("minecraft:breeze", factory<Breeze>());
+	registry.setFactory("minecraft:creaking", factory<Creaking>());
 }

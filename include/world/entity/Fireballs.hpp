@@ -23,6 +23,10 @@ class HurtingProjectile : public Projectile {
 
   protected:
 	virtual void onHit(const Hit& hit) = 0;
+	// AbstractHurtingProjectile.getInertia / getLiquidInertia (wind charges keep their speed) and shouldBurn
+	virtual float inertia() const { return 0.95F; }
+	virtual float liquidInertia() const { return 0.8F; }
+	virtual bool  shouldBurn() const { return true; }
 };
 
 // SmallFireball (blazes): 5 damage and 5 seconds of fire, lights a fire where it lands
