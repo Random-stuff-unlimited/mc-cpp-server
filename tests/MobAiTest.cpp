@@ -13,6 +13,8 @@
 #include "world/entity/mobs/Critters.hpp"
 #include "world/entity/mobs/FarmAnimals.hpp"
 #include "world/entity/mobs/FlyingAnimals.hpp"
+#include "world/entity/mobs/HelperMobs.hpp"
+#include "world/blockentity/BlockEntity.hpp"
 #include "world/entity/mobs/Skeleton.hpp"
 #include "world/entity/mobs/Shulker.hpp"
 #include "world/entity/mobs/Spider.hpp"
@@ -857,4 +859,62 @@ TEST(warden_attacks_angry_target) {
 	if (!warden) return;
 	warden->increaseAngerAt(*player, Warden::MAX_ANGER, false);
 	CHECK(hurtsPlayer(f, *player, 600));
+}
+
+// Given a diamond, an allay collects the diamonds lying around and brings them to its player
+TEST(allay_brings_items) {
+	LevelFixture f(1);
+	auto  player = addPlayer(f, 0.5, 0.5);
+	auto* allay	 = dynamic_cast<Allay*>(spawn(f, "minecraft:allay", {1, Y + 1, 0}));
+	CHECK(allay);
+	if (!allay) return;
+	int diamond = f.item("minecraft:diamond");
+	player->inventory().set(player->handSlot(0), ItemStack(diamond, 1));
+	CHECK(allay->mobInteract(*player, 0));
+	CHECK(!allay->getMainHandItem().isEmpty());
+	f.level->entities().add(std::make_unique<ItemEntity>(*f.level, Vec3{8.5, Y, 0.5}, ItemStack(diamond, 5), Vec3{}));
+	bool collected = false, delivered = false;
+	for (int t = 0; t < 1200 && !delivered; t++) {
+		f.tick();
+		collected |= allay->inventory().count == 5;
+		if (collected && allay->inventory().isEmpty()) {
+			for (ItemEntity* item : f.items()) delivered |= item->item().item == diamond && item->distanceToSqr(*player) < 6.0 * 6.0;
+		}
+	}
+	CHECK(collected);
+	CHECK(delivered);
+}
+
+// A copper golem carries the items of a copper chest to the chest that already holds the same item
+TEST(copper_golem_sorts_items) {
+	LevelFixture f(1);
+	f.level->setBlock({3, Y, 0}, f.data.getDefaultBlockState("minecraft:copper_chest"), Level::UPDATE_ALL);
+	f.level->setBlock({-3, Y, 3}, f.data.getDefaultBlockState("minecraft:chest"), Level::UPDATE_ALL);
+	f.level->setBlock({-3, Y, -3}, f.data.getDefaultBlockState("minecraft:chest"), Level::UPDATE_ALL);
+	auto* source = dynamic_cast<Container*>(f.level->getBlockEntity({3, Y, 0}));
+	auto* other	 = dynamic_cast<Container*>(f.level->getBlockEntity({-3, Y, 3}));
+	auto* same	 = dynamic_cast<Container*>(f.level->getBlockEntity({-3, Y, -3}));
+	CHECK(source && other && same);
+	if (!source || !other || !same) return;
+	int iron = f.item("minecraft:iron_ingot");
+	source->setItem(0, ItemStack(iron, 10));
+	other->setItem(0, ItemStack(f.item("minecraft:dirt"), 1));
+	same->setItem(0, ItemStack(iron, 1));
+	Mob* golem = spawn(f, "minecraft:copper_golem", {0, Y, 0});
+	CHECK(golem);
+	if (!golem) return;
+	for (int t = 0; t < 2400 && same->item(0).count < 11; t++) f.tick();
+	CHECK_EQ(same->item(0).count, 11);
+	CHECK(source->item(0).isEmpty());
+}
+
+// A happy ghast floats: it doesn't fall to the ground
+TEST(happy_ghast_floats) {
+	LevelFixture f(1);
+	Mob* ghast = spawn(f, "minecraft:happy_ghast", {0, Y + 6, 0});
+	CHECK(ghast);
+	if (!ghast) return;
+	ghast->setBaby(false);
+	f.tick(100);
+	CHECK(ghast->position().y > Y + 2.0);
 }

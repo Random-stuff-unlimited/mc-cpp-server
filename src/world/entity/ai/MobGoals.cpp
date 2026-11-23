@@ -15,6 +15,7 @@
 #include "world/entity/mobs/Fox.hpp"
 #include "world/entity/mobs/Ghast.hpp"
 #include "world/entity/mobs/Guardian.hpp"
+#include "world/entity/mobs/HelperMobs.hpp"
 #include "world/entity/mobs/Hoglin.hpp"
 #include "world/entity/mobs/Horses.hpp"
 #include "world/entity/mobs/Illagers.hpp"
@@ -126,4 +127,7 @@ void registerVanillaMobs(MobRegistry& registry) {
 	registry.setFactory("minecraft:creaking", factory<Creaking>());
 	registry.setFactory("minecraft:shulker", factory<Shulker>());
 	registry.setFactory("minecraft:warden", factory<Warden>());
+	registry.setFactory("minecraft:allay", factory<Allay>());
+	registry.setFactory("minecraft:copper_golem", factory<CopperGolem>());
+	registry.setFactory("minecraft:happy_ghast", factory<HappyGhast>());
 }
