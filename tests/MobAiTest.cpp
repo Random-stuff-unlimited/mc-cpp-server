@@ -7,6 +7,7 @@
 #include "world/entity/ItemEntity.hpp"
 #include "world/entity/Mob.hpp"
 #include "world/entity/mobs/Amphibians.hpp"
+#include "network/buffer.hpp"
 #include "world/entity/mobs/Bosses.hpp"
 #include "world/entity/mobs/Camelids.hpp"
 #include "world/entity/mobs/Slime.hpp"
@@ -1038,3 +1039,41 @@ TEST(ender_dragon_parts_and_death) {
 	f.tick(210);
 	CHECK(f.level->actorById(id) == nullptr);
 }
+
+// Every mob type: spawned, ticked for 5 seconds, saved and loaded back without error
+TEST(every_mob_ticks_saves_and_loads) {
+	LevelFixture f(2);
+	auto player = addPlayer(f, 20.5, 20.5);
+	std::vector<std::pair<std::string, int>> mobs; // By id: the ones that convert or die are freed
+	for (int id = 0;; id++) {
+		const GameData::EntityTypeInfo* type = f.data.getEntityType(id);
+		if (!type) break;
+		if (!type->mob) continue;
+		std::string name = f.data.getStaticName("minecraft:entity_type", id);
+		int			i	 = static_cast<int>(mobs.size());
+		Mob*		mob	 = spawn(f, name.c_str(), {(i % 9) * 3 - 12, Y + 1, (i / 9) * 3 - 12});
+		CHECK(mob != nullptr);
+		if (mob) mobs.emplace_back(name, mob->id());
+	}
+	f.tick(100);
+	int loaded = 0;
+	for (auto& [name, id] : mobs) {
+		auto* mob = dynamic_cast<Mob*>(f.level->actorById(id));
+		if (!mob || mob->isRemoved()) continue; // Died, despawned or converted meanwhile
+		Buffer saved;
+		mob->save(saved);
+		std::unique_ptr<Mob> copy = f.level->mobs().create(*f.level, mob->typeId());
+		CHECK(copy != nullptr);
+		if (!copy) continue;
+		try {
+			Buffer in(saved.getData());
+			copy->load(in);
+			loaded++;
+		} catch (const std::exception& e) {
+			std::printf("  load of %s failed: %s\n", name.c_str(), e.what());
+			CHECK(false);
+		}
+	}
+	CHECK(loaded > 60);
+}
+
