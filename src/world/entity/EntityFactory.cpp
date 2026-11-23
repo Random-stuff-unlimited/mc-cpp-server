@@ -1,3 +1,4 @@
+#include "world/entity/EndCrystal.hpp"
 #include "world/entity/EntityFactory.hpp"
 
 #include "network/buffer.hpp"
@@ -17,6 +18,7 @@ namespace EntityFactory {
 		if (name == "minecraft:tnt") return std::make_unique<PrimedTnt>(level, Vec3{}, nullptr);
 		if (name == "minecraft:arrow") return std::make_unique<Arrow>(level);
 		if (name == "minecraft:trident") return std::make_unique<ThrownTrident>(level);
+		if (name == "minecraft:end_crystal") return std::make_unique<EndCrystal>(level);
 		return nullptr;
 	}
 

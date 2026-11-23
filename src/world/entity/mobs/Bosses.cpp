@@ -9,7 +9,9 @@
 #include "world/Combat.hpp"
 #include "world/Explosion.hpp"
 #include "world/Level.hpp"
+#include "world/EndDragonFight.hpp"
 #include "world/entity/Arrow.hpp"
+#include "world/entity/EndCrystal.hpp"
 #include "world/entity/ExperienceOrb.hpp"
 #include "world/entity/MobRegistry.hpp"
 #include "world/entity/ai/Controls.hpp"
@@ -584,6 +586,7 @@ void EnderDragon::aiStep() {
 		if (_dyingTicks == 1) _level.levelEvent(nullptr, 1028, blockPosition(), 0); // Its death roar, everywhere
 		if (_dyingTicks >= 200) {
 			if (auto orb = ExperienceOrb::create(_level, _position, 600 / 2)) _level.entities().add(std::move(orb));
+			if (EndDragonFight* fight = _level.endFight()) fight->setDragonKilled();
 			_bossBar.removeAll();
 			discard();
 			return;
@@ -596,12 +599,30 @@ void EnderDragon::aiStep() {
 		_center = _position;
 		findPodium();
 	}
+	checkCrystals();
 	tickPhase();
 	hurtAndKnockBack();
 	_yHeadRot = _yRot;
 	_yBodyRot = _yRot;
 	_bossBar.setProgress(_health / maxHealth());
 	_bossBar.update(_position, 192.0);
+}
+
+void EnderDragon::checkCrystals() {
+	Actor* crystal = _healingCrystal >= 0 ? _level.actorById(_healingCrystal) : nullptr;
+	if (crystal && (!crystal->isAlive() || !dynamic_cast<EndCrystal*>(crystal))) crystal = nullptr;
+	if (!crystal) _healingCrystal = -1;
+	if (crystal && _tickCount % 10 == 0 && _health < maxHealth()) setHealth(_health + 1.0F);
+	if (_random.nextInt(10) == 0) {
+		double best = 0.0;
+		Actor* nearest = nullptr;
+		for (Actor* actor : _level.actorsIn(boundingBox().inflate(32.0), this)) {
+			if (!dynamic_cast<EndCrystal*>(actor) || !actor->isAlive()) continue;
+			double d = actor->distanceToSqr(*this);
+			if (!nearest || d < best) nearest = actor, best = d;
+		}
+		_healingCrystal = nearest ? nearest->id() : -1;
+	}
 }
 
 bool EnderDragon::hurtServer(const Combat::DamageSource& source, float amount) {

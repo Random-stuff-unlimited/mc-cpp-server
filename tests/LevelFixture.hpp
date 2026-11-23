@@ -27,13 +27,14 @@ struct LevelFixture {
 	std::unique_ptr<Level>	level;
 	int						radius;
 
-	explicit LevelFixture(int chunkRadius = 2) : radius(chunkRadius) {
+	explicit LevelFixture(int chunkRadius = 2, const std::string& dimension = "minecraft:overworld") : radius(chunkRadius) {
 		data.load("resources/gamedata");
 		directory = std::filesystem::temp_directory_path() / ("mc-cpp-server-test-" + std::to_string(reinterpret_cast<uintptr_t>(this)));
 		std::filesystem::remove_all(directory);
 		World::Settings settings;
 		settings.directory = directory;
 		settings.ioThreads = 2;
+		settings.dimension = dimension;
 		world			   = std::make_unique<World>(data, settings);
 
 		// Chunks one ring further, so every chunk in the radius is lit (and ticks)

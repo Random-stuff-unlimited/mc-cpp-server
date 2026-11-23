@@ -1,3 +1,4 @@
+#include "world/entity/EndCrystal.hpp"
 #include "world/item/ItemUseOn.hpp"
 
 #include "data/GameData.hpp"
@@ -38,6 +39,20 @@ namespace ItemUse {
 		int				   state = level.getBlockState(hit.pos);
 		JavaRandom&		   random = level.random();
 
+		if (name == "minecraft:end_crystal") {
+			// EndCrystalItem.useOn: on obsidian or bedrock, with two free blocks above and nothing in the way
+			std::string block = level.gameData().getStaticName("minecraft:block", level.blocks().blockOf(state));
+			if (block != "minecraft:obsidian" && block != "minecraft:bedrock") return Result::Fail;
+			BlockPos above = hit.pos.above();
+			if (!level.blocks().isAir(level.getBlockState(above)) || !level.blocks().isAir(level.getBlockState(above.above()))) return Result::Fail;
+			AABB box{static_cast<double>(above.x), static_cast<double>(above.y), static_cast<double>(above.z), above.x + 1.0, above.y + 2.0, above.z + 1.0};
+			if (!level.actorsIn(box).empty()) return Result::Fail;
+			auto crystal = std::make_unique<EndCrystal>(level, Vec3{above.x + 0.5, static_cast<double>(above.y), above.z + 0.5});
+			crystal->setShowBottom(false);
+			level.entities().add(std::move(crystal));
+			if (player.getGameMode() != GameMode::Creative) stack.shrink(1);
+			return Result::Success;
+		}
 		if (name == "minecraft:flint_and_steel") {
 			// FlintAndSteelItem.useOn
 			BlockPos target = hit.pos;

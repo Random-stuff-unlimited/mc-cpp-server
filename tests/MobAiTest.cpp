@@ -12,6 +12,8 @@
 #include "world/inventory/MerchantMenu.hpp"
 #include "world/blocks/Eggs.hpp"
 #include "world/blockentity/BeehiveBlockEntity.hpp"
+#include "world/EndDragonFight.hpp"
+#include "world/entity/EndCrystal.hpp"
 #include "world/entity/mobs/Camelids.hpp"
 #include "world/entity/mobs/Slime.hpp"
 #include "world/entity/mobs/Creeper.hpp"
@@ -1150,4 +1152,31 @@ TEST(bee_enters_hive_at_night) {
 	CHECK(f.level->actorById(id) == nullptr);
 	auto* hive = dynamic_cast<BeehiveBlockEntity*>(f.level->getBlockEntity({3, Y, 0}));
 	CHECK(hive && hive->occupantCount() == 1);
+}
+
+// The End: a player arrives, the arena is built (ten crystals on their spikes) and the dragon comes; dead, the exit
+// portal opens with the egg on it
+TEST(end_dragon_fight) {
+	LevelFixture f(2, "minecraft:the_end");
+	EndDragonFight* fight = f.level->endFight();
+	CHECK(fight);
+	if (!fight) return;
+	auto player = addPlayer(f, 10.5, 10.5);
+	f.tick(40);
+	CHECK(fight->arenaBuilt());
+	int crystals = 0;
+	EnderDragon* dragon = nullptr;
+	f.level->entities().forEach([&](Entity& entity) {
+		if (dynamic_cast<EndCrystal*>(&entity)) crystals++;
+		if (auto* d = dynamic_cast<EnderDragon*>(&entity)) dragon = d;
+	});
+	CHECK_EQ(crystals, 10);
+	CHECK(dragon);
+	if (!dragon) return;
+	dragon->hurtServer({"minecraft:generic", nullptr, nullptr, std::nullopt}, 1000.0F);
+	f.tick(220);
+	CHECK(fight->dragonKilled());
+	BlockPos portal = fight->portalLocation();
+	CHECK(f.data.getStaticName("minecraft:block", f.level->blocks().blockOf(f.level->getBlockState(portal.offset(1, 0, 0)))) == "minecraft:end_portal");
+	CHECK(f.data.getStaticName("minecraft:block", f.level->blocks().blockOf(f.level->getBlockState(portal.offset(0, 4, 0)))) == "minecraft:dragon_egg");
 }

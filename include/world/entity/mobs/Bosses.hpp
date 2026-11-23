@@ -137,6 +137,8 @@ class EnderDragon : public Mob {
 
 	Phase phase() const { return _phase; }
 	void  setPhase(Phase phase);
+	// The end crystal healing it (EnderDragon.nearestCrystal), its id, -1 if none
+	int	  healingCrystalId() const { return _healingCrystal; }
 	const Vec3& fightCenter() const { return _center; }
 
 	int								partCount() const override { return PARTS; }
@@ -161,7 +163,7 @@ class EnderDragon : public Mob {
 	Vec3	  _center, _target;
 	double	  _podiumY = 0.0;
 	float	  _yRotA   = 0.0F;
-	int		  _phaseTicks = 0, _circleStep = 0, _fireballCooldown = 0, _dyingTicks = 0;
+	int		  _phaseTicks = 0, _circleStep = 0, _fireballCooldown = 0, _dyingTicks = 0, _healingCrystal = -1;
 	EntityRef _attackTarget;
 	BossBar	  _bossBar;
 
@@ -171,6 +173,8 @@ class EnderDragon : public Mob {
 	void chooseNextPhase();
 	Vec3 headPosition() const;
 	void findPodium();
+	// EnderDragon.checkCrystals: the nearest crystal within 32 blocks heals it a point every half second
+	void checkCrystals();
 };
 
 // WitherSkullBlock.checkSpawn: the third wither skeleton skull on a T of soul sand or soul soil summons a wither

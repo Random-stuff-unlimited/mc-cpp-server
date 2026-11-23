@@ -44,6 +44,8 @@ class Server;
 // steps as vanilla in the same order: onPlace / affectNeighborsAfterRemoval, neighbor updates, shape updates.
 // Scheduled ticks and block events run in the tick phases called by Server::tick, in vanilla's order.
 // Changes reach the players once per tick (sendChanges): light first, then one packet per changed section.
+class EndDragonFight;
+
 class Level : public NeighborUpdateTarget {
   public:
 	// Block.UPDATE_* flags of setBlock
@@ -168,6 +170,8 @@ class Level : public NeighborUpdateTarget {
 	PathTypeCache& pathTypeCache() { return *_pathTypeCache; }
 	// The points of interest of this dimension (nether portals, beds, job sites...)
 	PoiManager& poi() { return *_poi; }
+	// The End's dragon fight (null in the other dimensions)
+	EndDragonFight* endFight() { return _endFight.get(); }
 	// ServerLevel.isCloseToVillage / isVillage: by sections to the nearest occupied point of interest
 	bool isCloseToVillage(const BlockPos& pos, int sections);
 	bool isVillage(const BlockPos& pos) { return isCloseToVillage(pos, 1); }
@@ -374,6 +378,7 @@ class Level : public NeighborUpdateTarget {
 	const GameData::Dimension* _dimensionType;
 	std::shared_ptr<const BlockContext> _blockContext;
 	std::unique_ptr<PoiManager>		 _poi;
+	std::unique_ptr<EndDragonFight> _endFight;
 	std::unique_ptr<PathTypeCache>	 _pathTypeCache;
 	std::vector<std::shared_ptr<Player>> _players;
 	const BlockRegistry& _blocks;
