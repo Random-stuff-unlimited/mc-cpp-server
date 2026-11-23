@@ -4,6 +4,7 @@
 #include "player.hpp"
 #include "world/Combat.hpp"
 #include "world/Level.hpp"
+#include "world/blockentity/BeehiveBlockEntity.hpp"
 #include "world/entity/ai/Controls.hpp"
 #include "world/entity/ai/RandomPos.hpp"
 
@@ -124,20 +125,30 @@ namespace {
 		int	 _cooldown = 0;
 	};
 
-	// Bee.BeeGoToHiveGoal and BeeEnterHiveGoal: with nectar, back to its hive, where the nectar becomes honey
+	// Bee.BeeGoToHiveGoal and BeeEnterHiveGoal: home when it wants to (nectar, night, rain), and in if there is room
 	class BeeGoToHiveGoal : public Goal {
 	  public:
 		explicit BeeGoToHiveGoal(Bee& bee) : _bee(bee) { setFlags({Flag::Move}); }
-		bool canUse() override { return _bee.hasNectar() && _bee.hasHive() && !_bee.isAngry() && _bee.isHive(_bee.hivePos()); }
+		bool canUse() override { return _bee.hasHive() && _bee.wantsToEnterHive() && _bee.isHive(_bee.hivePos()); }
 		bool canContinueToUse() override { return canUse() && _ticks < 1200; }
 		void start() override { _ticks = 0; }
-		void stop() override { _bee.navigation().stop(); }
+		void stop() override {
+			_bee.navigation().stop();
+			if (_ticks >= 1200) _bee.clearHive(); // It never got there: another hive, later
+		}
 		void tick() override {
 			_ticks++;
 			const BlockPos& hive = _bee.hivePos();
 			Vec3			center{hive.x + 0.5, hive.y + 0.5, hive.z + 0.5};
-			if ((center - _bee.position()).lengthSqr() <= 4.0) {
-				_bee.dropOffNectar();
+			if ((center - _bee.position()).lengthSqr() <= 2.0 * 2.0) {
+				auto* entity = dynamic_cast<BeehiveBlockEntity*>(_bee.level().getBlockEntity(hive));
+				if (entity && !entity->isFull()) {
+					entity->addOccupant(_bee);
+				} else if (_bee.hasNectar()) {
+					_bee.dropOffNectar(); // No room (or no block entity): the nectar goes in all the same
+				} else {
+					_bee.stayOutOfHiveCountdown = 200;
+				}
 				return;
 			}
 			if (_bee.navigation().isDone()) _bee.navigation().moveTo(center.x, center.y + 1.0, center.z, 1.0);
@@ -392,6 +403,11 @@ void Bee::dropOffNectar() {
 	_level.playSound(nullptr, _hivePos, "minecraft:block.beehive.enter", Level::SoundSource::Blocks, 1.0F, 1.0F);
 }
 
+bool Bee::wantsToEnterHive() {
+	if (stayOutOfHiveCountdown > 0 || hasStung() || getTarget()) return false;
+	return hasNectar() || _level.isDarkOutside() || _level.isRaining() || ticksWithoutNectarSinceExitingHive > 3600;
+}
+
 void Bee::setTarget(Actor* target) {
 	Animal::setTarget(target);
 	if (target && target->asPlayer() && !_anger.isAngry()) {
@@ -445,6 +461,7 @@ void Bee::customServerAiStep() {
 		}
 	}
 	if (!hasNectar()) ticksWithoutNectarSinceExitingHive++;
+	if (stayOutOfHiveCountdown > 0) stayOutOfHiveCountdown--;
 	_anger.update(false);
 }
 

@@ -11,6 +11,7 @@
 #include "world/entity/mobs/Bosses.hpp"
 #include "world/inventory/MerchantMenu.hpp"
 #include "world/blocks/Eggs.hpp"
+#include "world/blockentity/BeehiveBlockEntity.hpp"
 #include "world/entity/mobs/Camelids.hpp"
 #include "world/entity/mobs/Slime.hpp"
 #include "world/entity/mobs/Creeper.hpp"
@@ -758,8 +759,9 @@ TEST(bee_makes_honey) {
 	CHECK(bee);
 	if (!bee) return;
 	bee->setBaby(false);
+	f.world->setDayTime(1000); // In the day: at night it stays in its hive
 	bool honey = false, nectar = false;
-	for (int t = 0; t < 6000 && !honey; t++) {
+	for (int t = 0; t < 9000 && !honey; t++) {
 		f.tick();
 		nectar |= bee->hasNectar();
 		honey = f.data.getProperty(f.level->getBlockState({4, Y, 0}), "honey_level") != "0";
@@ -1133,4 +1135,19 @@ TEST(eggs_hatch) {
 	f.tick();
 	CHECK(f.level->blocks().isAir(f.level->getBlockState(eggPos)));
 	CHECK_EQ(countOf(f, "minecraft:sniffer"), 1);
+}
+
+// At night a bee goes into its hive (and leaves the level); the hive keeps it
+TEST(bee_enters_hive_at_night) {
+	LevelFixture f(1);
+	f.level->setBlock({3, Y, 0}, f.data.getDefaultBlockState("minecraft:beehive"), Level::UPDATE_ALL);
+	auto* bee = dynamic_cast<Bee*>(spawn(f, "minecraft:bee", {0, Y + 1, 0})); // spawn() makes it night
+	CHECK(bee);
+	if (!bee) return;
+	bee->setBaby(false);
+	int id = bee->id();
+	for (int t = 0; t < 1200 && f.level->actorById(id); t++) f.tick();
+	CHECK(f.level->actorById(id) == nullptr);
+	auto* hive = dynamic_cast<BeehiveBlockEntity*>(f.level->getBlockEntity({3, Y, 0}));
+	CHECK(hive && hive->occupantCount() == 1);
 }

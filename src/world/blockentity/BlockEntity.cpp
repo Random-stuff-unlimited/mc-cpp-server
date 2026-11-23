@@ -1,3 +1,4 @@
+#include "world/blockentity/BeehiveBlockEntity.hpp"
 #include "world/blockentity/BlockEntity.hpp"
 
 #include "data/GameData.hpp"
@@ -106,6 +107,7 @@ ItemStack BlockEntityReader::item() {
 std::unique_ptr<BlockEntity> BlockEntity::create(const std::string& type, const BlockPos& pos) {
 	if (type == "minecraft:comparator") return std::make_unique<ComparatorBlockEntity>(pos);
 	if (type == "minecraft:piston") return std::make_unique<PistonMovingBlockEntity>(pos);
+	if (type == "minecraft:beehive") return std::make_unique<BeehiveBlockEntity>(pos);
 	if (std::unique_ptr<BlockEntity> container = createContainerBlockEntity(type, pos)) return container;
 	if (type.empty()) return nullptr;
 	return std::make_unique<GenericBlockEntity>(type, pos);

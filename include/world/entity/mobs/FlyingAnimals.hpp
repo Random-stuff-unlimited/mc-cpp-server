@@ -62,7 +62,9 @@ class Bee : public Animal {
 	const BlockPos& savedFlower() const { return _savedFlower; }
 	void setSavedFlower(const BlockPos& pos) { _savedFlower = pos, _hasSavedFlower = true; }
 	void clearSavedFlower() { _hasSavedFlower = false; }
-	int	 cropsGrownSincePollination = 0, ticksWithoutNectarSinceExitingHive = 0;
+	int	 cropsGrownSincePollination = 0, ticksWithoutNectarSinceExitingHive = 0, stayOutOfHiveCountdown = 0;
+	// Bee.wantsToEnterHive: home with nectar, at night, in the rain, or tired of looking for flowers
+	bool wantsToEnterHive();
 	// Bee.isFlowerValid / isHiveValid
 	bool isFlower(const BlockPos& pos);
 	bool isHive(const BlockPos& pos);
