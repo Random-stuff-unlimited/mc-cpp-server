@@ -2,6 +2,7 @@
 #include "world/entity/MobRegistry.hpp"
 #include "world/entity/mobs/Bat.hpp"
 #include "world/entity/mobs/Blaze.hpp"
+#include "world/entity/mobs/Camelids.hpp"
 #include "world/entity/mobs/Creeper.hpp"
 #include "world/entity/mobs/Dolphin.hpp"
 #include "world/entity/mobs/Drowned.hpp"
@@ -104,4 +105,7 @@ void registerVanillaMobs(MobRegistry& registry) {
 	registry.setFactory("minecraft:illusioner", factory<Illusioner>());
 	registry.setFactory("minecraft:vex", factory<Vex>());
 	registry.setFactory("minecraft:ravager", factory<Ravager>());
+	registry.setFactory("minecraft:llama", factory<Llama>());
+	registry.setFactory("minecraft:trader_llama", factory<TraderLlama>());
+	registry.setFactory("minecraft:camel", factory<Camel>());
 }

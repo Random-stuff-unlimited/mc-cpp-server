@@ -6,6 +6,7 @@
 #include "world/Combat.hpp"
 #include "world/entity/ItemEntity.hpp"
 #include "world/entity/Mob.hpp"
+#include "world/entity/mobs/Camelids.hpp"
 #include "world/entity/mobs/Creeper.hpp"
 #include "world/entity/mobs/FarmAnimals.hpp"
 #include "world/entity/mobs/Skeleton.hpp"
@@ -552,4 +553,41 @@ TEST(ravager_bites_player) {
 	CHECK(mob);
 	if (!mob) return;
 	CHECK(hurtsPlayer(f, *player, 400));
+}
+
+// A llama spits at a wild wolf nearby
+TEST(llama_spits_at_wolf) {
+	LevelFixture f(1);
+	Mob* llama = spawn(f, "minecraft:llama", {0, Y, 0});
+	Mob* wolf  = spawn(f, "minecraft:wolf", {3, Y, 0}); // Llamas only look 4 blocks away for wolves
+	CHECK(llama && wolf);
+	if (!llama || !wolf) return;
+	llama->setBaby(false);
+	wolf->goalSelector().removeAllGoals();
+	wolf->targetSelector().removeAllGoals();
+	float health = wolf->health();
+	bool  targeted = false;
+	for (int t = 0; t < 600 && wolf->health() >= health; t++) {
+		f.tick();
+		targeted |= llama->getTarget() == wolf;
+	}
+	CHECK(targeted);
+	CHECK(wolf->health() < health);
+}
+
+// A camel sits down after a while, and stands up when hurt
+TEST(camel_sits_and_stands) {
+	LevelFixture f(1);
+	auto* camel = dynamic_cast<Camel*>(spawn(f, "minecraft:camel", {0, Y, 0}));
+	CHECK(camel);
+	if (!camel) return;
+	camel->setBaby(false);
+	bool sat = false;
+	for (int t = 0; t < 4000 && !sat; t++) {
+		f.tick();
+		sat = camel->isCamelSitting();
+	}
+	CHECK(sat);
+	camel->hurtServer({"minecraft:generic", nullptr, nullptr, std::nullopt}, 1.0F);
+	CHECK(!camel->isCamelSitting());
 }
