@@ -105,33 +105,35 @@ double Buffer::readDouble() {
 // Variable length
 
 int32_t Buffer::readVarInt() {
-	int32_t value = 0;
+	// At most 5 bytes (negative values take all 5)
+	uint32_t value = 0;
 	int position = 0;
 	uint8_t currentByte;
 
 	do {
+		if (position >= 35) throw std::runtime_error("VarInt too big");
 		currentByte = readUByte();
-		value |= (currentByte & 0x7F) << position;
+		value |= static_cast<uint32_t>(currentByte & 0x7F) << position;
 		position += 7;
-		if (position >= 32) throw std::runtime_error("VarInt too big");
 	} while (currentByte & 0x80);
 
-	return value;
+	return static_cast<int32_t>(value);
 }
 
 int64_t Buffer::readVarLong() {
-	int64_t value = 0;
+	// At most 10 bytes (negative values take all 10)
+	uint64_t value = 0;
 	int position = 0;
 	uint8_t currentByte;
 
 	do {
+		if (position >= 70) throw std::runtime_error("VarLong too big");
 		currentByte = readUByte();
-		value |= (static_cast<int64_t>(currentByte & 0x7F)) << position;
+		value |= static_cast<uint64_t>(currentByte & 0x7F) << position;
 		position += 7;
-		if (position >= 64) throw std::runtime_error("VarLong too big");
 	} while (currentByte & 0x80);
 
-	return value;
+	return static_cast<int64_t>(value);
 }
 
 // Complex types
