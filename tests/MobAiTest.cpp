@@ -16,6 +16,7 @@
 #include "world/entity/mobs/HelperMobs.hpp"
 #include "world/blockentity/BlockEntity.hpp"
 #include "world/entity/mobs/Skeleton.hpp"
+#include "world/entity/mobs/Piglins.hpp"
 #include "world/entity/mobs/Shulker.hpp"
 #include "world/entity/mobs/Spider.hpp"
 #include "world/entity/mobs/Warden.hpp"
@@ -917,4 +918,42 @@ TEST(happy_ghast_floats) {
 	ghast->setBaby(false);
 	f.tick(100);
 	CHECK(ghast->position().y > Y + 2.0);
+}
+
+// A piglin picks up a gold ingot, admires it, and throws something back
+TEST(piglin_barters_gold) {
+	LevelFixture f(1);
+	auto* piglin = dynamic_cast<Piglin*>(spawn(f, "minecraft:piglin", {0, Y, 0}));
+	CHECK(piglin);
+	if (!piglin) return;
+	piglin->setBaby(false);
+	piglin->setImmuneToZombification(true);
+	int gold = f.item("minecraft:gold_ingot");
+	f.level->entities().add(std::make_unique<ItemEntity>(*f.level, Vec3{3.5, Y, 0.5}, ItemStack(gold, 1), Vec3{}));
+	bool admired = false, bartered = false;
+	for (int t = 0; t < 600 && !bartered; t++) {
+		f.tick();
+		admired |= piglin->isAdmiring();
+		if (admired && !piglin->isAdmiring()) {
+			for (ItemEntity* item : f.items()) bartered |= item->item().item != gold;
+		}
+	}
+	CHECK(admired);
+	CHECK(bartered);
+}
+
+// A piglin attacks a player without gold, and leaves alone one wearing a golden helmet
+TEST(piglin_spares_gold_wearers) {
+	LevelFixture f(1);
+	auto  player = addPlayer(f, 6.5, 0.5);
+	auto* piglin = dynamic_cast<Piglin*>(spawn(f, "minecraft:piglin", {0, Y, 0}));
+	CHECK(piglin);
+	if (!piglin) return;
+	piglin->setBaby(false);
+	piglin->setImmuneToZombification(true);
+	player->inventory().set(5, ItemStack(f.item("minecraft:golden_helmet"), 1));
+	f.tick(200);
+	CHECK(piglin->getTarget() == nullptr);
+	player->inventory().set(5, ItemStack{});
+	CHECK(hurtsPlayer(f, *player, 600));
 }

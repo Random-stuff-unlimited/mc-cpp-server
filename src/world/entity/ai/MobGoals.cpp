@@ -22,6 +22,7 @@
 #include "world/entity/mobs/IronGolem.hpp"
 #include "world/entity/mobs/Panda.hpp"
 #include "world/entity/mobs/Phantom.hpp"
+#include "world/entity/mobs/Piglins.hpp"
 #include "world/entity/mobs/PolarBear.hpp"
 #include "world/entity/mobs/Rabbit.hpp"
 #include "world/entity/mobs/Skeleton.hpp"
@@ -130,4 +131,6 @@ void registerVanillaMobs(MobRegistry& registry) {
 	registry.setFactory("minecraft:allay", factory<Allay>());
 	registry.setFactory("minecraft:copper_golem", factory<CopperGolem>());
 	registry.setFactory("minecraft:happy_ghast", factory<HappyGhast>());
+	registry.setFactory("minecraft:piglin", factory<Piglin>());
+	registry.setFactory("minecraft:piglin_brute", factory<PiglinBrute>());
 }

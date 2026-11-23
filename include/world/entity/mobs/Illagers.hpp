@@ -2,6 +2,7 @@
 #define ILLAGERS_HPP
 
 #include "world/entity/Entity.hpp"
+#include "world/entity/ai/CrossbowAttack.hpp"
 #include "world/entity/ai/Goals.hpp"
 #include "world/entity/mobs/Monster.hpp"
 
@@ -36,14 +37,14 @@ class Vindicator : public Raider {
 };
 
 // Pillager: shoots its crossbow (load for 25 ticks, wait one or two seconds, fire) from up to 8 blocks
-class Pillager : public Raider {
+class Pillager : public Raider, public CrossbowAttackMob {
   public:
 	static constexpr int DATA_IS_CHARGING_CROSSBOW = 17;
 
 	Pillager(Level& level, int typeId);
 	bool isChargingCrossbow() const { return _chargingCrossbow; }
-	void setChargingCrossbow(bool charging);
-	bool isHoldingCrossbow();
+	void setChargingCrossbow(bool charging) override;
+	bool isHoldingCrossbow() override;
 
 	void							registerGoals() override;
 	void							performRangedAttack(Actor& target, float power) override;
