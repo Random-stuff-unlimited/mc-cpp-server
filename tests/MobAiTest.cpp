@@ -14,6 +14,7 @@
 #include "world/entity/mobs/FarmAnimals.hpp"
 #include "world/entity/mobs/FlyingAnimals.hpp"
 #include "world/entity/mobs/Skeleton.hpp"
+#include "world/entity/mobs/Shulker.hpp"
 #include "world/entity/mobs/Spider.hpp"
 #include "world/entity/mobs/TrialMobs.hpp"
 #include "world/entity/mobs/Wolf.hpp"
@@ -805,4 +806,20 @@ TEST(creaking_freezes_when_watched) {
 	}
 	CHECK(couldMove);
 	CHECK(moved);
+}
+
+// A shulker opens up and shoots a homing bullet at the player: hurt, and levitating
+TEST(shulker_bullet_levitates_player) {
+	LevelFixture f(1);
+	auto player	 = addPlayer(f, 8.5, 0.5);
+	Mob* shulker = spawn(f, "minecraft:shulker", {0, Y, 0});
+	CHECK(shulker);
+	if (!shulker) return;
+	bool levitating = false;
+	for (int t = 0; t < 600 && !levitating; t++) {
+		f.tick();
+		levitating = player->hasEffect(MobEffects::Levitation);
+	}
+	CHECK(levitating);
+	CHECK(shulker->position().x == 0.5 && shulker->position().z == 0.5); // It never moved
 }

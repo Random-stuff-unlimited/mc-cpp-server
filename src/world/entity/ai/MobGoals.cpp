@@ -24,6 +24,7 @@
 #include "world/entity/mobs/PolarBear.hpp"
 #include "world/entity/mobs/Rabbit.hpp"
 #include "world/entity/mobs/Skeleton.hpp"
+#include "world/entity/mobs/Shulker.hpp"
 #include "world/entity/mobs/Silverfish.hpp"
 #include "world/entity/mobs/Slime.hpp"
 #include "world/entity/mobs/SnowGolem.hpp"
@@ -122,4 +123,5 @@ void registerVanillaMobs(MobRegistry& registry) {
 	registry.setFactory("minecraft:bee", factory<Bee>());
 	registry.setFactory("minecraft:breeze", factory<Breeze>());
 	registry.setFactory("minecraft:creaking", factory<Creaking>());
+	registry.setFactory("minecraft:shulker", factory<Shulker>());
 }
