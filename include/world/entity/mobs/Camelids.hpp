@@ -90,7 +90,6 @@ class Camel : public AbstractHorse {
 	void							registerGoals() override;
 	bool							mobInteract(Player& player, int hand) override;
 	bool							isFood(const ItemStack& stack) const override;
-	bool							isImmobile() const override { return isCamelSitting() || AbstractHorse::isImmobile(); }
 	bool							hurtServer(const Combat::DamageSource& source, float amount) override;
 	bool							canMate(Animal& other) override;
 	std::unique_ptr<Mob>			getBreedOffspring(Animal& partner) override;

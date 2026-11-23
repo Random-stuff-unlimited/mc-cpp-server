@@ -4,6 +4,7 @@
 #include "world/entity/mobs/Blaze.hpp"
 #include "world/entity/mobs/Camelids.hpp"
 #include "world/entity/mobs/Creeper.hpp"
+#include "world/entity/mobs/Critters.hpp"
 #include "world/entity/mobs/Dolphin.hpp"
 #include "world/entity/mobs/Drowned.hpp"
 #include "world/entity/mobs/Enderman.hpp"
@@ -108,4 +109,7 @@ void registerVanillaMobs(MobRegistry& registry) {
 	registry.setFactory("minecraft:llama", factory<Llama>());
 	registry.setFactory("minecraft:trader_llama", factory<TraderLlama>());
 	registry.setFactory("minecraft:camel", factory<Camel>());
+	registry.setFactory("minecraft:goat", factory<Goat>());
+	registry.setFactory("minecraft:armadillo", factory<Armadillo>());
+	registry.setFactory("minecraft:sniffer", factory<Sniffer>());
 }

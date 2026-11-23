@@ -8,6 +8,7 @@
 #include "world/entity/Mob.hpp"
 #include "world/entity/mobs/Camelids.hpp"
 #include "world/entity/mobs/Creeper.hpp"
+#include "world/entity/mobs/Critters.hpp"
 #include "world/entity/mobs/FarmAnimals.hpp"
 #include "world/entity/mobs/Skeleton.hpp"
 #include "world/entity/mobs/Spider.hpp"
@@ -590,4 +591,57 @@ TEST(camel_sits_and_stands) {
 	CHECK(sat);
 	camel->hurtServer({"minecraft:generic", nullptr, nullptr, std::nullopt}, 1.0F);
 	CHECK(!camel->isCamelSitting());
+}
+
+// A screaming goat soon rams a cow standing a few blocks away
+TEST(goat_rams_cow) {
+	LevelFixture f(1);
+	auto* goat = dynamic_cast<Goat*>(spawn(f, "minecraft:goat", {0, Y, 0}));
+	Mob*  cow  = spawn(f, "minecraft:cow", {6, Y, 0});
+	CHECK(goat && cow);
+	if (!goat || !cow) return;
+	goat->setBaby(false);
+	goat->setScreamingGoat(true);
+	cow->goalSelector().removeAllGoals();
+	float health = cow->health();
+	for (int t = 0; t < 1200 && cow->health() >= health; t++) f.tick();
+	CHECK(cow->health() < health);
+}
+
+// Hurt, an armadillo rolls up and takes less damage; safe again, it unrolls
+TEST(armadillo_rolls_up) {
+	LevelFixture f(1);
+	auto* armadillo = dynamic_cast<Armadillo*>(spawn(f, "minecraft:armadillo", {0, Y, 0}));
+	CHECK(armadillo);
+	if (!armadillo) return;
+	armadillo->setBaby(false);
+	armadillo->hurtServer({"minecraft:generic", nullptr, nullptr, std::nullopt}, 1.0F);
+	f.tick(10);
+	CHECK(armadillo->state() == Armadillo::State::Scared);
+	float health = armadillo->health();
+	f.tick(20); // Past the invulnerability
+	armadillo->hurtServer({"minecraft:generic", nullptr, nullptr, std::nullopt}, 5.0F);
+	CHECK_EQ(armadillo->health(), health - 2.0F);
+	f.tick(200);
+	CHECK(armadillo->state() == Armadillo::State::Idle);
+}
+
+// A sniffer digs up an ancient seed from the grass
+TEST(sniffer_digs_seed) {
+	LevelFixture f(1);
+	auto* sniffer = dynamic_cast<Sniffer*>(spawn(f, "minecraft:sniffer", {0, Y, 0}));
+	CHECK(sniffer);
+	if (!sniffer) return;
+	sniffer->setBaby(false);
+	int	 torch = f.data.getStaticId("minecraft:item", "minecraft:torchflower_seeds");
+	int	 pod   = f.data.getStaticId("minecraft:item", "minecraft:pitcher_pod");
+	bool found = false;
+	for (int t = 0; t < 6000 && !found; t++) {
+		f.tick();
+		if (t % 20) continue;
+		f.level->entities().forEach([&](Entity& entity) {
+			if (auto* item = dynamic_cast<ItemEntity*>(&entity); item && (item->item().item == torch || item->item().item == pod)) found = true;
+		});
+	}
+	CHECK(found);
 }
