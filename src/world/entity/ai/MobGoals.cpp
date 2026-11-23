@@ -33,6 +33,7 @@
 #include "world/entity/mobs/TrialMobs.hpp"
 #include "world/entity/mobs/Turtle.hpp"
 #include "world/entity/mobs/WaterAnimals.hpp"
+#include "world/entity/mobs/Warden.hpp"
 #include "world/entity/mobs/Witch.hpp"
 #include "world/entity/mobs/Wolf.hpp"
 #include "world/entity/mobs/Zombie.hpp"
@@ -124,4 +125,5 @@ void registerVanillaMobs(MobRegistry& registry) {
 	registry.setFactory("minecraft:breeze", factory<Breeze>());
 	registry.setFactory("minecraft:creaking", factory<Creaking>());
 	registry.setFactory("minecraft:shulker", factory<Shulker>());
+	registry.setFactory("minecraft:warden", factory<Warden>());
 }

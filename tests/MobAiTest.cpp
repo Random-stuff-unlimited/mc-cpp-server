@@ -16,6 +16,7 @@
 #include "world/entity/mobs/Skeleton.hpp"
 #include "world/entity/mobs/Shulker.hpp"
 #include "world/entity/mobs/Spider.hpp"
+#include "world/entity/mobs/Warden.hpp"
 #include "world/entity/mobs/TrialMobs.hpp"
 #include "world/entity/mobs/Wolf.hpp"
 #include "world/entity/Arrow.hpp"
@@ -822,4 +823,38 @@ TEST(shulker_bullet_levitates_player) {
 	}
 	CHECK(levitating);
 	CHECK(shulker->position().x == 0.5 && shulker->position().z == 0.5); // It never moved
+}
+
+// A warden doesn't hear a sneaking player; one walking about is hunted down and hit hard
+TEST(warden_hears_walking_player) {
+	LevelFixture f(1);
+	auto  player = addPlayer(f, 8.5, 0.5);
+	auto* warden = dynamic_cast<Warden*>(spawn(f, "minecraft:warden", {0, Y, 0}));
+	CHECK(warden);
+	if (!warden) return;
+	warden->goalSelector().removeAllGoals(); // Standing still: only its hearing is tested first
+	player->setShiftKeyDown(true);
+	for (int t = 0; t < 200; t++) {
+		player->setPosition(8.5 + (t % 2) * 0.2, Y, 0.5);
+		f.tick();
+	}
+	CHECK_EQ(warden->angerAt(*player), 0);
+	player->setShiftKeyDown(false);
+	for (int t = 0; t < 200; t++) {
+		player->setPosition(8.5 + (t % 2) * 0.2, Y, 0.5);
+		f.tick();
+	}
+	CHECK(warden->angerAt(*player) >= Warden::ANGERY);
+	CHECK(warden->getTarget() == player.get());
+}
+
+// Angry, a warden walks up and swipes, or booms from afar
+TEST(warden_attacks_angry_target) {
+	LevelFixture f(1);
+	auto  player = addPlayer(f, 8.5, 0.5);
+	auto* warden = dynamic_cast<Warden*>(spawn(f, "minecraft:warden", {0, Y, 0}));
+	CHECK(warden);
+	if (!warden) return;
+	warden->increaseAngerAt(*player, Warden::MAX_ANGER, false);
+	CHECK(hurtsPlayer(f, *player, 600));
 }
