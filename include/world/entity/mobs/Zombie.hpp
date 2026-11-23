@@ -56,6 +56,9 @@ class Zombie : public Monster {
 
 // ZombieVillager: a zombie with a villager's type (by biome) and profession. Given a golden apple while weakened, it
 // cures into a villager after 3 to 5 minutes (faster near iron bars and beds)
+// VillagerType.byBiome: the villager type of a biome ("minecraft:plains" by default)
+const char* villagerTypeOfBiome(const GameData& data, int biome);
+
 class ZombieVillager : public Zombie {
   public:
 	static constexpr int DATA_CONVERTING = 19, DATA_VILLAGER_DATA = 20;

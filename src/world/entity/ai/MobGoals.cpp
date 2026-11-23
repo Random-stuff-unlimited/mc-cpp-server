@@ -35,6 +35,7 @@
 #include "world/entity/mobs/TrialMobs.hpp"
 #include "world/entity/mobs/Turtle.hpp"
 #include "world/entity/mobs/WaterAnimals.hpp"
+#include "world/entity/mobs/Villagers.hpp"
 #include "world/entity/mobs/Warden.hpp"
 #include "world/entity/mobs/Witch.hpp"
 #include "world/entity/mobs/Wolf.hpp"
@@ -133,4 +134,6 @@ void registerVanillaMobs(MobRegistry& registry) {
 	registry.setFactory("minecraft:happy_ghast", factory<HappyGhast>());
 	registry.setFactory("minecraft:piglin", factory<Piglin>());
 	registry.setFactory("minecraft:piglin_brute", factory<PiglinBrute>());
+	registry.setFactory("minecraft:villager", factory<Villager>());
+	registry.setFactory("minecraft:wandering_trader", factory<WanderingTrader>());
 }

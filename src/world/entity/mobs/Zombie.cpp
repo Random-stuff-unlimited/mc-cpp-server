@@ -1,4 +1,5 @@
 #include "world/entity/mobs/Zombie.hpp"
+#include "world/entity/mobs/Villagers.hpp"
 
 #include "network/buffer.hpp"
 #include "player.hpp"
@@ -323,9 +324,8 @@ void Zombie::load(Buffer& buf) {
 
 // ----- ZombieVillager -----
 
-namespace {
-	// VillagerType.BY_BIOME
-	const char* villagerTypeOfBiome(const GameData& data, int biome) {
+// VillagerType.byBiome: the villager type of a biome (plains by default)
+const char* villagerTypeOfBiome(const GameData& data, int biome) {
 		static const std::vector<std::pair<const char*, const char*>> byBiome = {
 				{"minecraft:badlands", "minecraft:desert"},			  {"minecraft:desert", "minecraft:desert"},
 				{"minecraft:eroded_badlands", "minecraft:desert"},	  {"minecraft:wooded_badlands", "minecraft:desert"},
@@ -347,7 +347,9 @@ namespace {
 			if (data.getSyncedId("minecraft:worldgen/biome", name) == biome) return type;
 		}
 		return "minecraft:plains";
-	}
+}
+
+namespace {
 	constexpr int ENTITY_EVENT_CURE_START			= 16;
 	constexpr int LEVEL_EVENT_ZOMBIE_VILLAGER_CURED = 1027;
 } // namespace
@@ -440,11 +442,10 @@ void ZombieVillager::finishConversion() {
 		for (int slot = 0; slot < EQUIPMENT_SLOT_COUNT; slot++) {
 			if (!equipment[slot].isEmpty() && _dropChances[slot] > 1.0F) villager.setItemSlot(static_cast<EquipmentSlot>(slot), equipment[slot]);
 		}
-		(void)type;
-		(void)profession;
-		(void)villagerLevel; // Villagers have no class of their own yet: their data isn't kept
 		DifficultyInstance difficulty = level.getCurrentDifficultyAt(villager.blockPosition());
 		villager.finalizeSpawn(difficulty, static_cast<int>(MobRegistry::SpawnReason::Conversion));
+		// Its villager data is kept (finalizeSpawn would give it its biome's type)
+		if (auto* cured = dynamic_cast<Villager*>(&villager)) cured->setVillagerData(type, profession, villagerLevel);
 		villager.addEffect(MobEffects::Instance(MobEffects::Nausea, 200, 0));
 	});
 	level.levelEvent(nullptr, LEVEL_EVENT_ZOMBIE_VILLAGER_CURED, pos, 0);

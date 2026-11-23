@@ -19,6 +19,7 @@
 #include "world/entity/mobs/Piglins.hpp"
 #include "world/entity/mobs/Shulker.hpp"
 #include "world/entity/mobs/Spider.hpp"
+#include "world/entity/mobs/Villagers.hpp"
 #include "world/entity/mobs/Warden.hpp"
 #include "world/entity/mobs/TrialMobs.hpp"
 #include "world/entity/mobs/Wolf.hpp"
@@ -956,4 +957,44 @@ TEST(piglin_spares_gold_wearers) {
 	CHECK(piglin->getTarget() == nullptr);
 	player->inventory().set(5, ItemStack{});
 	CHECK(hurtsPlayer(f, *player, 600));
+}
+
+// A villager near a lectern becomes a librarian, and sleeps in the bed nearby at night
+TEST(villager_takes_job_and_sleeps) {
+	LevelFixture f(1);
+	f.level->setBlock({4, Y, 0}, f.data.getDefaultBlockState("minecraft:lectern"), Level::UPDATE_ALL);
+	int foot = f.data.getBlockState("minecraft:red_bed", {{"facing", "south"}, {"occupied", "false"}, {"part", "foot"}});
+	int head = f.data.getBlockState("minecraft:red_bed", {{"facing", "south"}, {"occupied", "false"}, {"part", "head"}});
+	f.level->setBlock({-4, Y, 0}, foot, Level::UPDATE_ALL);
+	f.level->setBlock({-4, Y, 1}, head, Level::UPDATE_ALL);
+	auto* villager = dynamic_cast<Villager*>(spawn(f, "minecraft:villager", {0, Y, 0}));
+	CHECK(villager);
+	if (!villager) return;
+	villager->setBaby(false);
+	f.world->setDayTime(3000);
+	f.tick(100);
+	CHECK(villager->professionName() == "minecraft:librarian");
+	CHECK(villager->home().has_value());
+	f.world->setDayTime(13000);
+	bool slept = false;
+	for (int t = 0; t < 600 && !slept; t++) {
+		f.tick();
+		slept = villager->isSleeping();
+	}
+	CHECK(slept);
+}
+
+// A villager runs from a zombie
+TEST(villager_flees_zombie) {
+	LevelFixture f(1);
+	auto* villager = dynamic_cast<Villager*>(spawn(f, "minecraft:villager", {0, Y, 0}));
+	Mob*  zombie   = spawn(f, "minecraft:zombie", {4, Y, 0});
+	CHECK(villager && zombie);
+	if (!villager || !zombie) return;
+	villager->setBaby(false);
+	zombie->goalSelector().removeAllGoals();
+	zombie->targetSelector().removeAllGoals();
+	f.world->setDayTime(1000);
+	f.tick(100);
+	CHECK(villager->distanceToSqr(*zombie) > 6.0 * 6.0);
 }
