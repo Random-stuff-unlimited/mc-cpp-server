@@ -441,3 +441,38 @@ TEST(fox_hunts_chicken) {
 	}
 	CHECK(hurt);
 }
+
+// Outside the Nether a hoglin turns into a zoglin after 15 seconds
+TEST(hoglin_zombifies_in_overworld) {
+	LevelFixture f(1);
+	Mob* hoglin = spawn(f, "minecraft:hoglin", {0, Y, 0});
+	CHECK(hoglin);
+	if (!hoglin) return;
+	int id = hoglin->id();
+	f.tick(320);
+	CHECK(f.level->actorById(id) == nullptr || !f.level->actorById(id)->isAlive());
+	int zoglins = 0;
+	f.level->entities().forEach([&](Entity& entity) {
+		if (entity.typeId() == f.data.getStaticId("minecraft:entity_type", "minecraft:zoglin") && !entity.isRemoved()) zoglins++;
+	});
+	CHECK_EQ(zoglins, 1);
+}
+
+// A zoglin attacks any living thing, a cow too
+TEST(zoglin_attacks_cow) {
+	LevelFixture f(1);
+	Mob* zoglin = spawn(f, "minecraft:zoglin", {0, Y, 0});
+	Mob* cow	= spawn(f, "minecraft:cow", {6, Y, 0});
+	CHECK(zoglin && cow);
+	if (!zoglin || !cow) return;
+	cow->goalSelector().removeAllGoals();
+	int	  id	 = cow->id();
+	float health = cow->health();
+	bool  hurt	 = false;
+	for (int t = 0; t < 400 && !hurt; t++) {
+		f.tick();
+		Actor* still = f.level->actorById(id);
+		hurt		 = !still || !still->isAlive() || static_cast<Mob*>(still)->health() < health;
+	}
+	CHECK(hurt);
+}

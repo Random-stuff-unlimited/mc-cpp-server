@@ -53,6 +53,8 @@ void registerVanillaMobs(MobRegistry& registry) {
 	registry.setFactory("minecraft:cave_spider", factory<CaveSpider>());
 	registry.setFactory("minecraft:enderman", factory<Enderman>());
 	registry.setFactory("minecraft:hoglin", factory<Hoglin>());
+	registry.setFactory("minecraft:zoglin", factory<Zoglin>());
+	registry.setFactory("minecraft:giant", factory<Giant>());
 	registry.setFactory("minecraft:iron_golem", factory<IronGolem>());
 	registry.setFactory("minecraft:skeleton", factory<Skeleton>());
 	registry.setFactory("minecraft:stray", factory<Stray>());
