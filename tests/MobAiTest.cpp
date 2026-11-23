@@ -476,3 +476,80 @@ TEST(zoglin_attacks_cow) {
 	}
 	CHECK(hurt);
 }
+
+namespace {
+	// Ticks until the player loses health; whether it did
+	bool hurtsPlayer(LevelFixture& f, Player& player, int ticks) {
+		float health = player.combat().health;
+		for (int t = 0; t < ticks && player.combat().health >= health; t++) f.tick();
+		return player.combat().health < health;
+	}
+} // namespace
+
+// A vindicator charges the player with its axe
+TEST(vindicator_hits_player) {
+	LevelFixture f(1);
+	auto player = addPlayer(f, 8.5, 0.5);
+	Mob* mob	= spawn(f, "minecraft:vindicator", {0, Y, 0});
+	CHECK(mob);
+	if (!mob) return;
+	CHECK(!mob->getMainHandItem().isEmpty());
+	CHECK(hurtsPlayer(f, *player, 400));
+}
+
+// A pillager loads its crossbow and shoots the player from afar
+TEST(pillager_shoots_player) {
+	LevelFixture f(2);
+	auto player = addPlayer(f, 7.5, 0.5);
+	Mob* mob	= spawn(f, "minecraft:pillager", {0, Y, 0});
+	CHECK(mob);
+	if (!mob) return;
+	CHECK(hurtsPlayer(f, *player, 600));
+	CHECK(mob->distanceToSqr(*player) > 4.0); // From a distance
+}
+
+// An evoker summons vexes and bites with fangs
+TEST(evoker_casts_spells) {
+	LevelFixture f(2);
+	auto player = addPlayer(f, 6.5, 0.5);
+	Mob* mob	= spawn(f, "minecraft:evoker", {0, Y, 0});
+	CHECK(mob);
+	if (!mob) return;
+	int	 vexType = f.data.getStaticId("minecraft:entity_type", "minecraft:vex");
+	int	 vexes	 = 0;
+	bool hurt	 = false;
+	float health = player->combat().health;
+	for (int t = 0; t < 600 && (vexes == 0 || !hurt); t++) {
+		f.tick();
+		hurt |= player->combat().health < health;
+		vexes = 0;
+		f.level->entities().forEach([&](Entity& entity) {
+			if (entity.typeId() == vexType && !entity.isRemoved()) vexes++;
+		});
+	}
+	CHECK(vexes > 0);
+	CHECK(hurt);
+}
+
+// With nothing to fight, an evoker turns a blue sheep red
+TEST(evoker_wololo) {
+	LevelFixture f(1);
+	Mob*  evoker = spawn(f, "minecraft:evoker", {0, Y, 0});
+	auto* sheep	 = dynamic_cast<Sheep*>(spawn(f, "minecraft:sheep", {4, Y, 0}));
+	CHECK(evoker && sheep);
+	if (!evoker || !sheep) return;
+	sheep->setColor(11);
+	sheep->goalSelector().removeAllGoals();
+	for (int t = 0; t < 400 && sheep->color() == 11; t++) f.tick();
+	CHECK_EQ(sheep->color(), 14);
+}
+
+// A ravager bites the player
+TEST(ravager_bites_player) {
+	LevelFixture f(1);
+	auto player = addPlayer(f, 8.5, 0.5);
+	Mob* mob	= spawn(f, "minecraft:ravager", {0, Y, 0});
+	CHECK(mob);
+	if (!mob) return;
+	CHECK(hurtsPlayer(f, *player, 400));
+}

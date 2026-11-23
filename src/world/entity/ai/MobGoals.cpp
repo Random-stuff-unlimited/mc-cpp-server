@@ -13,6 +13,7 @@
 #include "world/entity/mobs/Guardian.hpp"
 #include "world/entity/mobs/Hoglin.hpp"
 #include "world/entity/mobs/Horses.hpp"
+#include "world/entity/mobs/Illagers.hpp"
 #include "world/entity/mobs/IronGolem.hpp"
 #include "world/entity/mobs/Panda.hpp"
 #include "world/entity/mobs/Phantom.hpp"
@@ -97,4 +98,10 @@ void registerVanillaMobs(MobRegistry& registry) {
 	registry.setFactory("minecraft:phantom", factory<Phantom>());
 	registry.setFactory("minecraft:witch", factory<Witch>());
 	registry.setFactory("minecraft:wolf", factory<Wolf>());
+	registry.setFactory("minecraft:vindicator", factory<Vindicator>());
+	registry.setFactory("minecraft:pillager", factory<Pillager>());
+	registry.setFactory("minecraft:evoker", factory<Evoker>());
+	registry.setFactory("minecraft:illusioner", factory<Illusioner>());
+	registry.setFactory("minecraft:vex", factory<Vex>());
+	registry.setFactory("minecraft:ravager", factory<Ravager>());
 }
