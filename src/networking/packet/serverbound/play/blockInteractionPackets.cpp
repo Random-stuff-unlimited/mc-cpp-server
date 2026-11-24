@@ -219,7 +219,7 @@ void handlePlayerActionPacket(Packet& packet, Server& server) {
 			// Instant break: always in creative, and for blocks that take no time (flowers, torches...)
 			refused = !breakBlock(player, server, x, y, z);
 		} else {
-			player.startDigging(x, y, z); // Broken on FINISH_DIGGING
+			player.startDigging(x, y, z, level.getGameTime()); // Broken on FINISH_DIGGING
 		}
 	} else if (status == FINISH_DIGGING) {
 		// TODO: check the digging time against the block's hardness and the tool (anti-cheat)

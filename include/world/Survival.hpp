@@ -66,6 +66,13 @@ namespace Survival {
 	void reset(Player& player);
 	// The player's pose, and the entity data to tell the viewers when it changed (sleeping, crouching...)
 	void setPose(Player& player, Pose pose);
+	// Player.getDestroySpeed: the held tool's speed on that block, efficiency, haste or conduit power, mining fatigue,
+	// underwater (without aqua affinity) and off the ground
+	float destroySpeed(Level& level, const Player& player, int state);
+	// BlockState.getDestroyProgress: the part of the block broken per tick (1 or more: broken at once)
+	float destroyProgress(Level& level, const Player& player, int state);
+	// ServerPlayerGameMode.tick: the cracks of the block being mined, to the other players near it
+	void tickDestroy(Level& level, Player& player);
 } // namespace Survival
 
 #endif

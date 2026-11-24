@@ -355,3 +355,36 @@ TEST(survival_clip) {
 	hit = ItemUse::clip(*f.level, {0.5, Y + 0.75, 0.5}, {5.5, Y + 0.75, 0.5}, false);
 	CHECK(!hit.hit);
 }
+
+// Player.getDestroySpeed / BlockState.getDestroyProgress, against vanilla's numbers; the cracks follow the progress
+TEST(destroy_progress_and_cracks) {
+	LevelFixture f(1);
+	auto player = std::make_shared<Player>("Miner", PlayerState::Play, -1, f.server);
+	player->setPosition(0.5, LevelFixture::SURFACE + 1, 0.5);
+	player->setOnGround(true);
+	f.addPlayer(player);
+	player->setSelectedSlot(0);
+	int	 stone = f.state("minecraft:stone"), dirt = f.data.getDefaultBlockState("minecraft:dirt");
+	auto near  = [](float a, float b) { return std::fabs(a - b) < 1e-4F; };
+	CHECK(near(Survival::destroyProgress(*f.level, *player, stone), 1.0F / 1.5F / 100.0F)); // By hand: no drop, slow
+	CHECK(near(Survival::destroyProgress(*f.level, *player, dirt), 1.0F / 0.5F / 30.0F));
+	player->inventory().set(player->handSlot(0), ItemStack(f.item("minecraft:wooden_pickaxe"), 1));
+	CHECK(near(Survival::destroyProgress(*f.level, *player, stone), 2.0F / 1.5F / 30.0F));
+	player->inventory().set(player->handSlot(0), ItemStack(f.item("minecraft:diamond_pickaxe"), 1));
+	CHECK(near(Survival::destroySpeed(*f.level, *player, stone), 8.0F));
+	player->setOnGround(false);
+	CHECK(near(Survival::destroySpeed(*f.level, *player, stone), 8.0F / 5.0F)); // In the air
+	player->setOnGround(true);
+	player->inventory().set(player->handSlot(0), ItemStack());
+	player->effects().add(*player, MobEffects::Instance(MobEffects::Effect::Haste, 200, 1, false, true));
+	CHECK(near(Survival::destroySpeed(*f.level, *player, dirt), 1.4F));
+
+	// Cracks: 10 stages over the time it takes, for the others only
+	f.level->setBlock({0, LevelFixture::SURFACE, 1}, dirt, Level::UPDATE_ALL);
+	player->startDigging(0, LevelFixture::SURFACE, 1, f.level->getGameTime());
+	Survival::tickDestroy(*f.level, *player);
+	CHECK_EQ(player->digLastStage(), static_cast<int>(1.4F / 0.5F / 30.0F * 10.0F));
+	player->stopDigging();
+	Survival::tickDestroy(*f.level, *player);
+	CHECK_EQ(player->digLastStage(), -1);
+}

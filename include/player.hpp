@@ -173,6 +173,8 @@ class Player : public Actor, public std::enable_shared_from_this<Player>, public
 	PlayerInventory			_inventory;
 	int						_selectedSlot = 3; // Hotbar index 0-8
 	bool					_digging	  = false;
+	int64_t					_digStartTick = 0;
+	int						_digLastStage = -1;
 	bool					_sprinting	  = false;
 	int64_t					_lastAttack	  = 0; // Tick of the last attack: the attack strength recharges from there
 	CombatState				_combat;
@@ -427,12 +429,20 @@ class Player : public Actor, public std::enable_shared_from_this<Player>, public
 	void		 setLastAttack(int64_t time) { _lastAttack = time; }
 
 	// Block being mined in survival (between the start and finish digging actions)
-	void startDigging(int x, int y, int z) {
-		_digging = true;
-		_digX	 = x;
-		_digY	 = y;
-		_digZ	 = z;
+	void startDigging(int x, int y, int z, int64_t gameTime = 0) {
+		_digging	   = true;
+		_digX		   = x;
+		_digY		   = y;
+		_digZ		   = z;
+		_digStartTick  = gameTime;
+		_digLastStage  = -1;
 	}
+	bool	 isDigging() const { return _digging; }
+	BlockPos digPos() const { return {_digX, _digY, _digZ}; }
+	// ServerPlayerGameMode.destroyProgressStart and lastSentState: the crack stage the others see (-1: none)
+	int64_t	 digStartTick() const { return _digStartTick; }
+	int		 digLastStage() const { return _digLastStage; }
+	void	 setDigLastStage(int stage) { _digLastStage = stage; }
 	void stopDigging() { _digging = false; }
 	bool isDigging(int x, int y, int z) const { return _digging && _digX == x && _digY == y && _digZ == z; }
 

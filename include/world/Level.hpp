@@ -335,6 +335,9 @@ class Level : public NeighborUpdateTarget {
 	void blockEvent(const BlockPos& pos, int block, int type, int data);
 	// Particles and sounds (Level Event packet) for the players within 64 blocks, except `except`
 	void levelEvent(Player* except, int type, const BlockPos& pos, int data);
+	// ServerLevel.destroyBlockProgress: a block's cracks (0 to 9, anything else removes them) for the players within
+	// 32 blocks, except the one breaking it (its client draws its own)
+	void destroyBlockProgress(int breakerId, const BlockPos& pos, int progress);
 	// ServerLevel.globalLevelEvent: heard by every player of the server, from the direction of pos in this level
 	void globalLevelEvent(int type, const BlockPos& pos, int data);
 

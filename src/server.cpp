@@ -244,6 +244,7 @@ void Server::tick(bool worldRuns) {
 			if (player->wonGame()) continue;
 			Combat::tick(*this, *player);
 			Survival::tick(*player->level(), *player);
+			Survival::tickDestroy(*player->level(), *player);
 		}
 	}
 	// The movements of this tick to the players that see them

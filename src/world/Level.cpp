@@ -1211,3 +1211,15 @@ std::optional<GameData::MobCategory> Level::mobCategoryNamed(const std::string& 
 	if (it == NAMES.end()) return std::nullopt;
 	return it->second;
 }
+
+void Level::destroyBlockProgress(int breakerId, const BlockPos& pos, int progress) {
+	Buffer data;
+	data.writeVarInt(breakerId);
+	data.writePosition(pos.x, pos.y, pos.z);
+	data.writeByte(static_cast<int8_t>(progress >= 0 && progress < 10 ? progress : -1));
+	for (const auto& player : _players) {
+		if (player->id() == breakerId || player->isDisconnected()) continue;
+		double dx = pos.x - player->getX(), dy = pos.y - player->getY(), dz = pos.z - player->getZ();
+		if (dx * dx + dy * dy + dz * dz < 1024.0) Packet::send(player->shared_from_this(), PacketId::Play::Clientbound::BLOCK_DESTRUCTION, data, _server);
+	}
+}

@@ -11,6 +11,7 @@
 #include "world/blocks/Fire.hpp"
 #include "world/PlayerTracker.hpp"
 #include "world/item/ItemUse.hpp"
+#include "world/item/Enchantments.hpp"
 
 #include <cmath>
 #include <optional>
@@ -473,3 +474,68 @@ namespace Survival {
 	}
 
 } // namespace Survival
+
+float Survival::destroySpeed(Level& level, const Player& player, int state) {
+	const GameData& data  = level.gameData();
+	const ItemStack& held = player.getStackInHand(0);
+	// ItemStack.getDestroySpeed: the tool component's first rule with a speed for that block, else its default
+	float speed = 1.0F;
+	if (const GameData::ItemProperties* item = held.isEmpty() ? nullptr : data.getItemProperties(held.item)) {
+		speed	  = item->defaultMiningSpeed;
+		int block = data.getBlockOfState(state);
+		for (const auto& rule : item->toolRules) {
+			if (rule.speed && rule.blocks[block]) {
+				speed = *rule.speed;
+				break;
+			}
+		}
+	}
+	// The mining_efficiency attribute: efficiency gives level² + 1
+	if (speed > 1.0F) {
+		int efficiency = held.isEmpty() ? 0 : Enchantments::level(data, held, "minecraft:efficiency");
+		if (efficiency > 0) speed += static_cast<float>(efficiency * efficiency + 1);
+	}
+	// MobEffectUtil.getDigSpeedAmplification: the best of haste and conduit power
+	int dig = std::max(player.effects().amplifier(MobEffects::Effect::Haste), player.effects().amplifier(MobEffects::Effect::ConduitPower));
+	if (dig >= 0) speed *= 1.0F + static_cast<float>(dig + 1) * 0.2F;
+	int fatigue = player.effects().amplifier(MobEffects::Effect::MiningFatigue);
+	if (fatigue >= 0) speed *= fatigue == 0 ? 0.3F : fatigue == 1 ? 0.09F : fatigue == 2 ? 0.0027F : 8.1E-4F;
+	// submerged_mining_speed: 0.2, 1 with aqua affinity on the helmet
+	if (player.survival().eyeInWater) {
+		const ItemStack& helmet = player.inventory().get(5);
+		if (helmet.isEmpty() || Enchantments::level(data, helmet, "minecraft:aqua_affinity") <= 0) speed *= 0.2F;
+	}
+	if (!player.isOnGround() && !player.survival().flying) speed /= 5.0F;
+	return speed;
+}
+
+float Survival::destroyProgress(Level& level, const Player& player, int state) {
+	const GameData& data	 = level.gameData();
+	float			hardness = data.getDestroyTime(state);
+	if (hardness < 0.0F) return 0.0F;
+	if (hardness == 0.0F) return 1.0F;
+	bool correct = !data.getStateProperties(state).requiresCorrectTool || data.isCorrectToolForDrops(player.getItemInHand(0), state);
+	return destroySpeed(level, player, state) / hardness / (correct ? 30.0F : 100.0F);
+}
+
+void Survival::tickDestroy(Level& level, Player& player) {
+	if (!player.isDigging()) {
+		if (player.digLastStage() >= 0) {
+			level.destroyBlockProgress(player.id(), player.digPos(), -1);
+			player.setDigLastStage(-1);
+		}
+		return;
+	}
+	BlockPos pos   = player.digPos();
+	int		 state = level.getBlockState(pos);
+	if (level.blocks().isAir(state)) {
+		player.stopDigging();
+		return; // Cleared next tick
+	}
+	float progress = destroyProgress(level, player, state) * static_cast<float>(level.getGameTime() - player.digStartTick() + 1);
+	int	  stage	   = static_cast<int>(progress * 10.0F);
+	if (stage != player.digLastStage()) {
+		level.destroyBlockProgress(player.id(), pos, stage);
+		player.setDigLastStage(stage);
+	}
+}
