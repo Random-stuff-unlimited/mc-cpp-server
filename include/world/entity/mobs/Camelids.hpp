@@ -24,6 +24,9 @@ class Llama : public AbstractChestedHorse {
 	void							performRangedAttack(Actor& target, float power) override;
 	bool							isFood(const ItemStack& stack) const override;
 	int								maxTemper() const override { return 30; }
+	int								inventoryColumns() const override { return _hasChest ? strength() : 0; }
+	bool							canUseSaddle() const override { return false; }
+	bool							canWearBody(const ItemStack& stack) const override;
 	bool							isControlledByRider() override { return false; }
 	bool							canMate(Animal& other) override;
 	std::unique_ptr<Mob>			getBreedOffspring(Animal& partner) override;

@@ -132,6 +132,8 @@ class LivingEntity : public Entity, public MobEffects::Host {
 	// ----- Equipment -----
 
 	const ItemStack& getItemBySlot(EquipmentSlot slot) const { return _equipment[static_cast<int>(slot)]; }
+	// The slot itself, for a menu showing it (its changes are sent like setItemSlot's, by the equipment check)
+	ItemStack&		 equipmentSlot(EquipmentSlot slot) { return _equipment[static_cast<int>(slot)]; }
 	// setItemSlot: the item's attribute modifiers and the viewers follow at the next tick (detectEquipmentUpdates)
 	virtual void	 setItemSlot(EquipmentSlot slot, ItemStack stack) { _equipment[static_cast<int>(slot)] = std::move(stack); }
 	const ItemStack& getMainHandItem() const { return getItemBySlot(EquipmentSlot::MainHand); }

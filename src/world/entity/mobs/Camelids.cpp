@@ -109,6 +109,8 @@ void Llama::setVariant(int variant) {
 	markData(DATA_VARIANT);
 }
 
+bool Llama::canWearBody(const ItemStack& stack) const { return isItemIn(_level, stack, "minecraft:wool_carpets"); }
+
 bool Llama::isFood(const ItemStack& stack) const { return isItemIn(_level, stack, "minecraft:llama_food"); }
 
 void Llama::randomizeAttributes(JavaRandom& random) {

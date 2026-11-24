@@ -75,8 +75,9 @@ Les 85 types de mobs vanilla ont leur classe et leur IA (`src/world/entity/mobs`
       vagues, barre de raid, Héros du village), golems par motif (fer/neige/cuivre)
 - [ ] Raids : fiole sinistre (le capitaine donne directement Mauvais présage ici), bannière sinistre à motifs, laisses
       des lamas du marchand, état des spawners non sauvegardé
-- [ ] Montures/apprivoisement étendus : inventaire des chevaux/lamas (`HORSE_SCREEN_OPEN`), caravanes et laisses,
-      perroquets sur l'épaule, plusieurs passagers (happy ghast, chameau)
+- [x] Inventaire des chevaux/ânes/mules/lamas (`HORSE_SCREEN_OPEN`) : selle, armure/tapis, coffre ; laisses (tirer,
+      casser à 10 blocs, nœud sur barrière, `SET_ENTITY_LINK`)
+- [ ] Montures étendues : caravanes de lamas, perroquets sur l'épaule, plusieurs passagers (happy ghast, chameau)
 - [ ] Comportements : creeper chargé (foudre), danse des piglins/allays (jukebox), duplication d'allay, piglins chasseurs
       de hoglins et colère aux coffres ouverts, cornes de chèvre, sauts longs (chèvre, grenouille), dash du chameau
 - [ ] Réglages de spawn : caps par dimension, spawn par biome (tableaux), `SpawnPlacements` étendus, groupes
@@ -99,11 +100,13 @@ Les 85 types de mobs vanilla ont leur classe et leur IA (`src/world/entity/mobs`
 
 ## Véhicules & montures
 
-- [ ] Minecarts : `MOVE_MINECART_ALONG_TRACK`, `MOVE_VEHICLE`, rails, propulsion
-- [ ] Bateaux : navigation, `PADDLE_BOAT`, `MOVE_VEHICLE`
-- [ ] Chevaux et autres montures : apprivoisement, inventaire (`HORSE_SCREEN_OPEN`), selle
-- [ ] Passagers : `SET_PASSENGERS`, `TELEPORT_ENTITY`, montée/descente
-- [ ] Chariots de mine avec coffre / four / TNT
+- [x] Minecarts : rails (courbes, pentes), rails de propulsion/détecteur/activateur, `MOVE_VEHICLE`
+- [ ] Minecarts : nouvelle physique expérimentale (`MOVE_MINECART_ALONG_TRACK`), comparateurs sur les rails détecteurs
+- [x] Bateaux et bateaux à coffre : flottaison, `PADDLE_BOAT`, `MOVE_VEHICLE`, casse et drop
+- [x] Chevaux et autres montures : apprivoisement, inventaire (`HORSE_SCREEN_OPEN`), selle
+- [x] Passagers : montée/descente (un seul passager)
+- [ ] Plusieurs passagers par véhicule (bateau à 2 places, chameau)
+- [x] Chariots de mine avec coffre / four / TNT / entonnoir
 
 ## Client : commandes & UI
 

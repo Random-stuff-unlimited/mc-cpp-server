@@ -215,3 +215,104 @@ TEST(detector_rail_and_hopper_minecart) {
 	}
 	CHECK_EQ(ingots, 4);
 }
+
+#include "world/entity/LeashKnot.hpp"
+#include "world/entity/MobRegistry.hpp"
+#include "world/entity/mobs/Camelids.hpp"
+#include "world/entity/mobs/Horses.hpp"
+#include "world/inventory/HorseMenu.hpp"
+
+namespace {
+	Mob* spawnMob(LevelFixture& f, const char* type, const BlockPos& pos) {
+		return f.level->mobs().spawn(*f.level, f.data.getStaticId("minecraft:entity_type", type), pos, MobRegistry::SpawnReason::Command);
+	}
+} // namespace
+
+// A tamed horse's inventory: sneak-click opens it, a saddle goes in its saddle slot (and on the horse)
+TEST(horse_inventory_saddle) {
+	LevelFixture f(1);
+	auto  player = addPlayer(f, 2.5, Y, 0.5);
+	auto* horse	 = dynamic_cast<Horse*>(spawnMob(f, "minecraft:horse", {0, Y, 0}));
+	CHECK(horse);
+	if (!horse) return;
+	horse->setBaby(false);
+	horse->setTamed(true);
+	player->setShiftKeyDown(true);
+	CHECK(horse->mobInteract(*player, 0));
+	auto* menu = dynamic_cast<HorseMenu*>(player->openMenuSlot().get());
+	CHECK(menu);
+	if (!menu) return;
+	ItemStack saddle(f.item("minecraft:saddle"), 1);
+	CHECK(menu->slots()[0].mayPlace(saddle, f.data));
+	CHECK(!menu->slots()[1].mayPlace(saddle, f.data));
+	CHECK(menu->slots()[1].mayPlace(ItemStack(f.item("minecraft:iron_horse_armor"), 1), f.data));
+	menu->slots()[0].set(saddle);
+	CHECK(horse->isSaddled());
+}
+
+// A donkey takes a chest; its 15 slots keep their items through a save and drop on death; a llama wears a carpet
+TEST(donkey_chest_and_llama_carpet) {
+	LevelFixture f(1);
+	auto  player = addPlayer(f, 2.5, Y, 0.5);
+	auto* donkey = dynamic_cast<AbstractChestedHorse*>(spawnMob(f, "minecraft:donkey", {0, Y, 0}));
+	CHECK(donkey);
+	if (!donkey) return;
+	donkey->setBaby(false);
+	donkey->setTamed(true);
+	player->setSelectedSlot(0);
+	player->inventory().set(player->handSlot(0), ItemStack(f.item("minecraft:chest"), 1));
+	CHECK(donkey->mobInteract(*player, 0));
+	CHECK(donkey->hasChest());
+	CHECK_EQ(donkey->inventoryColumns(), 5);
+	donkey->chestContainer()->item(4) = ItemStack(f.item("minecraft:gold_ingot"), 7);
+	Buffer saved;
+	donkey->save(saved);
+	auto copy = f.level->mobs().create(*f.level, donkey->typeId());
+	Buffer in(saved.getData());
+	copy->load(in);
+	auto* loaded = dynamic_cast<AbstractChestedHorse*>(copy.get());
+	CHECK(loaded && loaded->hasChest() && loaded->chestContainer()->item(4).count == 7);
+	donkey->hurtServer({"minecraft:generic", nullptr, nullptr, std::nullopt}, 1000.0F);
+	f.tick(25);
+	int gold = 0, chests = 0;
+	for (ItemEntity* item : f.items()) {
+		if (item->item().item == f.item("minecraft:gold_ingot")) gold += item->item().count;
+		if (item->item().item == f.item("minecraft:chest")) chests++;
+	}
+	CHECK_EQ(gold, 7);
+	CHECK_EQ(chests, 1);
+	auto* llama = dynamic_cast<Llama*>(spawnMob(f, "minecraft:llama", {6, Y, 6}));
+	CHECK(llama && llama->canWearBody(ItemStack(f.item("minecraft:red_carpet"), 1)) && !llama->canUseSaddle());
+}
+
+// A lead: the mob follows when pulled, the lead breaks past 10 blocks (dropping it); tied to a fence it stays there
+TEST(leads_and_fence_knots) {
+	LevelFixture f(1);
+	auto player = addPlayer(f, 0.5, Y, 2.5);
+	Mob* cow	= spawnMob(f, "minecraft:cow", {0, Y, 0});
+	CHECK(cow);
+	if (!cow) return;
+	player->setSelectedSlot(0);
+	player->inventory().set(player->handSlot(0), ItemStack(f.item("minecraft:lead"), 2));
+	CHECK(cow->handleLeashInteraction(*player, 0));
+	CHECK(cow->leashHolder() == player.get());
+	player->setPosition(8.5, Y, 0.5);
+	f.tick(60);
+	CHECK(cow->isLeashed());
+	CHECK(cow->position().x > 2.0); // Pulled along
+	// Tied to a fence
+	f.level->setBlock({cow->blockPosition().x, Y, 3}, f.data.getDefaultBlockState("minecraft:oak_fence"), Level::UPDATE_ALL);
+	BlockPos fence{cow->blockPosition().x, Y, 3};
+	player->setPosition(fence.x + 0.5, Y, 5.5);
+	CHECK_EQ(LeashKnot::bindPlayerMobs(*f.level, *player, fence), 1);
+	CHECK(dynamic_cast<LeashKnot*>(cow->leashHolder()) != nullptr);
+	// Untied, then pulled too far: the lead breaks and drops
+	cow->dropLeash(false);
+	CHECK(cow->handleLeashInteraction(*player, 0));
+	player->setPosition(cow->position().x + 30.0, Y, cow->position().z);
+	f.tick(5);
+	CHECK(!cow->isLeashed());
+	bool lead = false;
+	for (ItemEntity* item : f.items()) lead |= item->item().item == f.item("minecraft:lead");
+	CHECK(lead);
+}

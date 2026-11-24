@@ -1,3 +1,4 @@
+#include "world/entity/LeashKnot.hpp"
 #include "world/entity/Vehicles.hpp"
 #include "world/entity/EndCrystal.hpp"
 #include "world/item/ItemUseOn.hpp"
@@ -44,6 +45,10 @@ namespace ItemUse {
 			name == "minecraft:hopper_minecart") {
 			// MinecartItem.useOn: on a rail only
 			return Minecart::place(level, player, stack, hit.pos) ? Result::Success : Result::Fail;
+		}
+		if (name == "minecraft:lead") {
+			// LeadItem.useOn: the mobs the player holds, tied to the fence clicked
+			return LeashKnot::bindPlayerMobs(level, player, hit.pos) > 0 ? Result::Success : Result::Pass;
 		}
 		if (name == "minecraft:end_crystal") {
 			// EndCrystalItem.useOn: on obsidian or bedrock, with two free blocks above and nothing in the way

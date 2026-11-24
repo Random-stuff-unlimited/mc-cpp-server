@@ -261,6 +261,12 @@ void EntityManager::spawnFor(Tracked& tracked, Player& player) {
 		entity.writePassengers(passengers);
 		Packet::send(self, PacketId::Play::Clientbound::SET_PASSENGERS, passengers, _level.server());
 	}
+	if (int holder = entity.leashHolderId(); holder >= 0) {
+		Buffer link;
+		link.writeInt(entity.id());
+		link.writeInt(holder);
+		Packet::send(self, PacketId::Play::Clientbound::SET_ENTITY_LINK, link, _level.server());
+	}
 
 	// ServerEntity.sendPairingData: the values that aren't the client's defaults, then the attributes it is told about
 	Buffer data;

@@ -3,6 +3,10 @@
 
 #include "world/entity/mobs/Animal.hpp"
 
+#include <memory>
+
+class SimpleContainer;
+
 // AbstractHorse: wild, it throws its rider off until its temper lets it be tamed (food raises it); tamed and saddled,
 // its rider's client moves it. Eats grass, rears, its speed, jump and health are drawn at spawn and bred from its
 // parents'. The inventory screen (chests, taking the saddle back) isn't ported
@@ -11,9 +15,18 @@ class AbstractHorse : public Animal {
 	static constexpr int DATA_FLAGS = 17;
 	static constexpr int FLAG_TAME = 2, FLAG_BRED = 8, FLAG_EATING = 16, FLAG_STANDING = 32, FLAG_OPEN_MOUTH = 64;
 
-	using Animal::Animal;
+	AbstractHorse(Level& level, int typeId);
 
 	bool isTamed() const { return _horseFlags & FLAG_TAME; }
+	// ----- Its inventory (HorseInventoryMenu) -----
+	// The columns of its chest (none without one)
+	virtual int	 inventoryColumns() const { return 0; }
+	virtual SimpleContainer* chestContainer() { return nullptr; }
+	// Whether it takes a saddle, and what goes on its body (horse armor, a llama's carpet)
+	virtual bool canUseSaddle() const { return true; }
+	virtual bool canWearBody(const ItemStack&) const { return false; }
+	// AbstractHorse.openCustomInventoryScreen
+	void		 openInventory(Player& player);
 	void setTamed(bool value) { setFlag(FLAG_TAME, value); }
 	bool isEating() const { return _horseFlags & FLAG_EATING; }
 	void setEating(bool value) { setFlag(FLAG_EATING, value); }
@@ -87,6 +100,7 @@ class Horse : public AbstractHorse {
   public:
 	static constexpr int DATA_TYPE_VARIANT = 18;
 	using AbstractHorse::AbstractHorse;
+	bool canWearBody(const ItemStack& stack) const override;
 
 	int	 typeVariant() const { return _typeVariant; }
 	void setTypeVariant(int variant);
@@ -110,10 +124,22 @@ class Horse : public AbstractHorse {
 class AbstractChestedHorse : public AbstractHorse {
   public:
 	static constexpr int DATA_CHEST = 18;
-	using AbstractHorse::AbstractHorse;
+	AbstractChestedHorse(Level& level, int typeId);
+	~AbstractChestedHorse() override;
 	bool mobInteract(Player& player, int hand) override;
 
+	bool			 hasChest() const { return _hasChest; }
+	void			 setChest(bool chest);
+	int				 inventoryColumns() const override { return _hasChest ? 5 : 0; }
+	SimpleContainer* chestContainer() override { return _hasChest ? _chest.get() : nullptr; }
+	void			 save(Buffer& buf) const override;
+	void			 load(Buffer& buf) override;
+
   protected:
+	bool							 _hasChest = false;
+	std::shared_ptr<SimpleContainer> _chest; // 15 slots (a llama uses 3 times its strength)
+	void							 dropAllDeathLoot(const Combat::DamageSource& source) override;
+
 	void randomizeAttributes(JavaRandom& random) override;
 	void writeData(Buffer& buf, uint32_t mask, bool onlyNonDefault) const override;
 };

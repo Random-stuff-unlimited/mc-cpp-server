@@ -19,7 +19,7 @@
 #include <limits>
 
 namespace {
-	constexpr int	 SAVE_VERSION = 2;
+	constexpr int	 SAVE_VERSION = 3; // 3: its leash holder
 	constexpr int	 SAVED_NO_AI = 1, SAVED_LEFT_HANDED = 2, SAVED_PERSISTENT = 4, SAVED_CAN_PICK_UP_LOOT = 8;
 	const double	 DEFAULT_ATTACK_REACH = std::sqrt(2.04F) - 0.6F; // Mob.DEFAULT_ATTACK_REACH
 	constexpr double ITEM_PICKUP_REACH_XZ = 1.0, ITEM_PICKUP_REACH_Y = 0.0;
@@ -428,6 +428,7 @@ void Mob::playHurtSound() {
 
 void Mob::tick() {
 	LivingEntity::tick();
+	if (isLeashed() && !isRemoved()) tickLeash();
 	if (_tickCount % 5 == 0) {
 		// updateControlFlags: nothing rides or is ridden, every control stays available
 		_goalSelector.setControlFlag(Goal::Flag::Move, true);
@@ -520,6 +521,8 @@ void Mob::save(Buffer& buf) const {
 		writeStack(buf, _equipment[i]);
 		buf.writeFloat(_dropChances[i]);
 	}
+	buf.writeBool(_leashHolder.isSet());
+	if (_leashHolder.isSet()) buf.writeUUID(_leashHolder.uuid);
 }
 
 void Mob::load(Buffer& buf) {
@@ -535,6 +538,11 @@ void Mob::load(Buffer& buf) {
 			_equipment[i]	= readStack(buf);
 			_dropChances[i] = buf.readFloat();
 		}
+	}
+	_leashHolder.clear();
+	if (version >= 3 && buf.readBool()) {
+		_leashHolder.uuid = buf.readUUID();
+		_leashHolder.id	  = -2; // Found by its UUID once it is around
 	}
 	_dirtyData = 0;
 }
@@ -589,4 +597,79 @@ bool Mob::isPanicking() const {
 		if (wrapped->isRunning() && dynamic_cast<PanicGoal*>(&wrapped->goal())) return true;
 	}
 	return false;
+}
+
+// ===================== Leads =====================
+
+bool Mob::canBeLeashed() const { return !isLeashed() && _type.is("Leashable"); }
+
+Actor* Mob::leashHolder() { return _leashHolder.isSet() ? _level.actorByRef(_leashHolder) : nullptr; }
+
+int Mob::leashHolderId() const {
+	if (!_leashHolder.isSet()) return -1;
+	Actor* holder = const_cast<Level&>(_level).actorByRef(_leashHolder);
+	return holder ? holder->id() : -1;
+}
+
+void Mob::sendLeashLink() {
+	Buffer link;
+	link.writeInt(_id);
+	Actor* holder = leashHolder();
+	link.writeInt(holder ? holder->id() : 0);
+	_level.entities().broadcast(*this, PacketId::Play::Clientbound::SET_ENTITY_LINK, link);
+}
+
+void Mob::setLeashedTo(Actor& holder) {
+	_leashHolder = EntityRef(holder);
+	_persistenceRequired = true;
+	sendLeashLink();
+}
+
+void Mob::dropLeash(bool dropItem) {
+	if (!_leashHolder.isSet()) return;
+	_leashHolder.clear();
+	clearHome();
+	sendLeashLink();
+	if (dropItem) spawnAtLocation(ItemStack(_level.gameData().getStaticId("minecraft:item", "minecraft:lead"), 1));
+}
+
+bool Mob::handleLeashInteraction(Player& player, int hand) {
+	if (leashHolder() == &player) {
+		dropLeash(!player.isCreative());
+		return true;
+	}
+	ItemStack& stack = player.inventory().getMutable(player.handSlot(hand));
+	if (stack.isEmpty() || stack.item != _level.gameData().getStaticId("minecraft:item", "minecraft:lead") || !canBeLeashed()) return false;
+	setLeashedTo(player);
+	if (!player.isCreative()) stack.shrink(1);
+	_level.playSoundAt(nullptr, _position.x, _position.y, _position.z, "minecraft:item.lead.tied", Level::SoundSource::Neutral, 1.0F, 1.0F);
+	return true;
+}
+
+void Mob::tickLeash() {
+	Actor* holder = leashHolder();
+	// Its holder gone (or not found after a while, when loaded from a save): free, with its lead
+	if (!holder) {
+		if (_leashHolder.id != -2 || _tickCount > 100) dropLeash(true);
+		return;
+	}
+	if (_leashHolder.id == -2) _leashHolder = EntityRef(*holder);
+	if (!holder->isAlive()) {
+		dropLeash(true);
+		return;
+	}
+	double distance = std::sqrt(distanceToSqr(*holder));
+	if (distance > 10.0) {
+		// Leashable: too far, the lead breaks
+		dropLeash(true);
+		_level.playSoundAt(nullptr, _position.x, _position.y, _position.z, "minecraft:item.lead.break", Level::SoundSource::Neutral, 1.0F, 1.0F);
+		return;
+	}
+	setHomeTo(BlockPos{Mth::floor(holder->position().x), Mth::floor(holder->position().y), Mth::floor(holder->position().z)}, 5);
+	if (distance > 6.0) {
+		// legacyElasticRangeLeashBehaviour: pulled toward it, and walking to it
+		Vec3 to = (holder->position() - _position).scale(1.0 / distance);
+		_delta	= _delta + Vec3{std::copysign(to.x * to.x * 0.4, to.x), std::copysign(to.y * to.y * 0.4, to.y), std::copysign(to.z * to.z * 0.4, to.z)};
+		navigation().moveTo(*holder, 1.0);
+	}
 }

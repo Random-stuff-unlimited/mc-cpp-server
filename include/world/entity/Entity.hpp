@@ -123,6 +123,8 @@ class Entity : public Actor {
 	// Entity.interact: a player right-clicks it with that hand (0 main, 1 off); true if something happened. Mobs have
 	// Mob::mobInteract
 	virtual bool interact(Player&, int) { return false; }
+	// Leashable.getLeashHolder's id, -1 if not leashed (SET_ENTITY_LINK for the players that start seeing it)
+	virtual int	 leashHolderId() const { return -1; }
 	// Entity.push(Entity) needs it: pushed by the entities it touches
 	virtual bool isPushable() const { return false; }
 	// Entity.push(x, y, z)

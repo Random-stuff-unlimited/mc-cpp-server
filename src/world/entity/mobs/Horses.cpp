@@ -1,3 +1,4 @@
+#include "world/inventory/HorseMenu.hpp"
 #include "world/entity/mobs/Horses.hpp"
 
 #include "network/buffer.hpp"
@@ -93,6 +94,18 @@ void RunAroundLikeCrazyGoal::tick() {
 }
 
 // ===================== AbstractHorse =====================
+
+AbstractHorse::AbstractHorse(Level& level, int typeId) : Animal(level, typeId) {
+	// Its saddle and body armor always drop
+	setGuaranteedDrop(EquipmentSlot::Saddle);
+	setGuaranteedDrop(EquipmentSlot::Body);
+}
+
+void AbstractHorse::openInventory(Player& player) {
+	// AbstractHorse.openCustomInventoryScreen: for its rider, or anyone once tamed
+	if (!isTamed() && rider() != &player) return;
+	Menus::openHorseInventory(player, _level, *this);
+}
 
 void AbstractHorse::registerGoals() {
 	_goalSelector.addGoal(1, std::make_unique<PanicGoal>(*this, 1.2));
@@ -240,7 +253,10 @@ void AbstractHorse::doPlayerRide(Player& player) {
 
 bool AbstractHorse::mobInteract(Player& player, int hand) {
 	if (hasRider() || isBaby()) return Animal::mobInteract(player, hand);
-	if (isTamed() && player.isShiftKeyDown()) return false; // The inventory screen
+	if (isTamed() && player.isShiftKeyDown()) {
+		openInventory(player);
+		return true;
+	}
 	if (!player.getStackInHand(hand).isEmpty()) {
 		if (isTamed() && equipFromPlayer(player, hand, EquipmentSlot::Saddle)) return true;
 		if (equipFromPlayer(player, hand, EquipmentSlot::Body)) return true;
@@ -409,7 +425,60 @@ void AbstractChestedHorse::randomizeAttributes(JavaRandom& random) {
 	if (AttributeInstance* health = _attributes.getInstance(_ids.maxHealth)) health->setBaseValue(generateMaxHealth(random));
 }
 
+AbstractChestedHorse::AbstractChestedHorse(Level& level, int typeId) : AbstractHorse(level, typeId), _chest(std::make_shared<SimpleContainer>(15)) {}
+
+AbstractChestedHorse::~AbstractChestedHorse() = default;
+
+void AbstractChestedHorse::setChest(bool chest) {
+	if (chest == _hasChest) return;
+	_hasChest = chest;
+	markData(DATA_CHEST);
+}
+
+void AbstractChestedHorse::dropAllDeathLoot(const Combat::DamageSource& source) {
+	AbstractHorse::dropAllDeathLoot(source);
+	if (!_hasChest) return;
+	// Its chest and what is in it
+	spawnAtLocation(ItemStack(_level.gameData().getStaticId("minecraft:item", "minecraft:chest"), 1));
+	for (int slot = 0; slot < _chest->size(); slot++) {
+		if (!_chest->item(slot).isEmpty()) spawnAtLocation(_chest->item(slot));
+		_chest->item(slot) = ItemStack{};
+	}
+}
+
+void AbstractChestedHorse::save(Buffer& buf) const {
+	AbstractHorse::save(buf);
+	buf.writeBool(_hasChest);
+	for (int slot = 0; slot < _chest->size(); slot++) {
+		const ItemStack& stack = _chest->item(slot);
+		buf.writeVarInt(stack.isEmpty() ? 0 : stack.item);
+		buf.writeVarInt(stack.isEmpty() ? 0 : stack.count);
+		buf.writeVarInt(static_cast<int32_t>(stack.components.size()));
+		buf.writeBytes(stack.components);
+	}
+}
+
+void AbstractChestedHorse::load(Buffer& buf) {
+	AbstractHorse::load(buf);
+	setChest(buf.readBool());
+	for (int slot = 0; slot < _chest->size(); slot++) {
+		ItemStack stack;
+		stack.item		   = buf.readVarInt();
+		stack.count		   = buf.readVarInt();
+		stack.components   = buf.readBytes(static_cast<size_t>(buf.readVarInt()));
+		_chest->item(slot) = stack.isEmpty() ? ItemStack{} : stack;
+	}
+}
+
 bool AbstractChestedHorse::mobInteract(Player& player, int hand) {
+	// AbstractChestedHorse.mobInteract: a chest on a tamed adult
+	const ItemStack& held = player.getStackInHand(hand);
+	if (!_hasChest && isTamed() && !isBaby() && !held.isEmpty() && held.item == _level.gameData().getStaticId("minecraft:item", "minecraft:chest")) {
+		setChest(true);
+		playSound("minecraft:entity.donkey.chest", 1.0F, (_random.nextFloat() - _random.nextFloat()) * 0.2F + 1.0F);
+		if (!player.isCreative()) player.inventory().getMutable(player.handSlot(hand)).shrink(1);
+		return true;
+	}
 	bool inventory = !isBaby() && isTamed() && player.isShiftKeyDown();
 	if (!hasRider() && !inventory && !player.getStackInHand(hand).isEmpty()) {
 		if (isFood(player.getStackInHand(hand))) return fedFood(player, hand);
@@ -423,7 +492,14 @@ bool AbstractChestedHorse::mobInteract(Player& player, int hand) {
 
 void AbstractChestedHorse::writeData(Buffer& buf, uint32_t mask, bool onlyNonDefault) const {
 	AbstractHorse::writeData(buf, mask, onlyNonDefault);
-	if (wantsData(mask, DATA_CHEST, onlyNonDefault, true)) writeBoolData(buf, DATA_CHEST, false);
+	if (wantsData(mask, DATA_CHEST, onlyNonDefault, !_hasChest)) writeBoolData(buf, DATA_CHEST, _hasChest);
+}
+
+bool Horse::canWearBody(const ItemStack& stack) const {
+	// Horse armor: a body item for horses
+	const GameData::ItemProperties* props = _level.gameData().getItemProperties(stack.item);
+	std::string						name  = _level.gameData().getStaticName("minecraft:item", stack.item);
+	return props && props->equipmentSlot == GameData::EquipmentSlot::Body && name.find("horse_armor") != std::string::npos;
 }
 
 bool Donkey::canMate(Animal& other) {

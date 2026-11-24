@@ -144,6 +144,19 @@ class Mob : public LivingEntity {
 	virtual bool wantsToPickUp(const ItemStack& stack) { return canHoldItem(stack); }
 	virtual bool canHoldItem(const ItemStack&) { return true; }
 
+	// ----- Leads (Leashable) -----
+
+	// Leashable.canBeLeashed: a Leashable type, not leashed yet
+	bool   canBeLeashed() const;
+	Actor* leashHolder();
+	bool   isLeashed() const { return _leashHolder.isSet(); }
+	int	   leashHolderId() const override;
+	void   setLeashedTo(Actor& holder);
+	// Leashable.dropLeash: free, its lead dropped (dropItem) or kept
+	void   dropLeash(bool dropItem);
+	// Mob.checkAndHandleImportantInteractions: a lead put on it, or taken off by its holder; true if it did
+	bool   handleLeashInteraction(Player& player, int hand);
+
 	// Mob.ate: it ate grass (sheep regrow their wool)
 	virtual void ate() {}
 	// PathfinderMob.isPanicking: its PanicGoal runs
@@ -199,6 +212,10 @@ class Mob : public LivingEntity {
 	// Mob.getBaseExperienceReward: its reward, more for each piece of equipment it keeps
 	int								baseExperienceReward() override;
 	bool							_canPickUpLoot		 = false;
+	EntityRef						_leashHolder;
+	// Leashable.tickLeash: pulled toward its holder, the lead breaks when too far
+	void							tickLeash();
+	void							sendLeashLink();
 	int								_ambientSoundTime	 = 0;
 	BlockPos						_homePos;
 	int								_homeRadius = -1;

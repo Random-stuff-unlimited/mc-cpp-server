@@ -1,3 +1,4 @@
+#include "world/entity/LeashKnot.hpp"
 #include "world/entity/Vehicles.hpp"
 #include "world/entity/EndCrystal.hpp"
 #include "world/inventory/MerchantMenu.hpp"
@@ -81,7 +82,7 @@ namespace {
 	}
 
 	enum InteractType { INTERACT = 0, ATTACK = 1, INTERACT_AT = 2 };
-	enum PlayerCommandAction { START_SPRINTING = 1, STOP_SPRINTING = 2, START_RIDING_JUMP = 3 };
+	enum PlayerCommandAction { START_SPRINTING = 1, STOP_SPRINTING = 2, START_RIDING_JUMP = 3, OPEN_INVENTORY = 5 };
 	constexpr int CLIENT_COMMAND_RESPAWN = 0;
 	constexpr int ANIMATE_SWING_MAIN_HAND = 0, ANIMATE_SWING_OFF_HAND = 3;
 } // namespace
@@ -147,7 +148,7 @@ void handlePlayState(Packet* packet, Server& server) {
 			Mob*	mob	   = dynamic_cast<Mob*>(entity);
 			bool	used   = false;
 			if (player->getGameMode() != GameMode::Spectator && entity && entity->isAlive()) {
-				used = mob ? mob->mobInteract(*player, hand) : entity->interact(*player, hand); // Boats, minecarts
+				used = mob ? (mob->handleLeashInteraction(*player, hand) || mob->mobInteract(*player, hand)) : entity->interact(*player, hand); // Boats, minecarts
 			}
 			if (used) {
 				Buffer animation;
@@ -165,6 +166,8 @@ void handlePlayState(Packet* packet, Server& server) {
 				const GameData::ItemProperties* weapon = server.getGameData().getItemProperties(player->getStackInHand(0).item);
 				float damage = 1.0F + (weapon ? weapon->attackDamage : 0.0F);
 				vehicle->hurtServer({"minecraft:player_attack", player, nullptr, std::nullopt}, damage);
+			} else if (auto* knot = dynamic_cast<LeashKnot*>(server.levelOf(*player).entities().byId(entityId)); knot && player->getGameMode() != GameMode::Spectator) {
+				knot->hurtServer({"minecraft:player_attack", player, nullptr, std::nullopt}, 1.0F);
 			} else if (auto* crystal = dynamic_cast<EndCrystal*>(server.levelOf(*player).entities().byId(entityId)); crystal && player->getGameMode() != GameMode::Spectator) {
 				crystal->hurtServer({"minecraft:player_attack", player, nullptr, std::nullopt}, 1.0F);
 			} else if (auto* fireball = dynamic_cast<LargeFireball*>(server.levelOf(*player).entities().byId(entityId))) {
@@ -260,6 +263,10 @@ void handlePlayState(Packet* packet, Server& server) {
 		int action = packet->getData().readVarInt();
 		if (action == START_SPRINTING) player->setSprinting(true);
 		if (action == STOP_SPRINTING) player->setSprinting(false);
+		if (action == OPEN_INVENTORY && player->vehicleId() != -1) {
+			// The inventory key while riding a horse: its inventory
+			if (auto* horse = dynamic_cast<AbstractHorse*>(server.levelOf(*player).entities().byId(player->vehicleId()))) horse->openInventory(*player);
+		}
 		if (action == START_RIDING_JUMP && player->vehicleId() != -1) {
 			int boost = packet->getData().readVarInt();
 			auto* horse = dynamic_cast<AbstractHorse*>(server.levelOf(*player).entities().byId(player->vehicleId()));
