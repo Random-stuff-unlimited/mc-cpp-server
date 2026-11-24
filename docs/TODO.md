@@ -148,9 +148,8 @@ Les 85 types de mobs vanilla ont leur classe et leur IA (`src/world/entity/mobs`
 
 ## Qualité / infra
 
-- [ ] Tests d'IA instables par moments (hasard du niveau non fixé, chunks chargés en asynchrone) : `strider_stands_on_lava`,
-      `fish_swims_and_suffocates_on_land` ont déjà échoué une fois sur plusieurs passes ; graine du `Level` à fixer en test
-
+- [x] Tests reproductibles : graine du monde et hasard du niveau fixés dans `LevelFixture`, hasard des entités tiré de
+      celui du niveau
 - [ ] Corriger `make debug` : `-DDEBUG` (Makefile) entre en collision avec `enum LogLevel { DEBUG, ... }`
       (`include/logger.hpp:13`) → renommer l'enum ou le flag
 - [ ] Régénérer `docs/PACKETS_SUPPORTED.md` / `docs/PACKETS_MISSING.md` (`make packets`) : EXplode etc. déjà envoyés

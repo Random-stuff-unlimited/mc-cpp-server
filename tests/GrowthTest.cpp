@@ -356,6 +356,7 @@ TEST(growth_fancy_oak) {
 	bool fancy = false;
 	for (int attempt = 0; attempt < 60 && !fancy; attempt++) {
 		LevelFixture f(3);
+		f.level->random().setSeed(attempt); // A new draw each attempt (the fixture's random is seeded)
 		f.tick(1);
 		growTree(f, 0, 0, "minecraft:oak_sapling");
 		for (int dx = -8; dx <= 8 && !fancy; dx++) {

@@ -95,7 +95,7 @@ namespace {
 } // namespace
 
 Entity::Entity(Level& level, int typeId, float width, float height)
-	: _level(level), _random(static_cast<int64_t>(std::chrono::steady_clock::now().time_since_epoch().count())),
+	: _level(level), _random(level.random().nextLong()), // RandomSource.create: from the level's (seeded by the clock), so a seeded level is reproducible
 	  _id(level.server().getIdManager().allocate()), _uuid(randomUUID(level.random())), _typeId(typeId), _width(width), _height(height) {}
 
 Entity::~Entity() { _level.server().getIdManager().release(_id); }

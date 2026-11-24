@@ -35,6 +35,7 @@ struct LevelFixture {
 		settings.directory = directory;
 		settings.ioThreads = 2;
 		settings.dimension = dimension;
+		settings.seed	   = 12345; // Reproducible: the world's seed and the level's random are fixed
 		world			   = std::make_unique<World>(data, settings);
 
 		// Chunks one ring further, so every chunk in the radius is lit (and ticks)
@@ -48,6 +49,7 @@ struct LevelFixture {
 		int wanted = (2 * radius + 1) * (2 * radius + 1);
 		for (int i = 0; i < 1000 && lit < wanted; i++) std::this_thread::sleep_for(std::chrono::milliseconds(10));
 		level = std::make_unique<Level>(server, *world, data);
+		level->random().setSeed(67890);
 		level->setRandomTickSpeed(0); // Tests that want random ticks ask for them
 		level->setMobSpawning(false); // Same for natural spawning
 		// The server's chunk load listener attaches them to the level: here, by hand
