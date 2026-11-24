@@ -46,12 +46,19 @@ class Mooshroom : public Animal {
 	enum Variant { Red = 0, Brown = 1 };
 
 	Mooshroom(Level& level, int typeId) : Animal(level, typeId) {}
+	// MushroomCow.thunderHit: red and brown swap (once per bolt)
+	void thunderHit(LightningBolt& bolt) override;
 
 	int	 variant() const { return _variant; }
 	void setVariant(int variant);
 	bool readyForShearing() const { return isAlive() && !isBaby(); }
 	// MushroomCow.shear: a cow takes its place, its mushrooms drop
 	void shear();
+
+  private:
+	UUID _lastBolt;
+
+  public:
 
 	void				 registerGoals() override;
 	bool				 mobInteract(Player& player, int hand) override;
@@ -78,6 +85,8 @@ class Pig : public VariantAnimal {
 	// A saddle put on it, then ridden; a carrot on a stick steers it
 	bool mobInteract(Player& player, int hand) override;
 	bool isControlledByRider() override;
+	// Pig.thunderHit: a zombified piglin with a golden sword (not in peaceful)
+	void thunderHit(LightningBolt& bolt) override;
 };
 
 // Chicken: lays an egg every 5 to 10 minutes (its variant's), falls slowly

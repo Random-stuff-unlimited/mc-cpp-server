@@ -63,6 +63,8 @@ class AbstractVillager : public AgeableMob {
 class Villager : public AbstractVillager {
   public:
 	static constexpr int DATA_VILLAGER_DATA = 17, DATA_SLEEPING_POS = 14;
+	// Villager.thunderHit: a witch (not in peaceful)
+	void thunderHit(LightningBolt& bolt) override;
 	static constexpr int POSE_SLEEPING = 2;
 	static constexpr int BREEDING_FOOD = 12;
 	// VillagerSchedule's activities

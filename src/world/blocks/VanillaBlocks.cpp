@@ -207,6 +207,7 @@ void registerVanillaBlocks(Level& level, const GameData& gameData) {
 			{"BarrelBlock", [context, ids](int) { return std::make_unique<BarrelBlock>(context, ids); }},
 			{"FletchingTableBlock", nullptr}, // A CraftingTableBlock that opens nothing
 			{"CraftingTableBlock", [context, ids](int) { return std::make_unique<CraftingTableBlock>(context, ids); }},
+			{"LightningRodBlock", [context, ids](int) { return std::make_unique<LightningRodBlock>(context, ids); }},
 			{"BeaconBlock", [context, ids](int) { return std::make_unique<BeaconBlock>(context, ids); }},
 			{"EnchantingTableBlock", [context, ids](int) { return std::make_unique<EnchantingTableBlock>(context, ids); }},
 			{"AnvilBlock", [context, ids](int) { return std::make_unique<AnvilBlock>(context, ids); }},

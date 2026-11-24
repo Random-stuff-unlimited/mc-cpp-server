@@ -13,6 +13,8 @@ class Turtle : public Animal {
 	static constexpr int DATA_HAS_EGG = 17, DATA_LAYING_EGG = 18;
 
 	Turtle(Level& level, int typeId);
+	// Turtle.thunderHit: killed (it drops a bowl)
+	void thunderHit(LightningBolt& bolt) override;
 
 	bool hasEgg() const { return _hasEgg; }
 	void setHasEgg(bool has);

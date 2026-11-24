@@ -47,7 +47,7 @@ les commandes d'admin ci-dessous. Sans être op, seules `help`, `list`, `spawn`,
 - [x] Envoyer les effets au client : `UPDATE_MOB_EFFECT`, `REMOVE_MOB_EFFECT`, `ENTITY_EVENT` (guérison)
 - [x] Application à l'entité : `LivingEntity.addEffect`, tick des effets, dégâts périodiques (poison, warding…)
 - [x] Effets des potions bues (`ItemUse` → effet), potions jetables et persistantes (nuage d'effet), flèches à effets
-- [ ] Défenses/mitigations liées aux effets (résistance, absorption, résistance au feu)
+- [x] Défenses/mitigations liées aux effets (résistance, absorption, résistance au feu)
 - [x] Beacon : pyramide (1–4 niveaux), faisceau, `SET_BEACON`, effets du beacon, coût en items
 
 ## Mobs & IA
@@ -84,7 +84,10 @@ Les 85 types de mobs vanilla ont leur classe et leur IA (`src/world/entity/mobs`
 - [x] Inventaire des chevaux/ânes/mules/lamas (`HORSE_SCREEN_OPEN`) : selle, armure/tapis, coffre ; laisses (tirer,
       casser à 10 blocs, nœud sur barrière, `SET_ENTITY_LINK`)
 - [ ] Montures étendues : caravanes de lamas, perroquets sur l'épaule, plusieurs passagers (happy ghast, chameau)
-- [ ] Comportements : creeper chargé (foudre), danse des piglins/allays (jukebox), duplication d'allay, piglins chasseurs
+- [x] Foudre : éclairs d'orage (1/100000 par chunk et par tick), paratonnerres (attirent, signal 8 ticks), feu, creeper
+      chargé, cochon → piglin zombifié, villageois → sorcière, mooshroom, tortue ; `/summon lightning_bolt`
+- [ ] Foudre : piège du cheval squelette, cuivre désoxydé
+- [ ] Comportements : danse des piglins/allays (jukebox), duplication d'allay, piglins chasseurs
       de hoglins et colère aux coffres ouverts, cornes de chèvre, sauts longs (chèvre, grenouille), dash du chameau
 - [x] Réglages de spawn : spawn par biome (tableaux de `worldgen/biome`, coûts de spawn), caps globaux et par joueur,
       caps configurables par dimension (`config.json` → `world.spawn-limits`)

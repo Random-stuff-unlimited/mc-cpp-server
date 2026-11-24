@@ -1,3 +1,4 @@
+#include "world/entity/LightningBolt.hpp"
 #include "world/EndDragonFight.hpp"
 #include "world/VillageEvents.hpp"
 #include "world/Level.hpp"
@@ -1006,6 +1007,7 @@ void Level::forEachTickingChunk(const std::function<void(Chunk&)>& f) {
 
 void Level::tickChunk(Chunk& chunk, int speed) {
 	int minX = chunk.x() * 16, minZ = chunk.z() * 16;
+	LightningBolt::tickThunder(*this, chunk.x(), chunk.z()); // ServerLevel.tickThunder
 	// Snow and ice with the weather (not there yet): the random numbers are drawn all the same
 	for (int i = 0; i < speed; i++) {
 		if (_random.nextInt(48) == 0) getBlockRandomPos(minX, 0, minZ, 15);

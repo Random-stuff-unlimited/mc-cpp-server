@@ -10,6 +10,8 @@ class Creeper : public Monster {
 	static constexpr int DATA_SWELL_DIR = 16, DATA_IS_POWERED = 17, DATA_IS_IGNITED = 18;
 
 	Creeper(Level& level, int typeId) : Monster(level, typeId) {}
+	// Creeper.thunderHit: charged
+	void thunderHit(LightningBolt& bolt) override;
 
 	int	 getSwellDir() const { return _swellDir; }
 	void setSwellDir(int dir);

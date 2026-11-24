@@ -39,6 +39,16 @@ class RedstoneBehavior : public BlockBehavior {
 	int									blockOf(int state) const { return _context->blocks.blockOf(state); }
 };
 
+// LightningRodBlock: struck by lightning, it gives a signal of 15 for 8 ticks (strong toward the block it is on)
+class LightningRodBlock : public RedstoneBehavior {
+  public:
+	using RedstoneBehavior::RedstoneBehavior;
+	bool isSignalSource(int) const override { return true; }
+	int	 getSignal(Level& level, const BlockPos& pos, int state, Direction direction) const override;
+	int	 getDirectSignal(Level& level, const BlockPos& pos, int state, Direction direction) const override;
+	void tick(Level& level, const BlockPos& pos, int state) const override;
+};
+
 // RedStoneWireBlock with the DefaultRedstoneWireEvaluator (the one vanilla uses without the experiment)
 class RedStoneWireBlock : public RedstoneBehavior {
   public:

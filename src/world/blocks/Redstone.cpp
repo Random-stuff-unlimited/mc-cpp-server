@@ -1,3 +1,4 @@
+#include "world/Level.hpp"
 #include "world/blocks/Redstone.hpp"
 
 #include "world/PlaceContext.hpp"
@@ -140,4 +141,19 @@ int AnalogOutputBlock::getAnalogOutputSignal(Level&, const BlockPos&, int state,
 		return static_cast<int>(std::floor(b.getInt(state, _property) / 4.0F * 15));
 	}
 	return 0;
+}
+// ===== Lightning rod =====
+
+int LightningRodBlock::getSignal(Level&, const BlockPos&, int state, Direction) const {
+	return _context->data.getProperty(state, "powered") == "true" ? 15 : 0;
+}
+
+int LightningRodBlock::getDirectSignal(Level& level, const BlockPos& pos, int state, Direction direction) const {
+	// The facing's block gets the strong signal (the one the rod is attached to is on the other side)
+	return _context->direction(state, _context->facing) == direction ? getSignal(level, pos, state, direction) : 0;
+}
+
+void LightningRodBlock::tick(Level& level, const BlockPos& pos, int state) const {
+	int off = _context->data.withProperty(state, "powered", "false");
+	if (off >= 0 && off != state) level.setBlock(pos, off, Level::UPDATE_ALL);
 }

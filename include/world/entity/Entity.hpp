@@ -22,6 +22,8 @@ struct FluidState;
 
 // An entity other than a player, on the game thread (vanilla's Entity): position, movement and collisions with
 // blocks, fluids pushing it. Ported from vanilla's Entity.move, collide and updateFluidHeightAndDoFluidPushing
+class LightningBolt;
+
 class Entity : public Actor {
   public:
 	Entity(Level& level, int typeId, float width, float height);
@@ -117,6 +119,8 @@ class Entity : public Actor {
 	virtual void checkDespawn() {}
 	// Entity.hurtServer: damage from a source. Returns whether it hurt (non-living entities ignore it here)
 	bool hurtServer(const Combat::DamageSource&, float) override { return false; }
+	// Entity.thunderHit: struck by lightning (8 seconds of fire, 5 damage); some mobs change (LightningBolt.cpp)
+	virtual void thunderHit(LightningBolt& bolt);
 	virtual bool isLiving() const { return false; }
 	// The parts that follow it on the clients (EnderDragonPart), with the ids right after its own
 	virtual int	 partCount() const { return 0; }
