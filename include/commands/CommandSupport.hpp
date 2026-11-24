@@ -21,6 +21,8 @@ namespace Commands {
 	// "x y z" as integers, for chat messages
 	std::string coords(double x, double y, double z);
 	std::string coordinates(const Player& player);
+	// The players a selector names: @s and @p the one who runs it, @a everyone, else a name
+	std::vector<Player*> playerTargets(Server& server, Player& self, const std::string& selector);
 
 	// One registration function per command, called by Commands::registerCommands
 	void registerTp();
@@ -40,6 +42,9 @@ namespace Commands {
 	void registerDifficulty();
 	void registerWeather();
 	void registerEffect();
+	void registerSummon();
+	void registerExperience();
+	void registerEnchant();
 } // namespace Commands
 
 #endif

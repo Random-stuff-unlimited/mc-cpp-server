@@ -28,10 +28,10 @@ Implémentées : `tp`, `gamemode`/`gm`, `spawn`, `setworldspawn`, `spawnpoint`, 
 `time`, `list`, `setblock`, `give`, `clear`, `kill`, `difficulty`, `weather`.
 
 - [ ] Admin : `/kick`, `/ban`, `/op`, `/deop`, `/say`, `/tell` + op/permissions (whitelist, op list, gate des commandes)
-- [ ] `/summon <mob>` (via `MobRegistry::spawn`)
-- [ ] `/effect <joueur> <effet> [durée] [niveau]` (une fois les effets de statut faits)
-- [ ] `/xp <joueur> <niveau|points>` (donner/retirer de l'XP)
-- [ ] `/enchant <joueur> <ench> [niveau]`
+- [x] `/summon <entité> [x y z]`
+- [x] `/effect give|clear`
+- [x] `/xp` (`/experience`) `add|set|query`, en points ou niveaux
+- [x] `/enchant <joueurs> <enchantement> [niveau]` (objets supportés, niveau max, incompatibilités)
 - [ ] `/weather <durée>`, `/time set <durée>` (durée en secondes) : persistance + durées explicites
 - [ ] Autocomplétion des commandes côté client (`COMMANDS` + `COMMAND_SUGGESTIONS`, `Commands::suggest` existe déjà)
 

@@ -64,6 +64,20 @@ namespace Commands {
 		return std::to_string(static_cast<int>(x)) + " " + std::to_string(static_cast<int>(y)) + " " + std::to_string(static_cast<int>(z));
 	}
 
+	std::vector<Player*> playerTargets(Server& server, Player& self, const std::string& selector) {
+		std::vector<Player*> found;
+		if (selector == "@s" || selector == "@p") {
+			found.push_back(&self);
+		} else if (selector == "@a") {
+			for (const auto& player : server.getGamePlayers()) {
+				if (!player->isDisconnected()) found.push_back(player.get());
+			}
+		} else {
+			for (const auto& player : server.findPlayersByName(selector)) found.push_back(player.get());
+		}
+		return found;
+	}
+
 	std::string coordinates(const Player& player) { return coords(player.getX(), player.getY(), player.getZ()); }
 
 	void registerCommands() {
@@ -85,6 +99,9 @@ namespace Commands {
 		registerDifficulty();
 		registerWeather();
 		registerEffect();
+		registerSummon();
+		registerExperience();
+		registerEnchant();
 		registerHelp();
 	}
 

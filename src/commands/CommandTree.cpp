@@ -180,6 +180,24 @@ namespace {
 			int clear = t.literal("clear", true, {t.players("targets", false, true, {t.argument("effect", "minecraft:resource", true, {}, std::move(registry2))})});
 			return t.literal("effect", false, {give, clear});
 		}
+		if (name == "summon") {
+			Buffer registry;
+			registry.writeString("minecraft:entity_type");
+			return t.literal("summon", false, {t.argument("entity", "minecraft:resource", true, {t.argument("pos", "minecraft:vec3", true)}, std::move(registry))});
+		}
+		if (name == "xp" || name == "experience") {
+			auto amount = [&] { return t.argument("amount", "brigadier:integer", true, t.choices({"points", "levels"})); };
+			int	 add	= t.literal("add", false, {t.players("targets", false, false, {amount()})});
+			int	 set	= t.literal("set", false, {t.players("targets", false, false, {amount()})});
+			int	 query	= t.literal("query", false, {t.players("target", true, false, t.choices({"points", "levels"}))});
+			return t.literal(name, false, {add, set, query});
+		}
+		if (name == "enchant") {
+			Buffer registry;
+			registry.writeString("minecraft:enchantment");
+			int level = t.integer("level", 1, true);
+			return t.literal("enchant", false, {t.players("targets", false, false, {t.argument("enchantment", "minecraft:resource", true, {level}, std::move(registry))})});
+		}
 		if (name == "help") return t.literal("help", true, {t.askServer(t.word("command", true))});
 		return t.literal(name, true);
 	}
