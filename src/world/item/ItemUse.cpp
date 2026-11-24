@@ -1,3 +1,4 @@
+#include "world/entity/Vehicles.hpp"
 #include "world/item/ItemUse.hpp"
 
 #include "PacketIds.hpp"
@@ -385,7 +386,12 @@ namespace {
 			ItemUse::startUsingItem(player, hand, gd);
 			return {Result::Consume, {}};
 		}
-		// Hook for the items whose use makes an entity (projectiles, boats, spawn eggs...): nothing until they exist
+		// BoatItem.use: a boat (or raft) where the player looks
+		if (gd.isInTag("minecraft:item", "minecraft:boats", stack.item) || gd.isInTag("minecraft:item", "minecraft:chest_boats", stack.item)) {
+			ItemStack result = stack;
+			if (!Boat::place(level, player, result)) return {Result::Pass, {}};
+			return {Result::Success, result};
+		}
 		if (props->consumable) return startConsuming(level, player, hand, stack, *props);
 		if (props->swappable) return swapWithEquipmentSlot(level, player, stack, *props);
 		if (props->blocksAttacks) {

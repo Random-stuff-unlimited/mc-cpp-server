@@ -1,3 +1,4 @@
+#include "world/entity/Vehicles.hpp"
 #include "world/entity/EndCrystal.hpp"
 #include "world/entity/EntityFactory.hpp"
 
@@ -19,6 +20,9 @@ namespace EntityFactory {
 		if (name == "minecraft:arrow") return std::make_unique<Arrow>(level);
 		if (name == "minecraft:trident") return std::make_unique<ThrownTrident>(level);
 		if (name == "minecraft:end_crystal") return std::make_unique<EndCrystal>(level);
+		if (const GameData::EntityTypeInfo* info = level.gameData().getEntityType(typeId); info && info->is("AbstractBoat")) {
+			return std::make_unique<Boat>(level, typeId);
+		}
 		return nullptr;
 	}
 

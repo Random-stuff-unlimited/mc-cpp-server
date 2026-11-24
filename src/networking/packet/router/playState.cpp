@@ -1,3 +1,5 @@
+#include "world/entity/Vehicles.hpp"
+#include "world/entity/EndCrystal.hpp"
 #include "world/inventory/MerchantMenu.hpp"
 #include "world/entity/mobs/Horses.hpp"
 #include "world/entity/Fireballs.hpp"
@@ -140,9 +142,14 @@ void handlePlayState(Packet* packet, Server& server) {
 		int type	 = packet->getData().readVarInt();
 		if (type == INTERACT) {
 			// ServerGamePacketListenerImpl.handleInteract: Player.interactOn a mob in reach (Mob.interact / mobInteract)
-			int	 hand = packet->getData().readVarInt();
-			Mob* mob  = dynamic_cast<Mob*>(server.levelOf(*player).entities().byId(entityId));
-			if (mob && mob->isAlive() && player->getGameMode() != GameMode::Spectator && mob->mobInteract(*player, hand)) {
+			int		hand   = packet->getData().readVarInt();
+			Entity* entity = server.levelOf(*player).entities().byId(entityId);
+			Mob*	mob	   = dynamic_cast<Mob*>(entity);
+			bool	used   = false;
+			if (player->getGameMode() != GameMode::Spectator && entity && entity->isAlive()) {
+				used = mob ? mob->mobInteract(*player, hand) : entity->interact(*player, hand); // Boats, minecarts
+			}
+			if (used) {
 				Buffer animation;
 				animation.writeVarInt(player->getPlayerID());
 				animation.writeUByte(hand == 0 ? ANIMATE_SWING_MAIN_HAND : ANIMATE_SWING_OFF_HAND);
@@ -153,6 +160,13 @@ void handlePlayState(Packet* packet, Server& server) {
 				Combat::attack(server, *player, *target);
 			} else if (auto* living = dynamic_cast<LivingEntity*>(server.levelOf(*player).entities().byId(entityId))) {
 				Combat::attack(server, *player, *living);
+			} else if (auto* vehicle = dynamic_cast<VehicleEntity*>(server.levelOf(*player).entities().byId(entityId)); vehicle && player->getGameMode() != GameMode::Spectator) {
+				// Player.attack on a boat or minecart: the hit's damage (the hand's 1, plus the weapon's)
+				const GameData::ItemProperties* weapon = server.getGameData().getItemProperties(player->getStackInHand(0).item);
+				float damage = 1.0F + (weapon ? weapon->attackDamage : 0.0F);
+				vehicle->hurtServer({"minecraft:player_attack", player, nullptr, std::nullopt}, damage);
+			} else if (auto* crystal = dynamic_cast<EndCrystal*>(server.levelOf(*player).entities().byId(entityId)); crystal && player->getGameMode() != GameMode::Spectator) {
+				crystal->hurtServer({"minecraft:player_attack", player, nullptr, std::nullopt}, 1.0F);
 			} else if (auto* fireball = dynamic_cast<LargeFireball*>(server.levelOf(*player).entities().byId(entityId))) {
 				// Player.attack on a redirectable projectile: sent back along the player's look (Projectile.deflect, AIM_DEFLECT)
 				if (player->getGameMode() != GameMode::Spectator && !fireball->isRemoved()) {
@@ -218,6 +232,14 @@ void handlePlayState(Packet* packet, Server& server) {
 			} else {
 				player->setVehicleId(-1);
 			}
+		}
+		break;
+	}
+	case PacketId::Play::Serverbound::PADDLE_BOAT: {
+		// The paddles the rider moves (for the others to see)
+		bool left = packet->getData().readBool(), right = packet->getData().readBool();
+		if (auto* boat = dynamic_cast<Boat*>(server.levelOf(*player).entities().byId(player->vehicleId())); boat && boat->rider() == player) {
+			boat->setPaddleState(left, right);
 		}
 		break;
 	}

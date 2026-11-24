@@ -120,6 +120,9 @@ class Entity : public Actor {
 	virtual bool isLiving() const { return false; }
 	// The parts that follow it on the clients (EnderDragonPart), with the ids right after its own
 	virtual int	 partCount() const { return 0; }
+	// Entity.interact: a player right-clicks it with that hand (0 main, 1 off); true if something happened. Mobs have
+	// Mob::mobInteract
+	virtual bool interact(Player&, int) { return false; }
 	// Entity.push(Entity) needs it: pushed by the entities it touches
 	virtual bool isPushable() const { return false; }
 	// Entity.push(x, y, z)
