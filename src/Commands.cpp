@@ -107,6 +107,7 @@ namespace Commands {
 		registerChat();
 		registerHelp();
 		registerServer();
+		registerTitle();
 		// The commands everyone may run (the others need an op level of 2, the admin ones set theirs)
 		for (Command& command : commandList()) {
 			if (command.name == "help" || command.name == "list" || command.name == "spawn") command.permission = LEVEL_ALL;
@@ -120,7 +121,7 @@ namespace Commands {
 			{"time", CONSOLE_ALWAYS},	 {"weather", CONSOLE_ALWAYS},	 {"difficulty", CONSOLE_ALWAYS}, {"stop", CONSOLE_ALWAYS},
 			{"save-all", CONSOLE_ALWAYS}, {"xp", CONSOLE_ALWAYS},		 {"experience", CONSOLE_ALWAYS}, {"enchant", CONSOLE_ALWAYS},
 			{"give", 0},				 {"clear", 0},					 {"kill", 0},				   {"effect", 1},
-			{"gamemode", 1},			 {"gm", 1},
+			{"gamemode", 1},			 {"title", 0},			 {"gm", 1},
 		};
 		for (Command& command : commandList()) {
 			for (const auto& [name, console] : CONSOLE) {

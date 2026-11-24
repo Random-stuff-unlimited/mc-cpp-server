@@ -51,6 +51,7 @@ namespace Commands {
 	void registerChat();
 	// stop, save-all (level 4)
 	void registerServer();
+	void registerTitle();
 } // namespace Commands
 
 #endif

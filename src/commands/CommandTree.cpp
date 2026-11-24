@@ -216,6 +216,13 @@ namespace {
 			subs.push_back(t.literal("remove", false, {profile("targets", true)}));
 			return t.literal("whitelist", false, subs);
 		}
+		if (name == "title") {
+			std::vector<int> actions = t.choices({"clear", "reset"});
+			for (const char* kind : {"title", "subtitle", "actionbar"}) actions.push_back(t.literal(kind, false, {message(kind)}));
+			int fadeOut = t.integer("fadeOut", 0, true);
+			actions.push_back(t.literal("times", false, {t.integer("fadeIn", 0, false, {t.integer("stay", 0, false, {fadeOut})})}));
+			return t.literal("title", false, {t.players("targets", false, false, actions)});
+		}
 		if (name == "save-all") return t.literal("save-all", true, t.choices({"flush"}));
 		if (name == "say" || name == "me") return t.literal(name, false, {message(name == "say" ? "message" : "action")});
 		if (name == "tell" || name == "msg" || name == "w") return t.literal(name, false, {t.players("targets", false, false, {message("message")})});

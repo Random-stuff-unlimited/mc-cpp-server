@@ -1,5 +1,7 @@
 #include "Commands.hpp"
 #include "commands/CommandSupport.hpp"
+#include "network/TextComponent.hpp"
+#include "network/buffer.hpp"
 #include "LevelFixture.hpp"
 #include "Test.hpp"
 #include "player.hpp"
@@ -249,4 +251,33 @@ TEST(commands_from_console) {
 	CHECK(Commands::englishText("commands.op.success", {"Bob"}) == "Made Bob a server operator");
 	CHECK(Commands::englishText("commands.banlist.entry", {"Eve", "Server", "spam"}) == "Eve was banned by Server: spam");
 	CHECK(Commands::englishText("some.key", {"a"}) == "some.key a");
+}
+
+// Text components from JSON (as /title takes them) become NBT; plain text stays plain
+TEST(text_component_json) {
+	Buffer plain;
+	CHECK(TextComponent::writeJson(plain, "Hello there"));
+	Buffer expected;
+	TextComponent::writeText(expected, "Hello there");
+	CHECK(plain.getData() == expected.getData());
+	Buffer styled;
+	CHECK(TextComponent::writeJson(styled, R"({"text":"Hi","bold":true,"extra":["a",{"text":"b"}]})"));
+	const auto& bytes = styled.getData();
+	CHECK(!bytes.empty() && bytes[0] == 10 && bytes.back() == 0); // A compound
+	Buffer bad;
+	CHECK(!TextComponent::writeJson(bad, "{not json"));
+	CHECK(bad.getData().empty());
+}
+
+// /title: every form runs for the player itself (the packets aren't readable here: no crash, no wrong usage)
+TEST(commands_title) {
+	LevelFixture f;
+	Commands::registerCommands();
+	auto player = makePlayer(f);
+	f.addPlayer(player);
+	for (const char* line : {"title @s title Hello", "title @s subtitle {\"text\":\"sub\",\"color\":\"gold\"}", "title @s actionbar hi",
+							 "title @s times 10 70 20", "title @s clear", "title @s reset", "title @s times 1 2", "title nobody clear"}) {
+		Commands::run(f.server, *player, line);
+	}
+	CHECK(Commands::englishText("commands.title.show.title.single", {"Bob"}) == "Showing new title for Bob");
 }

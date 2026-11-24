@@ -43,9 +43,9 @@ les commandes d'admin ci-dessous. Sans être op, seules `help`, `list`, `spawn`,
 
 ## Effets de statut / potions
 
-- [ ] Moteur d'effets de statut (vitesse, force, régénération, poison…), durée et niveaux
-- [ ] Envoyer les effets au client : `UPDATE_MOB_EFFECT`, `REMOVE_MOB_EFFECT`, `ENTITY_EVENT` (guérison)
-- [ ] Application à l'entité : `LivingEntity.addEffect`, tick des effets, dégâts périodiques (poison, warding…)
+- [x] Moteur d'effets de statut (vitesse, force, régénération, poison…), durée et niveaux
+- [x] Envoyer les effets au client : `UPDATE_MOB_EFFECT`, `REMOVE_MOB_EFFECT`, `ENTITY_EVENT` (guérison)
+- [x] Application à l'entité : `LivingEntity.addEffect`, tick des effets, dégâts périodiques (poison, warding…)
 - [ ] Effets des potions bues (`ItemUse` → effet), potions jetables, flèches à effets
 - [ ] Défenses/mitigations liées aux effets (résistance, absorption, résistance au feu)
 - [ ] Beacon : `SET_BEACON`, effets du beacon, coût en items
@@ -118,20 +118,21 @@ Les 85 types de mobs vanilla ont leur classe et leur IA (`src/world/entity/mobs`
 
 ## Client : commandes & UI
 
-- [ ] Panneaux éditables : `SIGN_UPDATE`, `OPEN_SIGN_EDITOR`
-- [ ] Livres : `OPEN_BOOK`, `EDIT_BOOK`, `SET_PLAYER_INVENTORY` (livre dans l'inventaire)
+- [x] Panneaux éditables (et suspendus) : pose sol/mur/plafond, `SIGN_UPDATE`, `OPEN_SIGN_EDITOR`, teintures, encre lumineuse, cire
+- [x] Livres : `EDIT_BOOK` (édition, signature → livre écrit), `OPEN_BOOK`
 - [ ] Recettes : `UPDATE_RECIPES` (le client connaît les recettes déverrouillées)
 - [ ] Advancements : `UPDATE_ADVANCEMENTS`, `SELECT_ADVANCEMENTS_TAB`, déclencheurs de critères
 - [ ] Statistiques : `AWARD_STATS`
 - [ ] Scoreboard / teams : `SET_SCORE`, `SET_OBJECTIVE`, `SET_DISPLAY_OBJECTIVE`, `SET_PLAYER_TEAM`, `RESET_SCORE`
 - [ ] World border : `INITIALIZE_BORDER`, `SET_BORDER_*`
 - [ ] Cartes : `MAP_ITEM_DATA`, cartographie
-- [ ] `SET_DEFAULT_SPAWN_POSITION` (compass qui pointe le spawn)
-- [ ] Titles : `SET_TITLE_TEXT`, `SET_SUBTITLE_TEXT`, `SET_TITLES_ANIMATION`, `CLEAR_TITLES`, `SET_ACTION_BAR_TEXT`
+- [x] `SET_DEFAULT_SPAWN_POSITION` (compass qui pointe le spawn)
+- [x] Titles : `SET_TITLE_TEXT`, `SET_SUBTITLE_TEXT`, `SET_TITLES_ANIMATION`, `CLEAR_TITLES`, `SET_ACTION_BAR_TEXT`, commande `/title` (texte brut ou JSON)
 
 ## Client : effets visuels & audio
 
-- [ ] Animation de minage : `BLOCK_DESTRUCTION` (fissures du bloc pendant le cassage)
+- [x] Animation de minage : `BLOCK_DESTRUCTION` (fissures pour les autres joueurs, vitesse de minage vanilla)
+- [ ] Anti-triche du minage (temps de cassage vérifié au `FINISH_DIGGING`)
 - [ ] Sons d'entités : `SOUND_ENTITY`, `STOP_SOUND`
 - [ ] Camera spectateur : `SET_CAMERA`, mode spectateur complet
 - [ ] `PLAYER_ROTATION`, `PLAYER_LOOK_AT`
