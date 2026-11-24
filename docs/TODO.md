@@ -48,7 +48,7 @@ les commandes d'admin ci-dessous. Sans être op, seules `help`, `list`, `spawn`,
 - [x] Application à l'entité : `LivingEntity.addEffect`, tick des effets, dégâts périodiques (poison, warding…)
 - [x] Effets des potions bues (`ItemUse` → effet), potions jetables et persistantes (nuage d'effet), flèches à effets
 - [ ] Défenses/mitigations liées aux effets (résistance, absorption, résistance au feu)
-- [ ] Beacon : `SET_BEACON`, effets du beacon, coût en items
+- [x] Beacon : pyramide (1–4 niveaux), faisceau, `SET_BEACON`, effets du beacon, coût en items
 
 ## Mobs & IA
 

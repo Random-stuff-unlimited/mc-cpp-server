@@ -6,6 +6,8 @@
 #include "world/inventory/Menu.hpp"
 #include "world/inventory/StorageMenus.hpp"
 #include "world/item/Components.hpp"
+#include "world/blockentity/BeaconBlockEntity.hpp"
+#include "world/inventory/BeaconMenu.hpp"
 
 // Chiseled bookshelves, decorated pots, jukeboxes, lecterns, crafters and shelves
 
@@ -378,4 +380,43 @@ TEST(shelf_swaps) {
 	CHECK_EQ(f.level->getBlockEntity<ShelfBlockEntity>({-1, Y, 0})->item(2).count, 9);
 	auto copy = reloaded(f, *left);
 	CHECK_EQ(copy->item(1).count, 2);
+}
+
+// Beacons: a pyramid of iron under it and a clear sky make it work; the menu takes one payment for the powers chosen;
+// the players around get them, an opaque block above stops it
+TEST(beacon_pyramid_menu_and_effects) {
+	LevelFixture f(2);
+	BlockPos beacon{0, Y + 2, 0};
+	for (int x = -2; x <= 2; x++) {
+		for (int z = -2; z <= 2; z++) f.set(x, Y, z, "minecraft:iron_block");
+	}
+	for (int x = -1; x <= 1; x++) {
+		for (int z = -1; z <= 1; z++) f.set(x, Y + 1, z, "minecraft:diamond_block");
+	}
+	f.set(beacon.x, beacon.y, beacon.z, "minecraft:beacon");
+	auto* entity = dynamic_cast<BeaconBlockEntity*>(f.level->getBlockEntity(beacon));
+	CHECK(entity);
+	if (!entity) return;
+	CHECK_EQ(BeaconBlockEntity::pyramidLevels(*f.level, beacon), 2);
+	auto bob = player(f, 3.5, 3.5);
+	f.addPlayer(bob);
+	useOn(f, *bob, beacon, Direction::Up, 0.5, 1.0, 0.5);
+	auto* menu = dynamic_cast<BeaconMenu*>(bob->openMenuSlot().get());
+	CHECK(menu);
+	if (!menu) return;
+	CHECK(!menu->slots()[0].mayPlace(ItemStack(f.item("minecraft:dirt"), 1), f.data));
+	CHECK(!menu->updateEffects(MobEffects::Speed, std::nullopt)); // No payment
+	menu->slots()[0].set(ItemStack(f.item("minecraft:iron_ingot"), 1));
+	CHECK(menu->updateEffects(MobEffects::Speed, MobEffects::Poison)); // Poison isn't a beacon power: dropped
+	CHECK(menu->slots()[0].item().isEmpty());
+	CHECK(entity->primary() == MobEffects::Speed && !entity->secondary());
+	f.tick(81);
+	CHECK_EQ(entity->levels(), 2);
+	CHECK(bob->effects().get(MobEffects::Speed) != nullptr);
+	CHECK(bob->effects().get(MobEffects::Speed)->ambient);
+	// Covered: no more beam, no more levels
+	f.set(beacon.x, beacon.y + 5, beacon.z, "minecraft:stone");
+	f.set(beacon.x, beacon.y + 3, beacon.z, "minecraft:glass"); // Glass lets it through
+	f.tick(80);
+	CHECK_EQ(entity->levels(), 0);
 }

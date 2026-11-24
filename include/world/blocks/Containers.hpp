@@ -112,6 +112,13 @@ class CraftingTableBlock : public RedstoneBehavior {
 	bool useWithoutItem(Level& level, const BlockPos& pos, int state, Player& player) const override;
 };
 
+// BeaconBlock: opens the beacon's menu (BeaconMenu)
+class BeaconBlock : public RedstoneBehavior {
+  public:
+	using RedstoneBehavior::RedstoneBehavior;
+	bool useWithoutItem(Level& level, const BlockPos& pos, int state, Player& player) const override;
+};
+
 // EnchantingTableBlock: opens the enchanting table's menu (EnchantmentMenu)
 class EnchantingTableBlock : public RedstoneBehavior {
   public:

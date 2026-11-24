@@ -1,3 +1,4 @@
+#include "world/inventory/BeaconMenu.hpp"
 #include "world/blocks/Containers.hpp"
 #include "world/blocks/StorageBlocks.hpp"
 
@@ -291,6 +292,12 @@ bool CraftingTableBlock::useWithoutItem(Level& level, const BlockPos& pos, int, 
 }
 
 // ===== Enchanting table =====
+
+bool BeaconBlock::useWithoutItem(Level& level, const BlockPos& pos, int, Player& player) const {
+	if (!dynamic_cast<BeaconBlockEntity*>(level.getBlockEntity(pos))) return false;
+	Menus::openBeacon(player, level, pos);
+	return true;
+}
 
 bool EnchantingTableBlock::useWithoutItem(Level& level, const BlockPos& pos, int, Player& player) const {
 	Menus::openEnchanting(player, level, pos);

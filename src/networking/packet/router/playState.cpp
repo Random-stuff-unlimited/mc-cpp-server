@@ -1,3 +1,4 @@
+#include "world/inventory/BeaconMenu.hpp"
 #include "world/item/Books.hpp"
 #include "world/blocks/Signs.hpp"
 #include "world/entity/LeashKnot.hpp"
@@ -306,6 +307,20 @@ void handlePlayState(Packet* packet, Server& server) {
 		// ServerboundChatCommand: the command alone, without the '/'
 		Commands::run(server, *player, packet->getData().readString(32767));
 		break;
+	case PacketId::Play::Serverbound::SET_BEACON: {
+		// ServerboundSetBeaconPacket: the optional primary and secondary powers (mob_effect registry ids)
+		Buffer& data = packet->getData();
+		auto	power = [&]() -> BeaconBlockEntity::Power {
+			   if (!data.readBool()) return std::nullopt;
+			   int id = data.readVarInt();
+			   if (id < 0 || id >= static_cast<int>(MobEffects::Count)) return std::nullopt;
+			   return static_cast<MobEffects::Effect>(id);
+		};
+		BeaconBlockEntity::Power primary   = power();
+		BeaconBlockEntity::Power secondary = power();
+		if (auto* menu = dynamic_cast<BeaconMenu*>(&Menus::current(*player, server.levelOf(*player)))) menu->updateEffects(primary, secondary);
+		break;
+	}
 	case PacketId::Play::Serverbound::EDIT_BOOK: {
 		// ServerboundEditBookPacket: slot, pages, optional title (signing)
 		Buffer& data  = packet->getData();
