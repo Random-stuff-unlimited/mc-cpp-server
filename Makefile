@@ -20,7 +20,8 @@ TARGET          := $(BUILD_DIR)/$(TARGET_NAME)
 # Compiler and flags
 CXX             := g++
 CXXFLAGS        := -std=c++20 -Wall -Wextra -Wpedantic -O2
-DEBUG_FLAGS     := -g -DDEBUG -O0
+# Not -DDEBUG: it clashes with LogLevel's DEBUG. Debug and release share build/: run `make clean` when switching
+DEBUG_FLAGS     := -g -DMC_DEBUG -O0
 RELEASE_FLAGS   := -DNDEBUG -O3
 INCLUDE_FLAGS   := -I$(INCLUDE_DIR) -I$(INCLUDE_DIR)/data -I$(INCLUDE_DIR)/network -I$(INCLUDE_DIR)/world -I$(INCLUDE_DIR)/lib
 
