@@ -199,6 +199,25 @@ namespace {
 			return t.literal("enchant", false, {t.players("targets", false, false, {t.argument("enchantment", "minecraft:resource", true, {level}, std::move(registry))})});
 		}
 		if (name == "help") return t.literal("help", true, {t.askServer(t.word("command", true))});
+		// The admin commands: player names (GameProfileArgument), a free reason (MessageArgument)
+		auto message = [&](const char* arg) { return t.argument(arg, "minecraft:message", true); };
+		auto profile = [&](const char* arg, bool executable, std::vector<int> children = {}) {
+			return t.argument(arg, "minecraft:game_profile", executable, std::move(children));
+		};
+		if (name == "op" || name == "deop" || name == "pardon") return t.literal(name, false, {profile("targets", true)});
+		if (name == "ban") return t.literal("ban", false, {profile("targets", true, {message("reason")})});
+		if (name == "kick") return t.literal("kick", false, {t.players("targets", false, true, {message("reason")})});
+		if (name == "ban-ip") return t.literal("ban-ip", false, {t.word("target", true, {message("reason")})});
+		if (name == "pardon-ip") return t.literal("pardon-ip", false, {t.word("target", true)});
+		if (name == "banlist") return t.literal("banlist", true, t.choices({"ips", "players"}));
+		if (name == "whitelist") {
+			std::vector<int> subs = t.choices({"on", "off", "list", "reload"});
+			subs.push_back(t.literal("add", false, {profile("targets", true)}));
+			subs.push_back(t.literal("remove", false, {profile("targets", true)}));
+			return t.literal("whitelist", false, subs);
+		}
+		if (name == "say" || name == "me") return t.literal(name, false, {message(name == "say" ? "message" : "action")});
+		if (name == "tell" || name == "msg" || name == "w") return t.literal(name, false, {t.players("targets", false, false, {message("message")})});
 		return t.literal(name, true);
 	}
 } // namespace
@@ -207,7 +226,7 @@ namespace Commands {
 	void sendCommandTree(Server& server, Player& player) {
 		Tree tree(server.getGameData());
 		for (const Command& command : commandList()) {
-			if (command.run) tree.addCommand(commandNode(tree, command.name));
+			if (canUse(player, command)) tree.addCommand(commandNode(tree, command.name));
 		}
 		Buffer buf;
 		tree.write(buf);
@@ -221,7 +240,7 @@ namespace Commands {
 		std::vector<std::string> matches;
 		if (text.rfind("/help ", 0) == 0 && start == 6) {
 			for (const Command& command : commandList()) {
-				if (command.run && command.name.rfind(word, 0) == 0) matches.push_back(command.name);
+				if (canUse(player, command) && command.name.rfind(word, 0) == 0) matches.push_back(command.name);
 			}
 		}
 		// ClientboundCommandSuggestionsPacket: the range replaced (in the text as typed, '/' included), then the entries

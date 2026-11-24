@@ -7,7 +7,10 @@
 		"view-distance": 10,
 		"compression-threshold": 256,
 		"tick-rate": 20,
-		"fill-limit": 32768
+		"fill-limit": 32768,
+		"op-permission-level": 4,
+		"white-list": false,
+		"enforce-whitelist": false
 	},
 	"world": {
 		"name": "world",

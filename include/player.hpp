@@ -182,6 +182,8 @@ class Player : public Actor, public std::enable_shared_from_this<Player>, public
 	int			  x, y, z;
 	int			  health;
 	UUID		  _uuid;
+	std::string	  _address;
+	int			  _permissionLevel = 0;
 	int			  _playerId;
 	Server&		  _server;
 	PlayerConfig* _config;
@@ -459,6 +461,13 @@ class Player : public Actor, public std::enable_shared_from_this<Player>, public
 	int			  getPlayerID() const;
 	void		  setUUID(UUID uuid);
 	const UUID&	  getUUID() const { return _uuid; }
+	// The client's IP address ("127.0.0.1"), empty for players without a connection (tests)
+	const std::string& address() const { return _address; }
+	void			   setAddress(std::string address) { _address = std::move(address); }
+	// Its op level (0 to 4, ServerAccess): which commands it may run
+	int	 permissionLevel() const { return _permissionLevel; }
+	void setPermissionLevel(int level) { _permissionLevel = level; }
+	bool hasPermissions(int level) const { return _permissionLevel >= level; }
 };
 
 #endif

@@ -25,9 +25,14 @@ conservés tels quels). À mettre à jour au fil de l'avancement.
 ## Commandes
 
 Implémentées : `tp`, `gamemode`/`gm`, `spawn`, `setworldspawn`, `spawnpoint`, `execute in … run tp`, `fill`, `help`,
-`time`, `list`, `setblock`, `give`, `clear`, `kill`, `difficulty`, `weather`.
+`time`, `list`, `setblock`, `give`, `clear`, `kill`, `difficulty`, `weather`, `summon`, `effect`, `xp`, `enchant`, et
+les commandes d'admin ci-dessous. Sans être op, seules `help`, `list`, `spawn`, `tell`/`msg`/`w` et `me` sont permises.
 
-- [ ] Admin : `/kick`, `/ban`, `/op`, `/deop`, `/say`, `/tell` + op/permissions (whitelist, op list, gate des commandes)
+- [x] Admin : `/op`, `/deop`, `/kick`, `/ban`, `/ban-ip`, `/pardon`, `/pardon-ip`, `/banlist`, `/whitelist`, `/say`,
+      `/tell` (`/msg`, `/w`), `/me` ; niveaux de permission 0–4 (arbre de commandes, `/help` et suggestions filtrés),
+      `ops.json`, `banned-players.json`, `banned-ips.json`, `whitelist.json` (format vanilla, à côté de `config.json`),
+      refus au login ; `config.json` : `op-permission-level`, `white-list`, `enforce-whitelist`
+- [ ] Console serveur (stdin) pour lancer des commandes sans être op ; bans temporaires
 - [x] `/summon <entité> [x y z]`
 - [x] `/effect give|clear`
 - [x] `/xp` (`/experience`) `add|set|query`, en points ou niveaux

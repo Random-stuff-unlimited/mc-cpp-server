@@ -99,7 +99,7 @@ void enterPlay(Packet* packet, Server& server) {
 	changeDifficultyPacket(*packet, server);
 	playerAbilitiesPacket(*packet, server);
 	setHeldItemPacket(*packet, server);
-	Commands::sendCommandTree(server, *player); // PlayerList.sendPlayerPermissionLevel
+	server.refreshPermissions(*player); // PlayerList.sendPlayerPermissionLevel: its op level and commands
 	sendInitialRecipeBook(*packet, server);
 	synchronizePlayerPositionPacket(*packet, server);
 

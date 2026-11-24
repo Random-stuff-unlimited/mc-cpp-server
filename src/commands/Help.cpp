@@ -7,7 +7,7 @@ namespace Commands {
 		commandList().push_back({"help", "help [<command>]", [](Server& server, Player& player, const std::vector<std::string>& args) {
 								  if (!args.empty()) {
 									  for (const Command& command : commandList()) {
-										  if (command.name == args[0]) {
+										  if (command.name == args[0] && canUse(player, command)) {
 											  message(server, player, "/" + command.usage);
 											  return;
 										  }
@@ -17,6 +17,7 @@ namespace Commands {
 								  }
 								  std::string list;
 								  for (const Command& command : commandList()) {
+									  if (!canUse(player, command)) continue;
 									  if (!list.empty()) list += ", ";
 									  list += "/" + command.name;
 								  }

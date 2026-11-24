@@ -27,6 +27,8 @@ class Config {
 	std::string _difficulty;
 	// "spawn-limits": per dimension (or "default"), the natural spawning cap of each mob category ("monster": 70...)
 	std::map<std::string, std::map<std::string, int>> _spawnLimits;
+	int												  _opPermissionLevel = 4;
+	bool											  _whiteList = false, _enforceWhitelist = false;
 
   public:
 	Config();
@@ -47,6 +49,11 @@ class Config {
 	int			getAutosaveInterval() const { return _autosaveInterval; }
 	int			getFillLimit() const { return _fillLimit; }
 	const std::map<std::string, std::map<std::string, int>>& getSpawnLimits() const { return _spawnLimits; }
+	int	 getOpPermissionLevel() const { return _opPermissionLevel; }
+	bool getWhiteList() const { return _whiteList; }
+	bool getEnforceWhitelist() const { return _enforceWhitelist; }
+	// /whitelist on|off: kept in config.json ("server": "white-list"), like vanilla's server.properties
+	void setWhiteList(bool enabled);
 	void setSpawnLimits(std::map<std::string, std::map<std::string, int>> limits) { _spawnLimits = std::move(limits); }
 
 	void setServerSize(int ServerSize);

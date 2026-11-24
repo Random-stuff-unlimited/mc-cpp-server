@@ -102,8 +102,16 @@ namespace Commands {
 		registerSummon();
 		registerExperience();
 		registerEnchant();
+		registerAdmin();
+		registerChat();
 		registerHelp();
+		// The commands everyone may run (the others need an op level of 2, the admin ones set theirs)
+		for (Command& command : commandList()) {
+			if (command.name == "help" || command.name == "list" || command.name == "spawn") command.permission = LEVEL_ALL;
+		}
 	}
+
+	bool canUse(const Player& player, const Command& command) { return command.run && player.hasPermissions(command.permission); }
 
 	void run(Server& server, Player& player, const std::string& line) {
 		size_t space = line.find(' ');
@@ -112,7 +120,9 @@ namespace Commands {
 		std::vector<std::string> args = space == std::string::npos ? std::vector<std::string>() : split(line.substr(space + 1));
 		for (const Command& command : commandList()) {
 			if (command.name != name) continue;
-			if (command.run) command.run(server, player, args);
+			// Without the level, the command doesn't exist for the player (it isn't in its command tree either)
+			if (!canUse(player, command)) break;
+			command.run(server, player, args);
 			return;
 		}
 		// Unknown or incomplete command
@@ -132,6 +142,29 @@ namespace Commands {
 	void broadcastChat(Server& server, Player& player, const std::string& text) {
 		Buffer message;
 		TextComponent::writeTranslatable(message, "chat.type.text", {player.getPlayerName(), text});
+		message.writeBool(false);
+		std::vector<uint8_t> frame =
+				Packet::buildFrame(PacketId::Play::Clientbound::SYSTEM_CHAT, message.getData(), server.getConfig().getCompressionThreshold());
+		for (const auto& other : server.getGamePlayers()) Packet::sendFrame(other, frame, server);
+	}
+
+	void translated(Server& server, Player& player, const std::string& key, const std::vector<std::string>& args) {
+		Buffer message;
+		TextComponent::writeTranslatable(message, key, args);
+		message.writeBool(false);
+		Packet::send(player.shared_from_this(), PacketId::Play::Clientbound::SYSTEM_CHAT, message, server);
+	}
+
+	void failure(Server& server, Player& player, const std::string& key, const std::vector<std::string>& args) {
+		Buffer message;
+		TextComponent::writeTranslatable(message, key, args, "red");
+		message.writeBool(false);
+		Packet::send(player.shared_from_this(), PacketId::Play::Clientbound::SYSTEM_CHAT, message, server);
+	}
+
+	void broadcastTranslated(Server& server, const std::string& key, const std::vector<std::string>& args) {
+		Buffer message;
+		TextComponent::writeTranslatable(message, key, args);
 		message.writeBool(false);
 		std::vector<uint8_t> frame =
 				Packet::buildFrame(PacketId::Play::Clientbound::SYSTEM_CHAT, message.getData(), server.getConfig().getCompressionThreshold());

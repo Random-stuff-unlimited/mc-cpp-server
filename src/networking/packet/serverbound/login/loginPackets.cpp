@@ -19,6 +19,13 @@ void handleLoginStartPacket(Packet& packet, Server& server) {
 
 	std::string username = packet.getData().readString(16);
 
+	// PlayerList.canPlayerLogin: banned (name or IP) or not on the whitelist
+	if (auto refusal = server.access().loginRefusal(UUID::fromOfflinePlayer(username), player->address())) {
+		player->setPlayerName(username);
+		server.kick(player, refusal->key, refusal->args);
+		return;
+	}
+
 	// Same name = same offline UUID: both clients would take the other for themselves. Like vanilla, the new
 	// connection wins and the old one is kicked
 	for (const auto& existing : server.findPlayersByName(username)) {

@@ -1,10 +1,13 @@
 #include "Commands.hpp"
+#include "commands/CommandSupport.hpp"
 #include "LevelFixture.hpp"
 #include "Test.hpp"
 #include "player.hpp"
 #include "world/item/Enchantments.hpp"
 
 #include <cmath>
+#include <filesystem>
+#include <fstream>
 
 namespace {
 	constexpr int Y = LevelFixture::SURFACE + 1; // First air layer, on grass
@@ -13,6 +16,7 @@ namespace {
 		auto player = std::make_shared<Player>("Bob", PlayerState::Play, -1, f.server);
 		player->setPosition(0.5, Y, 0.5);
 		player->setOnGround(true);
+		player->setPermissionLevel(4); // An op: every command
 		return player;
 	}
 } // namespace
@@ -117,4 +121,110 @@ TEST(commands_enchant) {
 	Commands::run(f.server, *player, "enchant @s smite 1"); // Conflicts with sharpness
 	Commands::run(f.server, *player, "enchant @s sharpness 9"); // Above its maximum
 	CHECK_EQ(static_cast<int>(Enchantments::of(f.data, player->inventory().get(player->handSlot(0))).size()), 1);
+}
+
+// Permission levels: a player that isn't an op only has the level 0 commands (help, list, tell, me...)
+TEST(commands_need_permission) {
+	LevelFixture f;
+	Commands::registerCommands();
+	auto player = makePlayer(f);
+	f.addPlayer(player);
+	player->setPermissionLevel(0);
+	Commands::run(f.server, *player, "tp 100 64 -200"); // Unknown for it: nothing happens
+	CHECK(player->getX() == 0.5);
+	const Commands::Command* tell = nullptr;
+	const Commands::Command* op	  = nullptr;
+	for (const auto& command : Commands::commandList()) {
+		if (command.name == "tell") tell = &command;
+		if (command.name == "op") op = &command;
+	}
+	CHECK(tell && Commands::canUse(*player, *tell));
+	CHECK(op && !Commands::canUse(*player, *op));
+	player->setPermissionLevel(3);
+	CHECK(Commands::canUse(*player, *op));
+	Commands::run(f.server, *player, "tp 100 64 -200");
+	CHECK(player->getX() == 100.0);
+}
+
+// /op and /deop: the level comes from the ops list, online players get theirs right away
+TEST(commands_op_deop) {
+	LevelFixture f;
+	Commands::registerCommands();
+	auto admin = makePlayer(f);
+	f.addPlayer(admin);
+	auto alice = std::make_shared<Player>("Alice", PlayerState::Play, -1, f.server);
+	alice->setUUID(UUID::fromOfflinePlayer("Alice"));
+	f.addPlayer(alice);
+	CHECK_EQ(alice->permissionLevel(), 0);
+	Commands::run(f.server, *admin, "op Alice");
+	CHECK_EQ(f.server.access().permissionLevel(UUID::fromOfflinePlayer("Alice")), 4);
+	CHECK_EQ(alice->permissionLevel(), 4);
+	Commands::run(f.server, *admin, "op Carol"); // Offline: still made an op, by its offline UUID
+	CHECK_EQ(f.server.access().permissionLevel(UUID::fromOfflinePlayer("Carol")), 4);
+	Commands::run(f.server, *admin, "deop Alice");
+	CHECK_EQ(alice->permissionLevel(), 0);
+	CHECK_EQ(f.server.access().ops().size(), 1u);
+}
+
+// Bans (by name, by IP) and the whitelist refuse logins; /pardon lifts a ban; ops pass the whitelist
+TEST(commands_ban_pardon_whitelist) {
+	LevelFixture f;
+	Commands::registerCommands();
+	auto admin = makePlayer(f);
+	f.addPlayer(admin);
+	ServerAccess& access = f.server.access();
+	UUID		  mallory = UUID::fromOfflinePlayer("Mallory");
+	Commands::run(f.server, *admin, "ban Mallory griefing the spawn");
+	auto refusal = access.loginRefusal(mallory, "10.0.0.5");
+	CHECK(refusal && refusal->key == "multiplayer.disconnect.banned.reason" && refusal->args.at(0) == "griefing the spawn");
+	CHECK(access.bans().at(0).source == "Bob");
+	Commands::run(f.server, *admin, "pardon mallory");
+	CHECK(!access.loginRefusal(mallory, "10.0.0.5"));
+	Commands::run(f.server, *admin, "ban-ip 10.0.0.5");
+	refusal = access.loginRefusal(mallory, "10.0.0.5");
+	CHECK(refusal && refusal->key == "multiplayer.disconnect.banned_ip.reason");
+	CHECK(!access.loginRefusal(mallory, "10.0.0.6"));
+	Commands::run(f.server, *admin, "ban-ip not.an.ip"); // Neither an IP nor an online player
+	CHECK_EQ(access.ipBans().size(), 1u);
+	Commands::run(f.server, *admin, "pardon-ip 10.0.0.5");
+	CHECK(access.ipBans().empty());
+	// Whitelist
+	Commands::run(f.server, *admin, "whitelist on");
+	CHECK(access.whitelistEnabled());
+	refusal = access.loginRefusal(mallory, "");
+	CHECK(refusal && refusal->key == "multiplayer.disconnect.not_whitelisted");
+	Commands::run(f.server, *admin, "whitelist add Mallory");
+	CHECK(!access.loginRefusal(mallory, ""));
+	Commands::run(f.server, *admin, "whitelist remove Mallory");
+	CHECK(access.loginRefusal(mallory, ""));
+	access.op(mallory, "Mallory");
+	CHECK(!access.loginRefusal(mallory, "")); // Ops always may join
+	Commands::run(f.server, *admin, "whitelist off");
+	CHECK(!access.whitelistEnabled());
+}
+
+// The four files keep their vanilla format; an entry written by hand with only a name works too
+TEST(server_access_files) {
+	auto directory = std::filesystem::temp_directory_path() / "mc-cpp-server-access-test";
+	std::filesystem::remove_all(directory);
+	std::filesystem::create_directories(directory);
+	{
+		std::ofstream ops(directory / "ops.json");
+		ops << R"([{"name": "Admin", "level": 3}])";
+	}
+	ServerAccess access;
+	access.load(directory);
+	CHECK_EQ(access.permissionLevel(UUID::fromOfflinePlayer("Admin")), 3);
+	access.ban(UUID::fromOfflinePlayer("Eve"), "Eve", "Admin", "spam");
+	access.banIp("192.168.1.20", "Admin", "spam");
+	access.addToWhitelist(UUID::fromOfflinePlayer("Dan"), "Dan");
+	ServerAccess reloaded;
+	reloaded.load(directory);
+	CHECK(reloaded.isBanned(UUID::fromOfflinePlayer("Eve")));
+	CHECK(reloaded.isIpBanned("192.168.1.20"));
+	CHECK(reloaded.isWhitelisted(UUID::fromOfflinePlayer("Dan")));
+	CHECK(reloaded.bans().at(0).reason == "spam");
+	CHECK(reloaded.bans().at(0).created.size() == 25); // "2026-11-24 21:00:00 +0000"
+	CHECK(ServerAccess::isIpAddress("127.0.0.1") && !ServerAccess::isIpAddress("256.0.0.1") && !ServerAccess::isIpAddress("1.2.3"));
+	std::filesystem::remove_all(directory);
 }

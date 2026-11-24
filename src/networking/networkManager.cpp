@@ -125,6 +125,8 @@ void NetworkManager::acceptConnections(NetworkThread& thread) {
 			continue;
 		}
 		player->setNetworkThread(thread.index);
+		char address[INET_ADDRSTRLEN] = {};
+		if (inet_ntop(AF_INET, &clientAddr.sin_addr, address, sizeof(address))) player->setAddress(address);
 
 		epoll_event event{};
 		event.events  = EPOLLIN;

@@ -15,10 +15,14 @@ class Server;
 // src/Commands.cpp's registerCommands. The run function gets the arguments, split on spaces, without the
 // command's name ("tp 100 64 100" runs "tp" with {"100", "64", "100"}).
 namespace Commands {
+	// Commands.LEVEL_*: the op levels
+	constexpr int LEVEL_ALL = 0, LEVEL_MODERATORS = 1, LEVEL_GAMEMASTERS = 2, LEVEL_ADMINS = 3, LEVEL_OWNERS = 4;
+
 	struct Command {
 		std::string name;																	  // "tp"
 		std::string usage;																	  // "tp [<player>] <x> <y> <z>"
 		std::function<void(Server&, Player&, const std::vector<std::string>&)> run;			  // Empty: known but disabled
+		int			permission = LEVEL_GAMEMASTERS; // The op level it needs (Player::permissionLevel)
 	};
 
 	// Registers every built-in command (called once, when the server starts)
@@ -35,6 +39,14 @@ namespace Commands {
 	void message(Server& server, Player& player, const std::string& text);
 	// A player's line for everyone to see (chat.type.text: its name, then the message)
 	void broadcastChat(Server& server, Player& player, const std::string& text);
+	// A translated message in the player's own chat ("commands.op.success" and its arguments)
+	void translated(Server& server, Player& player, const std::string& key, const std::vector<std::string>& args = {});
+	// The same in red (a command's failure)
+	void failure(Server& server, Player& player, const std::string& key, const std::vector<std::string>& args = {});
+	// The same for every player in the game
+	void broadcastTranslated(Server& server, const std::string& key, const std::vector<std::string>& args);
+	// Whether the player may run this command (its op level)
+	bool canUse(const Player& player, const Command& command);
 	// Its usage, after a wrong call ("Usage: /<usage>")
 	void usage(Server& server, Player& player, const std::string& usage);
 } // namespace Commands

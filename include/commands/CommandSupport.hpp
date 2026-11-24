@@ -45,6 +45,10 @@ namespace Commands {
 	void registerSummon();
 	void registerExperience();
 	void registerEnchant();
+	// op, deop, kick, ban, ban-ip, pardon, pardon-ip, banlist, whitelist
+	void registerAdmin();
+	// say, tell (msg, w), me
+	void registerChat();
 } // namespace Commands
 
 #endif

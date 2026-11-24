@@ -38,6 +38,9 @@ bool Config::loadConfig() {
 		_tickRate			  = config["server"].value("tick-rate", _tickRate);
 		_autosaveInterval	  = std::max(10, config["world"].value("autosave-interval", _autosaveInterval));
 		_fillLimit			  = std::max(1, config["server"].value("fill-limit", _fillLimit));
+		_opPermissionLevel	  = std::clamp(config["server"].value("op-permission-level", _opPermissionLevel), 0, 4);
+		_whiteList			  = config["server"].value("white-list", _whiteList);
+		_enforceWhitelist	  = config["server"].value("enforce-whitelist", _enforceWhitelist);
 		_spawnLimits.clear();
 		if (config["world"].contains("spawn-limits")) {
 			for (const auto& [dimension, limits] : config["world"]["spawn-limits"].items()) {
@@ -78,6 +81,9 @@ bool Config::reloadConfig() {
 		_compressionThreshold = config["server"].value("compression-threshold", _compressionThreshold);
 		_autosaveInterval	  = std::max(10, config["world"].value("autosave-interval", _autosaveInterval));
 		_fillLimit			  = std::max(1, config["server"].value("fill-limit", _fillLimit));
+		_opPermissionLevel	  = std::clamp(config["server"].value("op-permission-level", _opPermissionLevel), 0, 4);
+		_whiteList			  = config["server"].value("white-list", _whiteList);
+		_enforceWhitelist	  = config["server"].value("enforce-whitelist", _enforceWhitelist);
 		_spawnLimits.clear();
 		if (config["world"].contains("spawn-limits")) {
 			for (const auto& [dimension, limits] : config["world"]["spawn-limits"].items()) {
@@ -125,3 +131,19 @@ void Config::setWorldName(std::string WorldName) { _worldName = WorldName; }
 void Config::setGamemode(std::string Gamemode) { _gamemode = Gamemode; }
 
 void Config::setDifficulty(std::string Difficulty) { _difficulty = Difficulty; }
+
+void Config::setWhiteList(bool enabled) {
+	_whiteList				   = enabled;
+	std::filesystem::path file = _execPath.parent_path() / "config.json";
+	std::ifstream		  in(file);
+	if (!in) return; // No config file (tests): only in memory
+	try {
+		json config = json::parse(in);
+		in.close();
+		config["server"]["white-list"] = enabled;
+		std::ofstream out(file);
+		out << config.dump(1, '\t') << "\n";
+	} catch (const std::exception& e) {
+		g_logger->logGameInfo(ERROR, "Couldn't save white-list in config.json: " + std::string(e.what()), "SERVER");
+	}
+}

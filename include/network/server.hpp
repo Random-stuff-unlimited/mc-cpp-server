@@ -12,6 +12,7 @@ class World;
 #include "../data/DeathMessages.hpp"
 #include "../data/GameData.hpp"
 #include "../player.hpp"
+#include "../ServerAccess.hpp"
 #include "../world/World.hpp"
 #include "id_manager.hpp"
 #include "lib/json.hpp"
@@ -37,6 +38,7 @@ class Server {
 	std::mutex						 _playerLock;
 	std::mutex						 _tempPlayerLock;
 	Config							 _config;
+	ServerAccess					 _access;
 	GameData						 _gameData;
 	DeathMessages					 _deathMessages;
 	NetworkManager*					 _networkManager;
@@ -60,6 +62,7 @@ class Server {
 	void tickLevel(Level& level, bool worldRuns);
 
 	void tickKeepAlive();
+	void disconnect(Player* player, const std::string& loginJson, const std::function<void(Buffer&)>& writeReason, const std::string& logged);
 	void runGameHandler(Packet* packet, void (*handler)(Packet*, Server&));
 
   public:
@@ -67,8 +70,16 @@ class Server {
 	// The overworld first. start_server loads the three; tests load them with loadGameData
 	void loadDimension(const World::Settings& overworldSettings, const std::string& dimension);
 	void loadGameData(const std::filesystem::path& directory) { _gameData.load(directory); }
-	// Disconnects a player with a message (a translation key of the game, e.g. "multiplayer.disconnect.kicked")
-	void kick(Player* player, const std::string& translationKey);
+	// Disconnects a player with a message (a translation key of the game, e.g. "multiplayer.disconnect.kicked", and
+	// its arguments)
+	void kick(Player* player, const std::string& translationKey, const std::vector<std::string>& args = {});
+	// The same with a plain text message (/kick's reason)
+	void kickWithText(Player* player, const std::string& text);
+	// Ops, bans and the whitelist (ops.json, banned-players.json, banned-ips.json, whitelist.json)
+	ServerAccess& access() { return _access; }
+	// PlayerList.sendPlayerPermissionLevel: the player's level read from the ops, sent to its client (an entity event:
+	// F3+F4 and the debug keys) with the commands it may now run
+	void refreshPermissions(Player& player);
 	// A translated message in the player's own chat (System Chat, in the chat): its language's wording
 	void sendSystemMessage(Player& player, const std::string& translationKey);
 	// The same above the hotbar (Player.displayClientMessage(..., true))

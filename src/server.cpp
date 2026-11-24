@@ -74,29 +74,50 @@ Level* Server::getLevel(const std::string& dimension) {
 	return nullptr;
 }
 
-void Server::kick(Player* player, const std::string& translationKey) {
+void Server::kick(Player* player, const std::string& translationKey, const std::vector<std::string>& args) {
+	json login = {{"translate", translationKey}};
+	for (const std::string& arg : args) login["with"].push_back(arg);
+	disconnect(player, login.dump(), [&](Buffer& buf) { TextComponent::writeTranslatable(buf, translationKey, args); }, translationKey);
+}
+
+void Server::kickWithText(Player* player, const std::string& text) {
+	disconnect(player, json{{"text", text}}.dump(), [&](Buffer& buf) { TextComponent::writeText(buf, text); }, text);
+}
+
+void Server::disconnect(Player* player, const std::string& loginJson, const std::function<void(Buffer&)>& writeReason, const std::string& logged) {
 	if (!player || player->isDisconnected()) return;
 	std::shared_ptr<Player> target = player->shared_from_this();
 	Buffer					reason;
 	switch (player->getPlayerState()) {
 	case PlayerState::Login:
 		// The login state still uses JSON text
-		reason.writeString("{\"translate\":\"" + translationKey + "\"}");
+		reason.writeString(loginJson);
 		Packet::send(target, PacketId::Login::Clientbound::LOGIN_DISCONNECT, reason, *this);
 		break;
 	case PlayerState::Configuration:
-		TextComponent::writeTranslatable(reason, translationKey, {});
+		writeReason(reason);
 		Packet::send(target, PacketId::Configuration::Clientbound::DISCONNECT, reason, *this);
 		break;
 	case PlayerState::Play:
-		TextComponent::writeTranslatable(reason, translationKey, {});
+		writeReason(reason);
 		Packet::send(target, PacketId::Play::Clientbound::DISCONNECT, reason, *this);
 		break;
 	default:
 		break;
 	}
-	g_logger->logNetwork(INFO, player->getPlayerName() + " kicked: " + translationKey, "SERVER");
-	_networkManager->requestDisconnect(player); // After the message is sent
+	g_logger->logNetwork(INFO, player->getPlayerName() + " kicked: " + logged, "SERVER");
+	if (_networkManager) _networkManager->requestDisconnect(player); // After the message is sent
+}
+
+void Server::refreshPermissions(Player& player) {
+	int level = _access.permissionLevel(player.getUUID());
+	player.setPermissionLevel(level);
+	// EntityEvent.PERMISSION_LEVEL_ALL (24) + level, for the player's own entity
+	Buffer event;
+	event.writeInt(player.id());
+	event.writeByte(static_cast<int8_t>(24 + std::clamp(level, 0, 4)));
+	Packet::send(player.shared_from_this(), PacketId::Play::Clientbound::ENTITY_EVENT, event, *this);
+	Commands::sendCommandTree(*this, player);
 }
 
 void Server::sendSystemMessage(Player& player, const std::string& translationKey) {
@@ -564,6 +585,9 @@ int Server::start_server() {
 		}
 
 		Commands::registerCommands();
+		_access.setOpPermissionLevel(_config.getOpPermissionLevel());
+		_access.setWhitelistEnabled(_config.getWhiteList());
+		_access.load(getPath().parent_path());
 
 		World::Settings worldSettings;
 		worldSettings.directory		   = getPath().parent_path() / _config.getWorldName();
