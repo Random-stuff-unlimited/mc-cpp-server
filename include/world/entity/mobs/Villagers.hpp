@@ -63,6 +63,16 @@ class AbstractVillager : public AgeableMob {
 class Villager : public AbstractVillager {
   public:
 	static constexpr int DATA_VILLAGER_DATA = 17, DATA_SLEEPING_POS = 14;
+	// Zombie.killedEntity: killed by a zombie in normal (one time in two) or hard, it becomes a zombie villager
+	void die(const Combat::DamageSource& source) override;
+	void setVillagerXp(int xp) { _villagerXp = xp; }
+	// Villager.wantsToSpawnGolem: slept within the last day and no iron golem seen around lately (GolemSensor)
+	bool wantsToSpawnGolem(int64_t gameTime);
+	// Villager.spawnGolemIfNeeded: with enough villagers around that want one too (5 when gossiping, 3 when
+	// panicking), an iron golem appears near it (SpawnUtil.trySpawnMob, LEGACY_IRON_GOLEM). Whether one did
+	bool spawnGolemIfNeeded(int64_t gameTime, int minVillagers);
+	void golemDetected(int64_t gameTime) { _golemDetectedUntil = gameTime + 600; }
+	void setLastSlept(int64_t gameTime) { _lastSlept = gameTime; }
 	// Villager.thunderHit: a witch (not in peaceful)
 	void thunderHit(LightningBolt& bolt) override;
 	static constexpr int POSE_SLEEPING = 2;
@@ -120,6 +130,7 @@ class Villager : public AbstractVillager {
   private:
 	int						_villagerType = 0, _profession = 0, _villagerLevel = 1, _villagerXp = 0;
 	int						_updateMerchantTimer = 0, _restocksToday = 0;
+	int64_t					_lastSlept = -1, _lastGossip = -1, _golemDetectedUntil = -1, _lastGolemSense = -1;
 	int64_t					_lastRestockGameTime = 0, _lastRestockCheckDay = -1;
 	bool					_increaseProfessionLevelOnUpdate = false;
 	std::optional<BlockPos> _jobSite, _home, _meetingPoint, _sleeping;

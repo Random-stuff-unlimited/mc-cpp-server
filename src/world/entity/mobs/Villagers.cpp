@@ -1,3 +1,4 @@
+#include "world/entity/mobs/IronGolem.hpp"
 #include "world/entity/mobs/Villagers.hpp"
 
 #include "PacketIds.hpp"
@@ -306,6 +307,7 @@ void Villager::startSleeping(const BlockPos& bed) {
 	setPos({bed.x + 0.5, bed.y + 0.6875, bed.z + 0.5});
 	_oldPosition = _position;
 	_sleeping	 = bed;
+	_lastSlept	 = _level.getGameTime(); // LAST_SLEPT
 	setBedOccupied(bed, true);
 	setPose(POSE_SLEEPING);
 	markData(DATA_SLEEPING_POS);
@@ -496,6 +498,19 @@ void Villager::tryBreed() {
 }
 
 void Villager::customServerAiStep() {
+	int64_t now = _level.getGameTime();
+	// VillagerPanicTrigger: scared, it calls for a golem (3 villagers are enough) every 5 seconds
+	if (isPanicking() && now % 100 == 0) spawnGolemIfNeeded(now, 3);
+	// Villager.gossip, when it meets another villager (at most once a minute each): 5 villagers make a golem
+	if (_lastGossip < 0 || now >= _lastGossip + 1200) {
+		for (Actor* actor : _level.actorsIn(boundingBox().inflate(2.0, 1.0, 2.0), this)) {
+			auto* other = dynamic_cast<Villager*>(actor);
+			if (!other || !other->isAlive() || (other->_lastGossip >= 0 && now < other->_lastGossip + 1200)) continue;
+			_lastGossip = other->_lastGossip = now;
+			spawnGolemIfNeeded(now, 5);
+			break;
+		}
+	}
 	// Leveling up, once its customer left: new offers and a moment of regeneration
 	if (!isTrading() && _updateMerchantTimer > 0 && --_updateMerchantTimer <= 0) {
 		if (_increaseProfessionLevelOnUpdate) {
@@ -682,4 +697,76 @@ void WanderingTrader::load(Buffer& buf) {
 	if (buf.readUByte() != SAVE_VERSION) throw std::runtime_error("unknown wandering trader data version");
 	_despawnDelay = buf.readInt();
 	if (buf.readBool()) _wanderTarget = BlockPos::fromLong(buf.readLong());
+}
+
+void Villager::die(const Combat::DamageSource& source) {
+	int difficulty = _level.difficulty();
+	if (dynamic_cast<Zombie*>(source.causing) && difficulty >= 2 && (difficulty == 3 || !source.causing->asLiving()->random().nextBoolean())) {
+		int type = _villagerType, profession = _profession, villagerLevel = _villagerLevel, xp = _villagerXp;
+		std::vector<MerchantOffer> kept = offers();
+		Level& level = _level;
+		BlockPos pos = blockPosition();
+		Mob* converted = convertTo(level.gameData().getStaticId("minecraft:entity_type", "minecraft:zombie_villager"), false, true, [&](Mob& mob) {
+			DifficultyInstance instance = level.getCurrentDifficultyAt(mob.blockPosition());
+			mob.finalizeSpawn(instance, static_cast<int>(MobRegistry::SpawnReason::Conversion));
+			if (auto* zombie = dynamic_cast<ZombieVillager*>(&mob)) {
+				zombie->setVillagerData(type, profession, villagerLevel);
+				zombie->setTradeOffers(kept);
+				zombie->setVillagerXp(xp);
+			}
+		});
+		if (converted) {
+			level.levelEvent(nullptr, 1026, pos, 0); // LevelEvent.SOUND_ZOMBIE_INFECTED
+			return;
+		}
+	}
+	AbstractVillager::die(source);
+}
+
+bool Villager::wantsToSpawnGolem(int64_t gameTime) {
+	// GolemSensor: an iron golem within 16 blocks, sensed every 10 seconds, keeps it quiet for 30 seconds
+	if (_lastGolemSense < 0 || gameTime - _lastGolemSense >= 200) {
+		_lastGolemSense = gameTime;
+		for (Actor* actor : _level.actorsIn(boundingBox().inflate(16.0, 16.0, 16.0), this)) {
+			if (dynamic_cast<IronGolem*>(actor) && actor->isAlive()) golemDetected(gameTime);
+		}
+	}
+	if (gameTime < _golemDetectedUntil) return false;
+	return _lastSlept >= 0 && gameTime - _lastSlept < 24000;
+}
+
+bool Villager::spawnGolemIfNeeded(int64_t gameTime, int minVillagers) {
+	if (!wantsToSpawnGolem(gameTime)) return false;
+	std::vector<Villager*> around, willing;
+	for (Actor* actor : _level.actorsIn(boundingBox().inflate(10.0, 10.0, 10.0))) {
+		auto* villager = dynamic_cast<Villager*>(actor);
+		if (!villager || !villager->isAlive()) continue;
+		around.push_back(villager);
+		if (willing.size() < 5 && villager->wantsToSpawnGolem(gameTime)) willing.push_back(villager);
+	}
+	if (static_cast<int>(willing.size()) < minVillagers) return false;
+	// SpawnUtil.trySpawnMob: 10 tries within 8 blocks, from 6 above down to 6 below, on a solid block with air (or
+	// liquid) above (LEGACY_IRON_GOLEM)
+	int		 golemType = _level.gameData().getStaticId("minecraft:entity_type", "minecraft:iron_golem");
+	BlockPos center	   = blockPosition();
+	for (int attempt = 0; attempt < 10; attempt++) {
+		int dx = _random.nextInt(17) - 8, dz = _random.nextInt(17) - 8;
+		for (int y = center.y + 6; y >= center.y - 6; y--) {
+			BlockPos at{center.x + dx, y, center.z + dz};
+			int		 below = _level.getBlockState(at.below()), here = _level.getBlockState(at), above = _level.getBlockState(at.above());
+			const GameData::StateProperties& hereProps = _level.gameData().getStateProperties(here);
+			bool open = (_level.blocks().isAir(here) || hereProps.liquid) && (_level.blocks().isAir(above) || _level.gameData().getStateProperties(above).liquid);
+			if (!open || !_level.gameData().getStateProperties(below).solidRender) continue;
+			std::unique_ptr<Mob> golem = _level.mobs().create(_level, golemType);
+			if (!golem) return false;
+			golem->snapTo({at.x + 0.5, static_cast<double>(at.y), at.z + 0.5}, 0.0F, 0.0F);
+			if (!golem->checkSpawnObstruction()) break;
+			DifficultyInstance difficulty = _level.getCurrentDifficultyAt(at);
+			golem->finalizeSpawn(difficulty, static_cast<int>(MobRegistry::SpawnReason::MobSummoned));
+			_level.addFreshEntity(std::move(golem));
+			for (Villager* villager : around) villager->golemDetected(gameTime);
+			return true;
+		}
+	}
+	return false;
 }

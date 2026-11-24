@@ -71,7 +71,8 @@ Les 85 types de mobs vanilla ont leur classe et leur IA (`src/world/entity/mobs`
       boules de feu, atterrissage, mort, parties)
 - [x] Commerce villageois : `MERCHANT_OFFERS`, `SELECT_TRADE`, menu marchand, offres des 13 métiers et du marchand ambulant,
       demande et réapprovisionnement, XP et niveaux de métier (cartes d'exploration, armures teintes, ragots non portés)
-- [ ] Villageois : ragots, fermiers (récolte/plantation), invocation de golems de fer, conversion par les zombies
+- [x] Villageois : invocation de golems de fer (panique, rencontres après avoir dormi), conversion par les zombies
+- [ ] Villageois : vrais ragots (réputation), fermiers (récolte/plantation)
 - [x] Éclosion des œufs (frai de grenouille → têtards, œuf de renifleur ; tortue déjà en place)
 - [x] Ruches : abeilles qui entrent/sortent (`BeehiveBlockEntity`), nuit/pluie, miel à la sortie, essaim en colère si cassée
 - [ ] Ruches : fumée de feu de camp, récolte au flacon/cisailles
@@ -99,7 +100,7 @@ Les 85 types de mobs vanilla ont leur classe et leur IA (`src/world/entity/mobs`
 - [x] IA villageoise (professions, emplois, horaires, dormir)
 - [x] Commerce : `MERCHANT_OFFERS`, `SELECT_TRADE`, offres par profession et niveau
 - [x] Golem de fer construit par motif
-- [ ] Golem de fer invoqué par les villageois
+- [x] Golem de fer invoqué par les villageois
 - [ ] Fermiers : moissons, partage de nourriture
 
 ## Boss

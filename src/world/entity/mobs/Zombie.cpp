@@ -436,7 +436,8 @@ void ZombieVillager::finishConversion() {
 	// A villager takes its place, with its villager data and equipment (dropPreservedEquipment); nauseous for 10 s
 	BlockPos pos = blockPosition();
 	Level&	 level = _level;
-	int		 type = _type, profession = _profession, villagerLevel = _villagerLevel;
+	int		 type = _type, profession = _profession, villagerLevel = _villagerLevel, xp = _xp;
+	std::vector<MerchantOffer> offers = _offers;
 	std::array<ItemStack, EQUIPMENT_SLOT_COUNT> equipment = _equipment;
 	convertTo(level.gameData().getStaticId("minecraft:entity_type", "minecraft:villager"), false, false, [&](Mob& villager) {
 		for (int slot = 0; slot < EQUIPMENT_SLOT_COUNT; slot++) {
@@ -445,7 +446,11 @@ void ZombieVillager::finishConversion() {
 		DifficultyInstance difficulty = level.getCurrentDifficultyAt(villager.blockPosition());
 		villager.finalizeSpawn(difficulty, static_cast<int>(MobRegistry::SpawnReason::Conversion));
 		// Its villager data is kept (finalizeSpawn would give it its biome's type)
-		if (auto* cured = dynamic_cast<Villager*>(&villager)) cured->setVillagerData(type, profession, villagerLevel);
+		if (auto* cured = dynamic_cast<Villager*>(&villager)) {
+			cured->setVillagerData(type, profession, villagerLevel);
+			cured->setVillagerXp(xp);
+			if (!offers.empty()) cured->offers() = offers;
+		}
 		villager.addEffect(MobEffects::Instance(MobEffects::Nausea, 200, 0));
 	});
 	level.levelEvent(nullptr, LEVEL_EVENT_ZOMBIE_VILLAGER_CURED, pos, 0);

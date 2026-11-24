@@ -1,6 +1,7 @@
 #ifndef ZOMBIE_HPP
 #define ZOMBIE_HPP
 
+#include "world/entity/Trading.hpp"
 #include "world/entity/mobs/Monster.hpp"
 
 // Zombie (and Husk): burns in daylight unless it wears a helmet (which wears out instead), calls reinforcements in
@@ -72,6 +73,10 @@ class ZombieVillager : public Zombie {
 	int	 profession() const { return _profession; }
 	void setVillagerData(int type, int profession, int level);
 	void setVillagerConversionTime(int ticks) { _conversionTime = ticks; }
+	// What a villager killed by a zombie keeps for when it is cured: its trades (until the server stops: they aren't
+	// saved with the zombie) and its experience
+	void setTradeOffers(std::vector<MerchantOffer> offers) { _offers = std::move(offers); }
+	void setVillagerXp(int xp) { _xp = xp; }
 
 	void tick() override;
 	bool mobInteract(Player& player, int hand) override;
@@ -90,6 +95,7 @@ class ZombieVillager : public Zombie {
 	bool _hasStarter = false;
 	int	 _type = 0, _profession = 0, _villagerLevel = 1, _xp = 0;
 	int	 _initialType = 0, _initialProfession = 0;
+	std::vector<MerchantOffer> _offers;
 
 	void startConverting(const UUID* starter, int ticks);
 	int	 getConversionProgress();

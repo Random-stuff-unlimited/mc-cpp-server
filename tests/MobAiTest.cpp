@@ -1339,3 +1339,48 @@ TEST(raid_starts_in_village) {
 	CHECK_EQ(raid->groupsSpawned(), 1);
 	CHECK(raid->raidersAlive() > 0);
 }
+
+// Killed by a zombie in hard difficulty, a villager becomes a zombie villager of the same profession
+TEST(villager_killed_by_zombie_converts) {
+	LevelFixture f(1);
+	f.server.getConfig().setDifficulty("hard");
+	auto* villager = dynamic_cast<Villager*>(spawn(f, "minecraft:villager", {0, Y, 0}));
+	Mob*  zombie   = spawn(f, "minecraft:zombie", {3, Y, 0});
+	CHECK(villager && zombie);
+	if (!villager || !zombie) return;
+	villager->setBaby(false);
+	int librarian = f.data.getStaticId("minecraft:villager_profession", "minecraft:librarian");
+	villager->setVillagerData(villager->villagerType(), librarian, 2);
+	villager->hurtServer({"minecraft:mob_attack", zombie, nullptr, std::nullopt}, 1000.0F);
+	f.tick(2);
+	ZombieVillager* converted = nullptr;
+	f.level->entities().forEach([&](Entity& entity) {
+		if (auto* z = dynamic_cast<ZombieVillager*>(&entity); z && !z->isRemoved()) converted = z;
+	});
+	CHECK(converted != nullptr);
+	CHECK(converted && converted->profession() == librarian);
+	f.server.getConfig().setDifficulty("normal");
+}
+
+// Villagers that slept lately, with no golem around: five of them together make an iron golem; then they know one
+// is there
+TEST(villagers_summon_iron_golem) {
+	LevelFixture f(2);
+	std::vector<Villager*> villagers;
+	for (int i = 0; i < 5; i++) {
+		auto* villager = dynamic_cast<Villager*>(spawn(f, "minecraft:villager", {i, Y, 0}));
+		CHECK(villager);
+		if (!villager) return;
+		villager->setBaby(false);
+		villager->goalSelector().removeAllGoals();
+		villagers.push_back(villager);
+	}
+	int64_t now = f.level->getGameTime();
+	CHECK(!villagers[0]->spawnGolemIfNeeded(now, 5)); // They haven't slept
+	for (Villager* villager : villagers) villager->setLastSlept(now);
+	CHECK(villagers[0]->spawnGolemIfNeeded(now, 5));
+	int golems = 0;
+	f.level->entities().forEach([&](Entity& entity) { golems += dynamic_cast<IronGolem*>(&entity) != nullptr; });
+	CHECK_EQ(golems, 1);
+	CHECK(!villagers[1]->spawnGolemIfNeeded(now + 10, 5)); // One was just seen
+}
