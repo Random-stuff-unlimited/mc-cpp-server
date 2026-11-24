@@ -1,6 +1,7 @@
 #include "world/VillageEvents.hpp"
 #include "world/blocks/Eggs.hpp"
 #include "world/blocks/Rails.hpp"
+#include "world/blocks/Signs.hpp"
 #include "world/entity/mobs/Bosses.hpp"
 #include "world/blocks/VanillaBlocks.hpp"
 
@@ -69,6 +70,10 @@ void registerVanillaBlocks(Level& level, const GameData& gameData) {
 			{"WitherSkullBlock", [](int) { return std::make_unique<WitherSkullBehavior>(); }},
 			{"FrogspawnBlock", [](int) { return std::make_unique<FrogspawnBlock>(); }},
 			{"CarvedPumpkinBlock", [](int) { return std::make_unique<CarvedPumpkinBehavior>(); }},
+			{"StandingSignBlock", [context](int) { return std::make_unique<SignBlock>(context, SignBlock::Kind::Standing); }},
+			{"WallSignBlock", [context](int) { return std::make_unique<SignBlock>(context, SignBlock::Kind::Wall); }},
+			{"CeilingHangingSignBlock", [context](int) { return std::make_unique<SignBlock>(context, SignBlock::Kind::CeilingHanging); }},
+			{"WallHangingSignBlock", [context](int) { return std::make_unique<SignBlock>(context, SignBlock::Kind::WallHanging); }},
 			{"DetectorRailBlock", [](int) { return std::make_unique<RailBehavior>(RailBehavior::Kind::Detector); }},
 			{"PoweredRailBlock", [&gameData](int block) {
 				 bool activator = gameData.getStaticName("minecraft:block", block) == "minecraft:activator_rail";

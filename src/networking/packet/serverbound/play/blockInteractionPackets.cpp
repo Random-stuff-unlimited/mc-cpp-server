@@ -1,3 +1,4 @@
+#include "world/blocks/Signs.hpp"
 #include "BlockPos.hpp"
 #include "PacketIds.hpp"
 #include "data/GameData.hpp"
@@ -348,6 +349,7 @@ void handleUseItemOnPacket(Packet& packet, Server& server) {
 		// block entity (BlockEntity.applyComponentsFromItemStack)
 		if (BlockEntity* entity = level.getBlockEntity(target)) ContainerItems::apply(*entity, player.getStackInHand(hand), gameData);
 		level.behavior(state).setPlacedBy(level, target, state);
+		Signs::afterPlaced(level, player, target); // A new sign opens its editor
 	}
 	// One item used, except with infinite materials
 	if (player.getGameMode() != GameMode::Creative) player.inventory().getMutable(player.handSlot(hand)).shrink(1);

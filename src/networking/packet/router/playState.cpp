@@ -1,3 +1,4 @@
+#include "world/blocks/Signs.hpp"
 #include "world/entity/LeashKnot.hpp"
 #include "world/entity/Vehicles.hpp"
 #include "world/entity/EndCrystal.hpp"
@@ -304,6 +305,17 @@ void handlePlayState(Packet* packet, Server& server) {
 		// ServerboundChatCommand: the command alone, without the '/'
 		Commands::run(server, *player, packet->getData().readString(32767));
 		break;
+	case PacketId::Play::Serverbound::SIGN_UPDATE: {
+		// ServerboundSignUpdatePacket: position, front side, the 4 lines
+		Buffer& data = packet->getData();
+		int32_t x, y, z;
+		data.readPosition(x, y, z);
+		bool					   front = data.readBool();
+		std::array<std::string, 4> lines;
+		for (std::string& line : lines) line = data.readString(384);
+		Signs::handleUpdate(server.levelOf(*player), *player, {x, y, z}, front, lines);
+		break;
+	}
 	case PacketId::Play::Serverbound::CHAT_COMMAND_SIGNED: {
 		// ServerboundChatCommandSigned: the command, then its signature (ignored)
 		Commands::run(server, *player, packet->getData().readString(32767));
