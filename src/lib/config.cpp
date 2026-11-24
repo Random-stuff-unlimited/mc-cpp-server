@@ -38,6 +38,14 @@ bool Config::loadConfig() {
 		_tickRate			  = config["server"].value("tick-rate", _tickRate);
 		_autosaveInterval	  = std::max(10, config["world"].value("autosave-interval", _autosaveInterval));
 		_fillLimit			  = std::max(1, config["server"].value("fill-limit", _fillLimit));
+		_spawnLimits.clear();
+		if (config["world"].contains("spawn-limits")) {
+			for (const auto& [dimension, limits] : config["world"]["spawn-limits"].items()) {
+				for (const auto& [category, max] : limits.items()) {
+					if (max.is_number_integer()) _spawnLimits[dimension][category] = max.get<int>();
+				}
+			}
+		}
 	} catch (json::parse_error& e) {
 		g_logger->logGameInfo(ERROR, "Error parsing config.json: " + std::string(e.what()), "SERVER");
 		inputFile.close();
@@ -70,6 +78,14 @@ bool Config::reloadConfig() {
 		_compressionThreshold = config["server"].value("compression-threshold", _compressionThreshold);
 		_autosaveInterval	  = std::max(10, config["world"].value("autosave-interval", _autosaveInterval));
 		_fillLimit			  = std::max(1, config["server"].value("fill-limit", _fillLimit));
+		_spawnLimits.clear();
+		if (config["world"].contains("spawn-limits")) {
+			for (const auto& [dimension, limits] : config["world"]["spawn-limits"].items()) {
+				for (const auto& [category, max] : limits.items()) {
+					if (max.is_number_integer()) _spawnLimits[dimension][category] = max.get<int>();
+				}
+			}
+		}
 	} catch (json::parse_error& e) {
 		g_logger->logGameInfo(ERROR, "Error parsing config.json: " + std::string(e.what()), "SERVER");
 		inputFile.close();

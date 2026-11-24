@@ -18,7 +18,9 @@
 #include "world/World.hpp"
 #include "world/blockentity/BlockEntity.hpp"
 
+#include <array>
 #include <cstdint>
+#include <optional>
 #include <deque>
 #include <functional>
 #include <memory>
@@ -203,6 +205,13 @@ class Level : public NeighborUpdateTarget {
 	// The randomTickSpeed game rule
 	int	 randomTickSpeed() const { return _randomTickSpeed; }
 	void setRandomTickSpeed(int speed) { _randomTickSpeed = speed; }
+	// Natural spawning cap of a mob category (MobCategory.getMaxInstancesPerChunk, per 17x17 chunks around the players),
+	// set per dimension from config.json ("spawn-limits"); -1: the vanilla value. 0 stops that category from spawning
+	int	 spawnCap(GameData::MobCategory category) const;
+	void setSpawnCap(GameData::MobCategory category, int cap) { _spawnCaps[static_cast<int>(category)] = cap; }
+	// The category of a "spawn-limits" name ("monster", "creature", "ambient", "axolotls", "underground_water_creature",
+	// "water_creature", "water_ambient"), nullopt if unknown
+	static std::optional<GameData::MobCategory> mobCategoryNamed(const std::string& name);
 
 	// ----- Writing (Level.setBlock and friends) -----
 
@@ -416,6 +425,7 @@ class Level : public NeighborUpdateTarget {
 	int						_skyDarken = 0;
 	int						_randValue;		// getBlockRandomPos's LCG
 	int						_randomTickSpeed = 3;
+	std::array<int, 8>		_spawnCaps{-1, -1, -1, -1, -1, -1, -1, -1};
 	std::vector<uint8_t>	_randomTicks;	// Per state: RANDOM_BLOCK and RANDOM_FLUID
 	bool					_handlingTick = false;
 	std::vector<std::pair<BlockPos, int64_t>> _torchToggles;

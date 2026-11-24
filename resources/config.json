@@ -13,6 +13,11 @@
 		"name": "world",
 		"gamemode": "creative",
 		"difficulty": "normal",
-		"autosave-interval": 300
+		"autosave-interval": 300,
+		"spawn-limits": {
+			"default": { "monster": 70, "creature": 10, "ambient": 15, "axolotls": 5, "underground_water_creature": 5, "water_creature": 5, "water_ambient": 20 },
+			"minecraft:the_nether": { "monster": 70 },
+			"minecraft:the_end": { "monster": 70 }
+		}
 	}
 }

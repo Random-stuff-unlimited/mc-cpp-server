@@ -154,6 +154,80 @@ TEST(natural_spawning_monster_cap) {
 	CHECK(monsters <= 70 + 3);
 }
 
+namespace {
+	// A superflat (the default layers) of one biome
+	nlohmann::json flatOf(const char* biome, const char* top = "minecraft:grass_block") {
+		return {{"type", "flat"},
+				{"biome", biome},
+				{"layers",
+				 {{{"block", "minecraft:bedrock"}, {"height", 1}},
+				  {{"block", "minecraft:dirt"}, {"height", 2}},
+				  {{"block", top}, {"height", 1}}}}};
+	}
+
+	// The mobs alive in the level, by entity type name
+	std::map<std::string, int> mobsByType(LevelFixture& f) {
+		std::map<std::string, int> mobs;
+		f.level->entities().forEach([&](Entity& entity) {
+			auto* mob = dynamic_cast<Mob*>(&entity);
+			if (mob && !mob->isRemoved()) mobs[f.data.getStaticName("minecraft:entity_type", mob->typeId())]++;
+		});
+		return mobs;
+	}
+} // namespace
+
+// A dimension's spawn cap (config.json "spawn-limits"): 10 monsters at most, none at all once set to 0
+TEST(natural_spawning_configured_cap) {
+	LevelFixture f(4);
+	auto player = addPlayer(f, 0.5, 0.5);
+	player->setGameMode(GameMode::Creative);
+	f.world->setDayTime(18000);
+	f.level->setMobSpawning(true);
+	CHECK_EQ(f.level->spawnCap(GameData::MobCategory::Monster), 70);
+	CHECK(Level::mobCategoryNamed("water_ambient") == GameData::MobCategory::WaterAmbient);
+	CHECK(!Level::mobCategoryNamed("misc"));
+	f.level->setSpawnCap(GameData::MobCategory::Monster, 10);
+	f.tick(300);
+	int monsters = 0;
+	for (const auto& [type, count] : mobsByType(f)) {
+		if (f.data.getEntityType(f.data.getStaticId("minecraft:entity_type", type))->category == GameData::MobCategory::Monster) monsters += count;
+	}
+	CHECK(monsters >= 5);
+	CHECK(monsters <= 10 + 3);
+	LevelFixture g(4);
+	auto other = addPlayer(g, 0.5, 0.5);
+	other->setGameMode(GameMode::Creative);
+	g.world->setDayTime(18000);
+	g.level->setMobSpawning(true);
+	g.level->setSpawnCap(GameData::MobCategory::Monster, 0);
+	g.tick(100);
+	CHECK(mobsByType(g).empty());
+}
+
+// The biome picks the mobs: deserts mostly spawn husks, mushroom fields no monster at all (only mooshrooms)
+TEST(natural_spawning_by_biome) {
+	LevelFixture desert(4, "minecraft:overworld", flatOf("minecraft:desert"));
+	auto		 player = addPlayer(desert, 0.5, 0.5);
+	player->setGameMode(GameMode::Creative);
+	desert.world->setDayTime(18000);
+	desert.level->setMobSpawning(true);
+	desert.tick(200);
+	auto mobs = mobsByType(desert);
+	CHECK(mobs["minecraft:husk"] > 0);
+	CHECK(mobs["minecraft:husk"] > mobs["minecraft:zombie"]);
+	CHECK_EQ(mobs["minecraft:cow"], 0);
+
+	LevelFixture mushroom(4, "minecraft:overworld", flatOf("minecraft:mushroom_fields", "minecraft:mycelium"));
+	auto other = addPlayer(mushroom, 0.5, 0.5);
+	other->setGameMode(GameMode::Creative);
+	mushroom.world->setDayTime(18000);
+	mushroom.level->setMobSpawning(true);
+	mushroom.tick(401); // A creature round (every 400 ticks)
+	auto spawned = mobsByType(mushroom);
+	CHECK(spawned["minecraft:mooshroom"] > 0);
+	for (const auto& [type, count] : spawned) CHECK(type == "minecraft:mooshroom");
+}
+
 
 // A player that dies drops its whole inventory (hotbar, main, armor, offhand) around it: nothing stays in it
 TEST(player_death_drops_inventory) {

@@ -2,6 +2,7 @@
 #define CONFIG_HPP
 
 #include <filesystem>
+#include <map>
 #include <string>
 
 class Config {
@@ -24,6 +25,8 @@ class Config {
 	int			_autosaveInterval;
 	std::string _gamemode;
 	std::string _difficulty;
+	// "spawn-limits": per dimension (or "default"), the natural spawning cap of each mob category ("monster": 70...)
+	std::map<std::string, std::map<std::string, int>> _spawnLimits;
 
   public:
 	Config();
@@ -43,6 +46,8 @@ class Config {
 	float		getTickRate() const { return _tickRate; }
 	int			getAutosaveInterval() const { return _autosaveInterval; }
 	int			getFillLimit() const { return _fillLimit; }
+	const std::map<std::string, std::map<std::string, int>>& getSpawnLimits() const { return _spawnLimits; }
+	void setSpawnLimits(std::map<std::string, std::map<std::string, int>> limits) { _spawnLimits = std::move(limits); }
 
 	void setServerSize(int ServerSize);
 	void setServerPort(int ServerPort);

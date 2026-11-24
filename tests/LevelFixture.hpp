@@ -27,7 +27,8 @@ struct LevelFixture {
 	std::unique_ptr<Level>	level;
 	int						radius;
 
-	explicit LevelFixture(int chunkRadius = 2, const std::string& dimension = "minecraft:overworld") : radius(chunkRadius) {
+	explicit LevelFixture(int chunkRadius = 2, const std::string& dimension = "minecraft:overworld", const nlohmann::json& generator = {})
+		: radius(chunkRadius) {
 		data.load("resources/gamedata");
 		directory = std::filesystem::temp_directory_path() / ("mc-cpp-server-test-" + std::to_string(reinterpret_cast<uintptr_t>(this)));
 		std::filesystem::remove_all(directory);
@@ -35,6 +36,7 @@ struct LevelFixture {
 		settings.directory = directory;
 		settings.ioThreads = 2;
 		settings.dimension = dimension;
+		settings.generator = generator;
 		settings.seed	   = 12345; // Reproducible: the world's seed and the level's random are fixed
 		world			   = std::make_unique<World>(data, settings);
 

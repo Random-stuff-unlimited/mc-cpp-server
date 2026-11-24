@@ -514,6 +514,18 @@ void Server::loadDimension(const World::Settings& overworldSettings, const std::
 	auto world = std::make_unique<World>(_gameData, settings);
 	if (_world) world->setPrimary(_world);
 	auto level = std::make_unique<Level>(*this, *world, _gameData);
+	// config.json "spawn-limits": the defaults, then the dimension's own
+	for (const char* key : {"default", dimension.c_str()}) {
+		auto limits = _config.getSpawnLimits().find(key);
+		if (limits == _config.getSpawnLimits().end()) continue;
+		for (const auto& [name, cap] : limits->second) {
+			if (auto category = Level::mobCategoryNamed(name)) {
+				level->setSpawnCap(*category, cap);
+			} else {
+				g_logger->logGameInfo(WARN, "config.json: unknown mob category in spawn-limits: " + name, "SERVER");
+			}
+		}
+	}
 	// Chunks finish loading on I/O threads: their scheduled ticks start counting on the game thread
 	Level* levelPtr = level.get();
 	world->setChunkLoadListener([this, levelPtr](const std::shared_ptr<Chunk>& chunk) { _tickLoop.post([levelPtr, chunk] { levelPtr->onChunkLoaded(chunk); }); });

@@ -1191,3 +1191,23 @@ void Level::tickPhantomSpawner() {
 		}
 	}
 }
+
+int Level::spawnCap(GameData::MobCategory category) const {
+	// MobCategory: max instances per chunk (misc mobs never spawn naturally)
+	static constexpr std::array<int, 8> VANILLA = {70, 10, 15, 5, 5, 5, 20, -1};
+	int									i		= static_cast<int>(category);
+	return _spawnCaps[i] >= 0 ? _spawnCaps[i] : VANILLA[i];
+}
+
+std::optional<GameData::MobCategory> Level::mobCategoryNamed(const std::string& name) {
+	using C = GameData::MobCategory;
+	static const std::unordered_map<std::string, C> NAMES = {
+		{"monster", C::Monster},		 {"creature", C::Creature},
+		{"ambient", C::Ambient},		 {"axolotls", C::Axolotls},
+		{"underground_water_creature", C::UndergroundWaterCreature},
+		{"water_creature", C::WaterCreature}, {"water_ambient", C::WaterAmbient},
+	};
+	auto it = NAMES.find(name);
+	if (it == NAMES.end()) return std::nullopt;
+	return it->second;
+}

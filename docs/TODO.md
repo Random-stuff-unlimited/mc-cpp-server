@@ -80,7 +80,9 @@ Les 85 types de mobs vanilla ont leur classe et leur IA (`src/world/entity/mobs`
 - [ ] Montures étendues : caravanes de lamas, perroquets sur l'épaule, plusieurs passagers (happy ghast, chameau)
 - [ ] Comportements : creeper chargé (foudre), danse des piglins/allays (jukebox), duplication d'allay, piglins chasseurs
       de hoglins et colère aux coffres ouverts, cornes de chèvre, sauts longs (chèvre, grenouille), dash du chameau
-- [ ] Réglages de spawn : caps par dimension, spawn par biome (tableaux), `SpawnPlacements` étendus, groupes
+- [x] Réglages de spawn : spawn par biome (tableaux de `worldgen/biome`, coûts de spawn), caps globaux et par joueur,
+      caps configurables par dimension (`config.json` → `world.spawn-limits`)
+- [ ] Spawns liés aux structures (forteresse, cabane de sorcière, monument, avant-poste) : pas de structures générées
 - [ ] Sons par type (ambient/hurt/death/step) complets
 
 ## Villageois & commerce
@@ -143,7 +145,7 @@ Les 85 types de mobs vanilla ont leur classe et leur IA (`src/world/entity/mobs`
 ## Monde (hors générateur)
 
 - [x] Enregistrement du temps/weather dans `level.json` (persistance de la météo et de l'heure)
-- [ ] Spawn conditionnel des mobs par biome (tableaux par type), caps par dimension
+- [x] Spawn conditionnel des mobs par biome (tableaux par type), caps par dimension
 - [ ] Portails End : activation, plateforme, retour — à vérifier/compléter
 - [ ] Climat : neige (blocage de la pluie), températures par biome appliquées
 - [ ] Structuration `AnvilImporter` : biomes nether/end, block entities, entités importées

@@ -24,7 +24,8 @@ namespace NaturalSpawner {
 		constexpr int CATEGORY_COUNT = 8;
 		constexpr int MAGIC_NUMBER	 = 17 * 17;
 
-		// MobCategory: max instances per chunk, friendly, persistent, despawn distance
+		// MobCategory: max instances per chunk (vanilla's, the level's spawnCap may change it), friendly, persistent,
+		// despawn distance
 		struct CategoryInfo {
 			int	 max;
 			bool friendly, persistent;
@@ -92,9 +93,10 @@ namespace NaturalSpawner {
 				}
 			}
 			bool canSpawn(int category, int chunkX, int chunkZ) {
+				int max = level.spawnCap(static_cast<Category>(category));
 				for (const Player* player : getPlayersNear(chunkX, chunkZ)) {
 					auto it = counts.find(player);
-					if (it == counts.end() || it->second[category] < CATEGORIES[category].max) return true;
+					if (it == counts.end() || it->second[category] < max) return true;
 				}
 				return false;
 			}
@@ -111,7 +113,7 @@ namespace NaturalSpawner {
 			double								 lastCharge		 = 0.0;
 
 			bool canSpawnForCategoryGlobal(int category) const {
-				int cap = CATEGORIES[category].max * spawnableChunkCount / MAGIC_NUMBER;
+				int cap = localMobCaps.level.spawnCap(static_cast<Category>(category)) * spawnableChunkCount / MAGIC_NUMBER;
 				return mobCategoryCounts[category] < cap;
 			}
 		};
