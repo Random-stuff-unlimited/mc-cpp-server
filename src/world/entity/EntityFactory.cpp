@@ -1,3 +1,4 @@
+#include "world/entity/AreaEffectCloud.hpp"
 #include "world/entity/LeashKnot.hpp"
 #include "world/entity/Vehicles.hpp"
 #include "world/entity/EndCrystal.hpp"
@@ -22,6 +23,7 @@ namespace EntityFactory {
 		if (name == "minecraft:trident") return std::make_unique<ThrownTrident>(level);
 		if (name == "minecraft:end_crystal") return std::make_unique<EndCrystal>(level);
 		if (name == "minecraft:leash_knot") return std::make_unique<LeashKnot>(level);
+		if (name == "minecraft:area_effect_cloud") return std::make_unique<AreaEffectCloud>(level);
 		if (const GameData::EntityTypeInfo* info = level.gameData().getEntityType(typeId); info && info->is("AbstractBoat")) {
 			return std::make_unique<Boat>(level, typeId);
 		}

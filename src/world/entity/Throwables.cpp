@@ -1,3 +1,4 @@
+#include "world/entity/AreaEffectCloud.hpp"
 #include "world/entity/Throwables.hpp"
 
 #include "PacketIds.hpp"
@@ -152,6 +153,16 @@ void ThrownExperienceBottle::onHit(const Hit& hit) {
 ThrownSplashPotion::ThrownSplashPotion(Level& level, Actor* thrower, ItemStack item)
 	: ThrowableProjectile(level, "minecraft:splash_potion", thrower, orDefault(level, std::move(item), "minecraft:splash_potion")) {}
 
+ThrownSplashPotion::ThrownSplashPotion(Level& level, const char* type, Actor* thrower, ItemStack item)
+	: ThrowableProjectile(level, type, thrower, std::move(item)) {}
+
+std::unique_ptr<ThrownSplashPotion> ThrownSplashPotion::lingering(Level& level, Actor* thrower, ItemStack item) {
+	std::unique_ptr<ThrownSplashPotion> thrown(
+			new ThrownSplashPotion(level, "minecraft:lingering_potion", thrower, orDefault(level, std::move(item), "minecraft:lingering_potion")));
+	thrown->_lingering = true;
+	return thrown;
+}
+
 void ThrownSplashPotion::dowseFire(const BlockPos& pos) {
 	int block = _level.blocks().blockOf(_level.getBlockState(pos));
 	if (_level.gameData().isInTag("minecraft:block", "minecraft:fire", block)) _level.destroyBlock(pos, false);
@@ -174,6 +185,10 @@ void ThrownSplashPotion::onHit(const Hit& hit) {
 	std::vector<MobEffects::Instance> effects = MobEffects::potionEffects(name);
 	if (water) {
 		onHitAsWater();
+	} else if (!effects.empty() && _lingering) {
+		// ThrownLingeringPotion.onHitAsPotion: the potion stays where it broke
+		Actor* by = owner();
+		_level.entities().add(AreaEffectCloud::lingering(_level, hit.location, name, by && (by->asLiving() || by->asPlayer()) ? by : nullptr));
 	} else if (!effects.empty()) {
 		onHitAsPotion(name, 1.0F, hit.location);
 	}

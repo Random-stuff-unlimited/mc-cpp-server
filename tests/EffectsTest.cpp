@@ -4,6 +4,9 @@
 #include "world/Combat.hpp"
 #include "world/entity/Mob.hpp"
 #include "world/entity/MobEffects.hpp"
+#include "world/entity/AreaEffectCloud.hpp"
+#include "world/item/ItemUse.hpp"
+#include "player.hpp"
 
 #include <cmath>
 
@@ -139,4 +142,52 @@ TEST(effects_saved) {
 	CHECK(slowness && slowness->hidden && slowness->hidden->amplifier == 2 && slowness->hidden->duration == 400 && !slowness->hidden->visible);
 	// The modifier came with the attributes
 	CHECK(other->getAttributeValue(other->attributeIds().movementSpeed) < cow->getAttributeValue(cow->attributeIds().movementSpeed) + 1e-9);
+}
+
+// A lingering potion's cloud: waits half a second, then gives its effects (a quarter of their duration) to the mobs in
+// it, at most once a second each, shrinking each time; gone after 30 seconds at most
+TEST(lingering_potion_cloud) {
+	LevelFixture f(1);
+	Mob* cow = spawn(f, "minecraft:cow");
+	CHECK(cow);
+	if (!cow) return;
+	auto  made	= AreaEffectCloud::lingering(*f.level, {0.5, static_cast<double>(Y), 0.5}, "minecraft:poison", nullptr);
+	auto* cloud = made.get();
+	f.level->entities().add(std::move(made));
+	f.tick(5);
+	CHECK(cloud->isWaiting());
+	CHECK(!cow->hasEffect(MobEffects::Poison));
+	f.tick(15);
+	CHECK(!cloud->isWaiting());
+	CHECK(cow->hasEffect(MobEffects::Poison));
+	CHECK(cow->effects().get(MobEffects::Poison)->duration <= 900 / 4); // Poison: 45 s, a quarter
+	CHECK(cloud->radius() < 3.0F - 0.5F + 0.01F);  // Shrunk by its use
+	float after = cloud->radius();
+	f.tick(20);
+	CHECK(cloud->radius() < after); // Shrinking over time, and again when the cow is touched again
+	f.tick(700);
+	CHECK(cloud->isRemoved());
+}
+
+// The dragon's breath: a growing cloud of instant damage; a glass bottle collects dragon's breath from it
+TEST(dragon_breath_cloud_and_bottle) {
+	LevelFixture f(1);
+	auto  made	= AreaEffectCloud::dragonBreath(*f.level, {0.5, static_cast<double>(Y), 0.5}, nullptr);
+	auto* cloud = made.get();
+	f.level->entities().add(std::move(made));
+	CHECK(cloud->isDragonBreath());
+	auto player = std::make_shared<Player>("Collector", PlayerState::Play, -1, f.server);
+	player->setPosition(1.5, Y, 0.5);
+	player->setGameMode(GameMode::Survival);
+	f.addPlayer(player);
+	player->setSelectedSlot(0);
+	player->inventory().set(player->handSlot(0), ItemStack(f.item("minecraft:glass_bottle"), 2));
+	float before = cloud->radius();
+	ItemUse::useItem(*f.level, *player, 0);
+	CHECK(cloud->radius() < before);
+	bool breath = false;
+	for (int slot = 0; slot < PlayerInventory::SIZE; slot++) breath |= player->inventory().get(slot).item == f.item("minecraft:dragon_breath");
+	CHECK(breath);
+	f.tick(25);
+	CHECK(cloud->radius() > before - 0.5F); // Growing (toward 7 blocks)
 }

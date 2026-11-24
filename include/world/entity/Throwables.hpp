@@ -1,6 +1,7 @@
 #ifndef THROWABLES_HPP
 #define THROWABLES_HPP
 
+#include <memory>
 #include "world/entity/Projectile.hpp"
 #include "world/item/ItemStack.hpp"
 
@@ -72,12 +73,17 @@ class ThrownExperienceBottle : public ThrowableProjectile {
 class ThrownSplashPotion : public ThrowableProjectile {
   public:
 	ThrownSplashPotion(Level& level, Actor* thrower, ItemStack item);
+	// ThrownLingeringPotion: the same entity kind, but its potion stays as a cloud (AreaEffectCloud) where it broke
+	static std::unique_ptr<ThrownSplashPotion> lingering(Level& level, Actor* thrower, ItemStack item);
+	bool isLingering() const { return _lingering; }
 
   protected:
 	double gravity() const override { return 0.05; }
 	void   onHit(const Hit& hit) override;
 
   private:
+	bool _lingering = false;
+	ThrownSplashPotion(Level& level, const char* type, Actor* thrower, ItemStack item);
 	void onHitAsWater();
 	void onHitAsPotion(const std::string& potion, float durationScale, const Vec3& location);
 	void dowseFire(const BlockPos& pos);

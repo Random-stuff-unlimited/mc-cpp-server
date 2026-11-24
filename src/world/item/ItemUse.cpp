@@ -1,3 +1,4 @@
+#include "world/entity/AreaEffectCloud.hpp"
 #include "world/item/Books.hpp"
 #include "world/entity/Vehicles.hpp"
 #include "world/item/ItemUse.hpp"
@@ -330,6 +331,18 @@ namespace {
 	// BottleItem.use: filled with water from a water source (dragon's breath needs area effect clouds)
 	Outcome useBottle(Level& level, Player& player, const ItemStack& stack) {
 		const GameData&	   gd	 = level.gameData();
+		// BottleItem.use: dragon's breath from a cloud around the player first
+		const AABB around = player.boundingBox().inflate(2.0, 2.0, 2.0);
+		AreaEffectCloud* breath = nullptr;
+		level.entities().forEachIn(around, [&](Entity& entity) {
+			auto* cloud = dynamic_cast<AreaEffectCloud*>(&entity);
+			if (!breath && cloud && !cloud->isRemoved() && cloud->isDragonBreath()) breath = cloud;
+		});
+		if (breath) {
+			breath->setRadius(breath->radius() - 0.5F);
+			level.playSoundAt(nullptr, player.getX(), player.getY(), player.getZ(), "minecraft:item.bottle.fill_dragonbreath", Level::SoundSource::Neutral);
+			return {Result::Success, createFilledResult(level, player, stack, ItemStack(gd.getStaticId("minecraft:item", "minecraft:dragon_breath"), 1))};
+		}
 		ItemUse::HitResult hit	 = ItemUse::playerPOVHitResult(level, player, true);
 		if (!hit.hit || !level.fluids().isWater(level.getFluidState(hit.pos).type)) return {Result::Pass, {}};
 		level.playSoundAt(&player, player.getX(), player.getY(), player.getZ(), "minecraft:item.bottle.fill", Level::SoundSource::Neutral);
@@ -361,6 +374,7 @@ namespace {
 				{"minecraft:egg", "minecraft:entity.egg.throw", true, 0.0F, 1.5F},
 				{"minecraft:experience_bottle", "minecraft:entity.experience_bottle.throw", false, -20.0F, 0.7F},
 				{"minecraft:splash_potion", "minecraft:entity.splash_potion.throw", true, -20.0F, 0.5F},
+				{"minecraft:lingering_potion", "minecraft:entity.lingering_potion.throw", true, -20.0F, 0.5F},
 		};
 		for (const Throwable& t : throwables) {
 			if (name != t.item) continue;
@@ -373,6 +387,8 @@ namespace {
 				thrown = std::make_unique<ThrownEgg>(level, &player, stack);
 			} else if (name == "minecraft:experience_bottle") {
 				thrown = std::make_unique<ThrownExperienceBottle>(level, &player, stack);
+			} else if (name == "minecraft:lingering_potion") {
+				thrown = ThrownSplashPotion::lingering(level, &player, stack);
 			} else {
 				thrown = std::make_unique<ThrownSplashPotion>(level, &player, stack);
 			}

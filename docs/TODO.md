@@ -46,7 +46,7 @@ les commandes d'admin ci-dessous. Sans être op, seules `help`, `list`, `spawn`,
 - [x] Moteur d'effets de statut (vitesse, force, régénération, poison…), durée et niveaux
 - [x] Envoyer les effets au client : `UPDATE_MOB_EFFECT`, `REMOVE_MOB_EFFECT`, `ENTITY_EVENT` (guérison)
 - [x] Application à l'entité : `LivingEntity.addEffect`, tick des effets, dégâts périodiques (poison, warding…)
-- [ ] Effets des potions bues (`ItemUse` → effet), potions jetables, flèches à effets
+- [x] Effets des potions bues (`ItemUse` → effet), potions jetables et persistantes (nuage d'effet), flèches à effets
 - [ ] Défenses/mitigations liées aux effets (résistance, absorption, résistance au feu)
 - [ ] Beacon : `SET_BEACON`, effets du beacon, coût en items
 
@@ -104,7 +104,7 @@ Les 85 types de mobs vanilla ont leur classe et leur IA (`src/world/entity/mobs`
 - [x] Wither : invocation (3 têtes de wither + sable des âmes), `BOSS_EVENT`, attaques, drop du Nether Star (loot table)
 - [x] Ender Dragon : vol, charge, boules de feu, atterrissage, `BOSS_EVENT`, mort
 - [x] Ender Dragon : cristaux de l'End, combat de l'End, portail de sortie, œuf
-- [ ] Souffle persistant du dragon (nuage d'effet de zone), fioles de souffle
+- [x] Souffle persistant du dragon (nuage d'effet de zone), fioles de souffle
 
 ## Véhicules & montures
 

@@ -1,3 +1,4 @@
+#include "world/entity/AreaEffectCloud.hpp"
 #include "world/entity/mobs/Bosses.hpp"
 
 #include "PacketIds.hpp"
@@ -377,12 +378,17 @@ DragonFireball::DragonFireball(Level& level, LivingEntity* shooter, const Vec3& 
 void DragonFireball::onHit(const Hit& hit) {
 	Actor* by = owner();
 	if (hit.actor && hit.actor == by) return;
-	// The dragon's breath: here, its first touch
-	for (Actor* actor : _level.actorsIn(AABB{_position.x - 3, _position.y - 1, _position.z - 3, _position.x + 3, _position.y + 3, _position.z + 3}, this)) {
+	// The dragon's breath: a cloud of instant damage, on the first living thing within 4 blocks if there is one
+	Vec3 at = _position;
+	for (Actor* actor : _level.actorsIn(boundingBox().inflate(4.0, 2.0, 4.0), this)) {
 		if (actor == by || !actor->isAlive() || (!actor->asLiving() && !actor->asPlayer())) continue;
-		hurtActor(_level, *actor, {"minecraft:indirect_magic", by, this, std::nullopt}, 6.0F);
+		if (distanceToSqr(actor->position()) < 16.0) {
+			at = actor->position();
+			break;
+		}
 	}
 	_level.levelEvent(nullptr, 2006, BlockPos{Mth::floor(_position.x), Mth::floor(_position.y), Mth::floor(_position.z)}, 1); // Dragon breath particles
+	_level.entities().add(AreaEffectCloud::dragonBreath(_level, at, by));
 	discard();
 }
 
