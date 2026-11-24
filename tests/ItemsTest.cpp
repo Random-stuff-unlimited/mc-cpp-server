@@ -1,6 +1,8 @@
 #include "LevelFixture.hpp"
 #include "Test.hpp"
 #include "player.hpp"
+#include "world/item/Books.hpp"
+#include "world/item/Components.hpp"
 
 #include <cmath>
 
@@ -150,4 +152,34 @@ TEST(items_creative_tools_that_dont_break) {
 	for (const char* name : {"minecraft:diamond_pickaxe", "minecraft:stick", "minecraft:stone"}) {
 		CHECK(f.data.getItemProperties(f.item(name))->canDestroyBlocksInCreative);
 	}
+}
+
+// Book and quill: its pages are kept as typed; signed, it becomes a written book by the player (pages kept, title
+// limited); other items or slots are ignored
+TEST(book_edit_and_sign) {
+	LevelFixture f(1);
+	auto player = std::make_shared<Player>("Writer", PlayerState::Play, -1, f.server);
+	f.addPlayer(player);
+	int slot = PlayerInventory::HOTBAR + 2;
+	player->inventory().set(slot, ItemStack(f.item("minecraft:writable_book"), 1));
+	Books::handleEdit(*f.level, *player, 2, {"Once upon a time", "the end"}, std::nullopt);
+	auto content = Components::get(player->inventory().get(slot), f.data, "minecraft:writable_book_content");
+	CHECK(content.has_value());
+	auto pages = content ? Books::writablePages(*content) : std::vector<std::string>{};
+	CHECK(pages.size() == 2 && pages[0] == "Once upon a time" && pages[1] == "the end");
+	Books::handleEdit(*f.level, *player, 2, {"x"}, std::string("   ")); // A blank title: not signed
+	CHECK(player->inventory().get(slot).item == f.item("minecraft:writable_book"));
+	Books::handleEdit(*f.level, *player, 2, {"Once upon a time", "the end"}, std::string("My Story"));
+	const ItemStack& written = player->inventory().get(slot);
+	CHECK(written.item == f.item("minecraft:written_book"));
+	auto signedContent = Components::get(written, f.data, "minecraft:written_book_content");
+	CHECK(signedContent && Components::bookPageCount(*signedContent, true) == 2);
+	player->setSelectedSlot(2);
+	CHECK(Books::openWritten(*f.level, *player, 0));
+	Books::handleEdit(*f.level, *player, 2, {"rewritten"}, std::nullopt); // Not a book and quill anymore
+	CHECK(player->inventory().get(slot).item == f.item("minecraft:written_book"));
+	player->inventory().set(PlayerInventory::HOTBAR, ItemStack(f.item("minecraft:writable_book"), 1));
+	Books::handleEdit(*f.level, *player, 12, {"main inventory"}, std::nullopt); // Not the hotbar: ignored
+	CHECK(!Components::get(player->inventory().get(PlayerInventory::HOTBAR), f.data, "minecraft:writable_book_content") ||
+		  Books::writablePages(*Components::get(player->inventory().get(PlayerInventory::HOTBAR), f.data, "minecraft:writable_book_content")).empty());
 }

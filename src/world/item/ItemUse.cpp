@@ -1,3 +1,4 @@
+#include "world/item/Books.hpp"
 #include "world/entity/Vehicles.hpp"
 #include "world/item/ItemUse.hpp"
 
@@ -386,6 +387,8 @@ namespace {
 			ItemUse::startUsingItem(player, hand, gd);
 			return {Result::Consume, {}};
 		}
+		// WrittenBookItem.use: the client opens it
+		if (Books::openWritten(level, player, hand)) return {Result::Success, stack};
 		// BoatItem.use: a boat (or raft) where the player looks
 		if (gd.isInTag("minecraft:item", "minecraft:boats", stack.item) || gd.isInTag("minecraft:item", "minecraft:chest_boats", stack.item)) {
 			ItemStack result = stack;

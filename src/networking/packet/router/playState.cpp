@@ -1,3 +1,4 @@
+#include "world/item/Books.hpp"
 #include "world/blocks/Signs.hpp"
 #include "world/entity/LeashKnot.hpp"
 #include "world/entity/Vehicles.hpp"
@@ -305,6 +306,19 @@ void handlePlayState(Packet* packet, Server& server) {
 		// ServerboundChatCommand: the command alone, without the '/'
 		Commands::run(server, *player, packet->getData().readString(32767));
 		break;
+	case PacketId::Play::Serverbound::EDIT_BOOK: {
+		// ServerboundEditBookPacket: slot, pages, optional title (signing)
+		Buffer& data  = packet->getData();
+		int		slot  = data.readVarInt();
+		int		count = data.readVarInt();
+		if (count < 0 || count > Books::MAX_PAGES) break;
+		std::vector<std::string> pages;
+		for (int i = 0; i < count; i++) pages.push_back(data.readString(Books::PAGE_LENGTH));
+		std::optional<std::string> title;
+		if (data.readBool()) title = data.readString(Books::TITLE_LENGTH);
+		Books::handleEdit(server.levelOf(*player), *player, slot, pages, title);
+		break;
+	}
 	case PacketId::Play::Serverbound::SIGN_UPDATE: {
 		// ServerboundSignUpdatePacket: position, front side, the 4 lines
 		Buffer& data = packet->getData();
