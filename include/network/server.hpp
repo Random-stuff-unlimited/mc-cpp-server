@@ -39,6 +39,7 @@ class Server {
 	std::mutex						 _tempPlayerLock;
 	Config							 _config;
 	ServerAccess					 _access;
+	std::shared_ptr<Player>			 _console;
 	GameData						 _gameData;
 	DeathMessages					 _deathMessages;
 	NetworkManager*					 _networkManager;
@@ -77,6 +78,12 @@ class Server {
 	void kickWithText(Player* player, const std::string& text);
 	// Ops, bans and the whitelist (ops.json, banned-players.json, banned-ips.json, whitelist.json)
 	ServerAccess& access() { return _access; }
+	// The console's command source: a player named "Server", level 4, never in the game (Commands log its messages)
+	Player& console();
+	// /stop: the tick loop ends, then everything is saved (like Ctrl+C)
+	void requestStop();
+	// /save-all: the players and entities now, the chunks at the next world maintenance (within a second)
+	void saveAll();
 	// PlayerList.sendPlayerPermissionLevel: the player's level read from the ops, sent to its client (an entity event:
 	// F3+F4 and the debug keys) with the commands it may now run
 	void refreshPermissions(Player& player);

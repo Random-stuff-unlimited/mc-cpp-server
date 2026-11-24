@@ -7,6 +7,7 @@
 #include "network/packet.hpp"
 #include "network/packetRouter.hpp"
 #include "network/server.hpp"
+#include "logger.hpp"
 #include "player.hpp"
 #include "world/ChunkStreamer.hpp"
 
@@ -67,7 +68,7 @@ namespace Commands {
 	std::vector<Player*> playerTargets(Server& server, Player& self, const std::string& selector) {
 		std::vector<Player*> found;
 		if (selector == "@s" || selector == "@p") {
-			found.push_back(&self);
+			if (!self.isConsole()) found.push_back(&self);
 		} else if (selector == "@a") {
 			for (const auto& player : server.getGamePlayers()) {
 				if (!player->isDisconnected()) found.push_back(player.get());
@@ -105,9 +106,26 @@ namespace Commands {
 		registerAdmin();
 		registerChat();
 		registerHelp();
+		registerServer();
 		// The commands everyone may run (the others need an op level of 2, the admin ones set theirs)
 		for (Command& command : commandList()) {
 			if (command.name == "help" || command.name == "list" || command.name == "spawn") command.permission = LEVEL_ALL;
+		}
+		// What the console may run: the commands that don't need a player, and those naming their target
+		static const std::vector<std::pair<std::string, int>> CONSOLE = {
+			{"help", CONSOLE_ALWAYS},	 {"list", CONSOLE_ALWAYS},		 {"op", CONSOLE_ALWAYS},	   {"deop", CONSOLE_ALWAYS},
+			{"kick", CONSOLE_ALWAYS},	 {"ban", CONSOLE_ALWAYS},		 {"ban-ip", CONSOLE_ALWAYS},   {"pardon", CONSOLE_ALWAYS},
+			{"pardon-ip", CONSOLE_ALWAYS}, {"banlist", CONSOLE_ALWAYS},	 {"whitelist", CONSOLE_ALWAYS}, {"say", CONSOLE_ALWAYS},
+			{"tell", CONSOLE_ALWAYS},	 {"msg", CONSOLE_ALWAYS},		 {"w", CONSOLE_ALWAYS},		   {"me", CONSOLE_ALWAYS},
+			{"time", CONSOLE_ALWAYS},	 {"weather", CONSOLE_ALWAYS},	 {"difficulty", CONSOLE_ALWAYS}, {"stop", CONSOLE_ALWAYS},
+			{"save-all", CONSOLE_ALWAYS}, {"xp", CONSOLE_ALWAYS},		 {"experience", CONSOLE_ALWAYS}, {"enchant", CONSOLE_ALWAYS},
+			{"give", 0},				 {"clear", 0},					 {"kill", 0},				   {"effect", 1},
+			{"gamemode", 1},			 {"gm", 1},
+		};
+		for (Command& command : commandList()) {
+			for (const auto& [name, console] : CONSOLE) {
+				if (command.name == name) command.console = console;
+			}
 		}
 	}
 
@@ -122,10 +140,15 @@ namespace Commands {
 			if (command.name != name) continue;
 			// Without the level, the command doesn't exist for the player (it isn't in its command tree either)
 			if (!canUse(player, command)) break;
+			if (player.isConsole() && command.console != CONSOLE_ALWAYS) {
+				const std::string* target = command.console >= 0 && static_cast<size_t>(command.console) < args.size() ? &args[command.console] : nullptr;
+				if (!target || *target == "@s" || *target == "@p") return failure(server, player, "permissions.requires.player");
+			}
 			command.run(server, player, args);
 			return;
 		}
 		// Unknown or incomplete command
+		if (player.isConsole()) return g_logger->logGameInfo(WARN, "Unknown command: " + name + " (\"help\" lists them)", "Console");
 		Buffer error;
 		TextComponent::writeTranslatable(error, "commands.unknown.command", {});
 		error.writeBool(false);
@@ -133,6 +156,7 @@ namespace Commands {
 	}
 
 	void message(Server& server, Player& player, const std::string& text) {
+		if (player.isConsole()) return g_logger->logGameInfo(INFO, text, "Console");
 		Buffer message;
 		TextComponent::writeText(message, text);
 		message.writeBool(false); // In the chat, not above the hotbar
@@ -140,6 +164,7 @@ namespace Commands {
 	}
 
 	void broadcastChat(Server& server, Player& player, const std::string& text) {
+		g_logger->logGameInfo(INFO, englishText("chat.type.text", {player.getPlayerName(), text}), "Chat");
 		Buffer message;
 		TextComponent::writeTranslatable(message, "chat.type.text", {player.getPlayerName(), text});
 		message.writeBool(false);
@@ -149,6 +174,7 @@ namespace Commands {
 	}
 
 	void translated(Server& server, Player& player, const std::string& key, const std::vector<std::string>& args) {
+		if (player.isConsole()) return g_logger->logGameInfo(INFO, englishText(key, args), "Console");
 		Buffer message;
 		TextComponent::writeTranslatable(message, key, args);
 		message.writeBool(false);
@@ -156,6 +182,7 @@ namespace Commands {
 	}
 
 	void failure(Server& server, Player& player, const std::string& key, const std::vector<std::string>& args) {
+		if (player.isConsole()) return g_logger->logGameInfo(WARN, englishText(key, args), "Console");
 		Buffer message;
 		TextComponent::writeTranslatable(message, key, args, "red");
 		message.writeBool(false);
@@ -163,6 +190,7 @@ namespace Commands {
 	}
 
 	void broadcastTranslated(Server& server, const std::string& key, const std::vector<std::string>& args) {
+		g_logger->logGameInfo(INFO, englishText(key, args), "Chat"); // MinecraftServer logs what it broadcasts
 		Buffer message;
 		TextComponent::writeTranslatable(message, key, args);
 		message.writeBool(false);

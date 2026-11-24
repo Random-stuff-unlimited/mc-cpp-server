@@ -64,6 +64,7 @@ Server::~Server() {
 	_level = nullptr;
 	// Player destructors use _idManager, which is destroyed before the player maps
 	clearPlayers();
+	_console.reset();
 	delete _networkManager;
 }
 
@@ -107,6 +108,27 @@ void Server::disconnect(Player* player, const std::string& loginJson, const std:
 	}
 	g_logger->logNetwork(INFO, player->getPlayerName() + " kicked: " + logged, "SERVER");
 	if (_networkManager) _networkManager->requestDisconnect(player); // After the message is sent
+}
+
+Player& Server::console() {
+	if (!_console) {
+		_console = std::make_shared<Player>("Server", PlayerState::Play, -1, *this);
+		_console->setConsole(true);
+		_console->setPermissionLevel(4);
+	}
+	return *_console;
+}
+
+void Server::requestStop() { g_stopRequested = 1; }
+
+void Server::saveAll() {
+	savePlayers();
+	for (const auto& level : _levels) {
+		level->saveEntities();
+		level->savePoi();
+	}
+	for (const auto& world : _worlds) world->requestAutosave();
+	_lastWorldMaintenance = {};
 }
 
 void Server::refreshPermissions(Player& player) {
@@ -611,13 +633,26 @@ int Server::start_server() {
 		_networkManager		  = new NetworkManager(networkThreads, *this);
 		_networkManager->startThreads();
 
+		// The console: each line of the standard input is a command, run on the game thread as the "Server" source.
+		// Detached: it stays blocked on the input until the process ends
+		console();
+		std::thread([this] {
+			std::string line;
+			while (std::getline(std::cin, line)) {
+				while (!line.empty() && (line.back() == '\r' || line.back() == ' ')) line.pop_back();
+				size_t start = line.find_first_not_of(" /");
+				if (start == std::string::npos) continue;
+				_tickLoop.post([this, command = line.substr(start)] { Commands::run(*this, *_console, command); });
+			}
+		}).detach();
+
 		struct sigaction sa = {};
 		sa.sa_handler		= handleStopSignal;
 		sigemptyset(&sa.sa_mask);
 		sigaction(SIGINT, &sa, nullptr);
 		sigaction(SIGTERM, &sa, nullptr);
 
-		g_logger->logGameInfo(INFO, "Server started (" + std::to_string(static_cast<int>(_tickLoop.getTickRate())) + " TPS), press Ctrl+C to stop",
+		g_logger->logGameInfo(INFO, "Server started (" + std::to_string(static_cast<int>(_tickLoop.getTickRate())) + " TPS), type commands here (\"help\"), \"stop\" or Ctrl+C to stop",
 							  "SERVER");
 		_lastWorldMaintenance = std::chrono::steady_clock::now();
 		// This thread becomes the game thread

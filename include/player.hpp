@@ -184,6 +184,7 @@ class Player : public Actor, public std::enable_shared_from_this<Player>, public
 	UUID		  _uuid;
 	std::string	  _address;
 	int			  _permissionLevel = 0;
+	bool		  _console		   = false;
 	int			  _playerId;
 	Server&		  _server;
 	PlayerConfig* _config;
@@ -468,6 +469,9 @@ class Player : public Actor, public std::enable_shared_from_this<Player>, public
 	int	 permissionLevel() const { return _permissionLevel; }
 	void setPermissionLevel(int level) { _permissionLevel = level; }
 	bool hasPermissions(int level) const { return _permissionLevel >= level; }
+	// The server console's command source (not in the game: its messages go to the log)
+	bool isConsole() const { return _console; }
+	void setConsole(bool console) { _console = console; }
 };
 
 #endif

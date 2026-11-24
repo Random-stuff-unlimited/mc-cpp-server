@@ -49,6 +49,8 @@ namespace Commands {
 	void registerAdmin();
 	// say, tell (msg, w), me
 	void registerChat();
+	// stop, save-all (level 4)
+	void registerServer();
 } // namespace Commands
 
 #endif

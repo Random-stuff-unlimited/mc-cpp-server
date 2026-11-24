@@ -16,6 +16,7 @@ class Server;
 // command's name ("tp 100 64 100" runs "tp" with {"100", "64", "100"}).
 namespace Commands {
 	// Commands.LEVEL_*: the op levels
+	constexpr int CONSOLE_NEVER = -2, CONSOLE_ALWAYS = -1;
 	constexpr int LEVEL_ALL = 0, LEVEL_MODERATORS = 1, LEVEL_GAMEMASTERS = 2, LEVEL_ADMINS = 3, LEVEL_OWNERS = 4;
 
 	struct Command {
@@ -23,6 +24,9 @@ namespace Commands {
 		std::string usage;																	  // "tp [<player>] <x> <y> <z>"
 		std::function<void(Server&, Player&, const std::vector<std::string>&)> run;			  // Empty: known but disabled
 		int			permission = LEVEL_GAMEMASTERS; // The op level it needs (Player::permissionLevel)
+		// From the server console: CONSOLE_NEVER (it needs a player: a position, itself as target), CONSOLE_ALWAYS, or
+		// the index of the argument naming its target player (refused without it, or with @s / @p)
+		int			console = CONSOLE_NEVER;
 	};
 
 	// Registers every built-in command (called once, when the server starts)
@@ -45,6 +49,9 @@ namespace Commands {
 	void failure(Server& server, Player& player, const std::string& key, const std::vector<std::string>& args = {});
 	// The same for every player in the game
 	void broadcastTranslated(Server& server, const std::string& key, const std::vector<std::string>& args);
+	// A translation key with its arguments as English text, for the console ("Made Bob a server operator"); keys it
+	// doesn't know: the key and its arguments
+	std::string englishText(const std::string& key, const std::vector<std::string>& args);
 	// Whether the player may run this command (its op level)
 	bool canUse(const Player& player, const Command& command);
 	// Its usage, after a wrong call ("Usage: /<usage>")

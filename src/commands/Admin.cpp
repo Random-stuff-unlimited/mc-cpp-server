@@ -209,6 +209,21 @@ namespace Commands {
 		registerWhitelist();
 	}
 
+	// StopCommand and SaveAllCommand (level 4)
+	void registerServer() {
+		commandList().push_back({"stop", "stop", [](Server& server, Player& player, const std::vector<std::string>& args) {
+			if (!args.empty()) return usage(server, player, "stop");
+			translated(server, player, "commands.stop.stopping");
+			server.requestStop();
+		}, LEVEL_OWNERS});
+		commandList().push_back({"save-all", "save-all", [](Server& server, Player& player, const std::vector<std::string>& args) {
+			if (!args.empty() && !(args.size() == 1 && args[0] == "flush")) return usage(server, player, "save-all [flush]");
+			translated(server, player, "commands.save.saving");
+			server.saveAll();
+			translated(server, player, "commands.save.success");
+		}, LEVEL_OWNERS});
+	}
+
 	void registerChat() {
 		// SayCommand (level 2): "[name] message" for everyone
 		commandList().push_back({"say", "say <message>", [](Server& server, Player& player, const std::vector<std::string>& args) {

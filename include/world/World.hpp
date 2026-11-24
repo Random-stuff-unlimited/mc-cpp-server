@@ -108,6 +108,8 @@ class World {
 	// done on the I/O threads before whenLit's callback, so the game thread normally only gets the cached one
 	std::shared_ptr<const std::vector<uint8_t>> getChunkPacket(const std::shared_ptr<Chunk>& chunk);
 
+	// The next tick() autosaves, whatever the interval (/save-all)
+	void requestAutosave() { _lastAutosave = {}; }
 	// Unloads idle chunks and autosaves. Call about once per second. True when it autosaved (players are saved too)
 	bool tick();
 	// The other dimensions share the overworld's clock and weather flags (vanilla's DerivedLevelData): their time

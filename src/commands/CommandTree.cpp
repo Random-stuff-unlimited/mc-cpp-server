@@ -216,6 +216,7 @@ namespace {
 			subs.push_back(t.literal("remove", false, {profile("targets", true)}));
 			return t.literal("whitelist", false, subs);
 		}
+		if (name == "save-all") return t.literal("save-all", true, t.choices({"flush"}));
 		if (name == "say" || name == "me") return t.literal(name, false, {message(name == "say" ? "message" : "action")});
 		if (name == "tell" || name == "msg" || name == "w") return t.literal(name, false, {t.players("targets", false, false, {message("message")})});
 		return t.literal(name, true);

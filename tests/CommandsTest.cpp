@@ -228,3 +228,25 @@ TEST(server_access_files) {
 	CHECK(ServerAccess::isIpAddress("127.0.0.1") && !ServerAccess::isIpAddress("256.0.0.1") && !ServerAccess::isIpAddress("1.2.3"));
 	std::filesystem::remove_all(directory);
 }
+
+// The server console: level 4, ops players; the commands that need a player (or name none) are refused
+TEST(commands_from_console) {
+	LevelFixture f;
+	Commands::registerCommands();
+	auto bob = makePlayer(f);
+	bob->setUUID(UUID::fromOfflinePlayer("Bob"));
+	bob->setPermissionLevel(0);
+	f.addPlayer(bob);
+	Player& console = f.server.console();
+	CHECK(console.isConsole() && console.permissionLevel() == 4);
+	Commands::run(f.server, console, "op Bob");
+	CHECK_EQ(bob->permissionLevel(), 4);
+	Commands::run(f.server, console, "gamemode creative"); // No target: refused
+	CHECK(console.getGameMode() != GameMode::Creative);
+	CHECK(bob->getGameMode() != GameMode::Creative);
+	Commands::run(f.server, console, "kill @s"); // Not a player
+	CHECK(!console.combat().dead);
+	CHECK(Commands::englishText("commands.op.success", {"Bob"}) == "Made Bob a server operator");
+	CHECK(Commands::englishText("commands.banlist.entry", {"Eve", "Server", "spam"}) == "Eve was banned by Server: spam");
+	CHECK(Commands::englishText("some.key", {"a"}) == "some.key a");
+}
