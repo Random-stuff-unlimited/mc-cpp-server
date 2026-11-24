@@ -23,6 +23,9 @@ namespace EntityFactory {
 		if (const GameData::EntityTypeInfo* info = level.gameData().getEntityType(typeId); info && info->is("AbstractBoat")) {
 			return std::make_unique<Boat>(level, typeId);
 		}
+		if (const GameData::EntityTypeInfo* info = level.gameData().getEntityType(typeId); info && info->is("AbstractMinecart")) {
+			return std::make_unique<Minecart>(level, typeId);
+		}
 		return nullptr;
 	}
 

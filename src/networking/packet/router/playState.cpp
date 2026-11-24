@@ -225,6 +225,7 @@ void handlePlayState(Packet* packet, Server& server) {
 		// The keys held: forward, backward, left, right, jump, sneak (0x20), sprint
 		uint8_t keys = packet->getData().readUByte();
 		player->setShiftKeyDown(keys & 0x20);
+		player->setForwardKeyDown(keys & 0x01);
 		// Sneaking gets off what it rides (ServerPlayer.rideTick)
 		if ((keys & 0x20) && player->vehicleId() != -1) {
 			if (Entity* vehicle = server.levelOf(*player).entities().byId(player->vehicleId())) {

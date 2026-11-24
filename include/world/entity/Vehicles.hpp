@@ -75,4 +75,55 @@ class Boat : public VehicleEntity {
 	void				  floatBoat();
 };
 
+// AbstractMinecart (the old minecart behavior): rolls along rails (slopes speed it up, curves turn it, 0.4 blocks a tick at
+// most), off them it rolls and slows down. Powered rails push it (and brake it when off), activator rails throw its rider
+// out and prime TNT. Its rider pushes it with the forward key. Its kinds: a seat (minecart), a chest (27 slots), a
+// furnace (fuel pushes it), TNT (primed, it explodes), a hopper (it picks up the items it passes). Pushing other
+// minecarts and mobs, and the new experimental movement, aren't ported
+class Minecart : public VehicleEntity {
+  public:
+	enum class Kind { Rideable, Chest, Furnace, Tnt, Hopper, Other };
+	static constexpr double RAIL_HEIGHT = 0.0625;
+
+	Minecart(Level& level, int typeId, const Vec3& position);
+	Minecart(Level& level, int typeId) : Minecart(level, typeId, Vec3{}) {}
+	~Minecart() override;
+
+	Kind kind() const { return _kind; }
+	int	 fuel() const { return _fuel; }
+	int	 fuse() const { return _fuse; }
+	bool isPrimed() const { return _fuse > -1; }
+	// MinecartTNT.primeFuse: it explodes in 4 seconds
+	void prime();
+	// MinecartItem.useOn: a minecart of the item's kind on the rail clicked
+	static bool place(Level& level, Player& player, ItemStack& stack, const BlockPos& rail);
+
+	void   tick() override;
+	bool   interact(Player& player, int hand) override;
+	bool   hurtServer(const Combat::DamageSource& source, float amount) override;
+	double riderY() const override { return _position.y + 0.1875 - 0.6; }
+	void   writeEntityData(Buffer& buf) const override { writeVehicleData(buf); }
+	void   save(Buffer& buf) const override;
+	void   load(Buffer& buf) override;
+
+  protected:
+	ItemStack dropItem() const override;
+	void	  destroy(bool drop) override;
+
+  private:
+	Kind							 _kind;
+	std::shared_ptr<SimpleContainer> _container; // Chest and hopper minecarts
+	int								 _fuel = 0, _fuse = -1;
+	Vec3							 _push;
+	bool							 _hopperEnabled = true;
+
+	double maxSpeed() const;
+	void   moveAlongTrack(const BlockPos& pos, int state);
+	void   comeOffTrack();
+	void   applyNaturalSlowdown();
+	void   activate(const BlockPos& pos, bool powered);
+	void   explode(double speedSqr);
+	void   suckInItems();
+};
+
 #endif

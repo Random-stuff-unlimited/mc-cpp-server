@@ -1,3 +1,4 @@
+#include "world/entity/Vehicles.hpp"
 #include "world/entity/EndCrystal.hpp"
 #include "world/item/ItemUseOn.hpp"
 
@@ -39,6 +40,11 @@ namespace ItemUse {
 		int				   state = level.getBlockState(hit.pos);
 		JavaRandom&		   random = level.random();
 
+		if (name == "minecraft:minecart" || name == "minecraft:chest_minecart" || name == "minecraft:furnace_minecart" || name == "minecraft:tnt_minecart" ||
+			name == "minecraft:hopper_minecart") {
+			// MinecartItem.useOn: on a rail only
+			return Minecart::place(level, player, stack, hit.pos) ? Result::Success : Result::Fail;
+		}
 		if (name == "minecraft:end_crystal") {
 			// EndCrystalItem.useOn: on obsidian or bedrock, with two free blocks above and nothing in the way
 			std::string block = level.gameData().getStaticName("minecraft:block", level.blocks().blockOf(state));

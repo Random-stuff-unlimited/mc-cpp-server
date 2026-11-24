@@ -1,5 +1,6 @@
 #include "world/VillageEvents.hpp"
 #include "world/blocks/Eggs.hpp"
+#include "world/blocks/Rails.hpp"
 #include "world/entity/mobs/Bosses.hpp"
 #include "world/blocks/VanillaBlocks.hpp"
 
@@ -68,6 +69,12 @@ void registerVanillaBlocks(Level& level, const GameData& gameData) {
 			{"WitherSkullBlock", [](int) { return std::make_unique<WitherSkullBehavior>(); }},
 			{"FrogspawnBlock", [](int) { return std::make_unique<FrogspawnBlock>(); }},
 			{"CarvedPumpkinBlock", [](int) { return std::make_unique<CarvedPumpkinBehavior>(); }},
+			{"DetectorRailBlock", [](int) { return std::make_unique<RailBehavior>(RailBehavior::Kind::Detector); }},
+			{"PoweredRailBlock", [&gameData](int block) {
+				 bool activator = gameData.getStaticName("minecraft:block", block) == "minecraft:activator_rail";
+				 return std::make_unique<RailBehavior>(activator ? RailBehavior::Kind::Activator : RailBehavior::Kind::Powered);
+			 }},
+			{"RailBlock", [](int) { return std::make_unique<RailBehavior>(RailBehavior::Kind::Plain); }},
 			{"SnifferEggBlock", [](int) { return std::make_unique<SnifferEggBlock>(); }},
 			{"WitherWallSkullBlock", [](int) { return std::make_unique<WitherSkullBehavior>(); }},
 

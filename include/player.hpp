@@ -186,6 +186,7 @@ class Player : public Actor, public std::enable_shared_from_this<Player>, public
 	Server&		  _server;
 	PlayerConfig* _config;
 	bool		  _shiftKeyDown = false;
+	bool		  _forwardKeyDown = false; // PLAYER_INPUT's forward key (pushes the minecart it rides)
 	int			  _vehicleId	= -1;
 	std::array<ItemStack, 27> _enderChest;
 	std::unique_ptr<Menu> _inventoryMenu, _openMenu;
@@ -287,6 +288,8 @@ class Player : public Actor, public std::enable_shared_from_this<Player>, public
 	int	   vehicleId() const { return _vehicleId; }
 	void   setVehicleId(int id) { _vehicleId = id; }
 	void   setShiftKeyDown(bool down) { _shiftKeyDown = down; }
+	bool   isForwardKeyDown() const { return _forwardKeyDown; }
+	void   setForwardKeyDown(bool down) { _forwardKeyDown = down; }
 	float  getPitch() const { return _pitch; }
 	bool   isOnGround() const { return _onGround; }
 	void   setRotation(float yaw, float pitch) {

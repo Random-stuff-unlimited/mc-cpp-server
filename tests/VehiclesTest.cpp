@@ -109,3 +109,109 @@ TEST(chest_boat_items) {
 	CHECK_EQ(diamonds, 3);
 	CHECK_EQ(boats, 1);
 }
+
+namespace {
+	void rail(LevelFixture& f, int x, int y, int z, const char* block = "minecraft:rail") {
+		f.level->setBlock({x, y, z}, f.data.getDefaultBlockState(block), Level::UPDATE_ALL);
+	}
+	std::string shapeAt(LevelFixture& f, int x, int y, int z) { return f.data.getProperty(f.level->getBlockState({x, y, z}), "shape"); }
+
+	Minecart* addMinecart(LevelFixture& f, const char* type, int x, int y, int z) {
+		auto	  cart = std::make_unique<Minecart>(*f.level, f.data.getStaticId("minecraft:entity_type", type), Vec3{x + 0.5, y + Minecart::RAIL_HEIGHT, z + 0.5});
+		Minecart* raw  = cart.get();
+		f.level->entities().add(std::move(cart));
+		return raw;
+	}
+} // namespace
+
+// Rails connect: a corner curves, a rail next to one a block higher slopes up to it
+TEST(rails_connect) {
+	LevelFixture f(1);
+	rail(f, 0, Y, 0);
+	rail(f, 1, Y, 0);
+	CHECK(shapeAt(f, 0, Y, 0) == "east_west");
+	rail(f, 0, Y, 1);
+	CHECK(shapeAt(f, 0, Y, 0) == "south_east");
+	f.set(5, Y, 0, "minecraft:stone");
+	rail(f, 5, Y + 1, 0);
+	rail(f, 4, Y, 0);
+	CHECK(shapeAt(f, 4, Y, 0) == "ascending_east");
+}
+
+// A pushed minecart rolls along a straight rail, staying on it, and slows down
+TEST(minecart_rolls_on_rail) {
+	LevelFixture f(1);
+	for (int x = -10; x <= 10; x++) rail(f, x, Y, 0);
+	Minecart* cart = addMinecart(f, "minecraft:minecart", -10, Y, 0);
+	cart->setDeltaMovement({0.4, 0.0, 0.0});
+	f.tick(20);
+	CHECK(cart->position().x > -6.0);
+	CHECK(std::abs(cart->position().z - 0.5) < 0.01);
+	CHECK(std::abs(cart->position().y - (Y + Minecart::RAIL_HEIGHT)) < 0.01);
+	f.tick(200);
+	CHECK(cart->deltaMovement().horizontalDistanceSqr() < 0.0001); // Friction stopped it
+}
+
+// A powered rail (a redstone block next to it) speeds it up to its maximum
+TEST(minecart_powered_rail) {
+	LevelFixture f(1);
+	for (int x = 0; x <= 20; x++) rail(f, x, Y, 0, x < 4 ? "minecraft:powered_rail" : "minecraft:rail");
+	f.set(0, Y, 1, "minecraft:redstone_block");
+	CHECK(f.data.getProperty(f.level->getBlockState({3, Y, 0}), "powered") == "true"); // Through the line
+	Minecart* cart = addMinecart(f, "minecraft:minecart", 1, Y, 0);
+	cart->setDeltaMovement({0.05, 0.0, 0.0});
+	f.tick(10);
+	CHECK(cart->deltaMovement().x > 0.3);
+}
+
+// Its rider pushes it with the forward key; an activator rail throws the rider out
+TEST(minecart_rider_and_activator) {
+	LevelFixture f(1);
+	for (int x = 0; x <= 12; x++) rail(f, x, Y, 0, x == 10 ? "minecraft:activator_rail" : "minecraft:rail");
+	f.set(10, Y, 1, "minecraft:redstone_block");
+	Minecart* cart	 = addMinecart(f, "minecraft:minecart", 1, Y, 0);
+	auto	  player = addPlayer(f, 1.5, Y, 1.5);
+	CHECK(cart->interact(*player, 0));
+	CHECK_EQ(player->vehicleId(), cart->id());
+	player->setRotation(-90.0F, 0.0F); // Facing +x
+	player->setForwardKeyDown(true);
+	bool ejected = false;
+	for (int t = 0; t < 200 && !ejected; t++) {
+		f.tick();
+		ejected = player->vehicleId() == -1;
+	}
+	CHECK(ejected);
+	CHECK(cart->position().x > 9.0);
+}
+
+// A TNT minecart primed by a powered activator rail explodes 4 seconds later
+TEST(tnt_minecart_explodes) {
+	LevelFixture f(1);
+	rail(f, 0, Y, 0, "minecraft:activator_rail");
+	f.set(0, Y, 1, "minecraft:redstone_block");
+	Minecart* cart = addMinecart(f, "minecraft:tnt_minecart", 0, Y, 0);
+	f.tick(2);
+	CHECK(cart->isPrimed());
+	int id = cart->id();
+	f.tick(90);
+	CHECK(f.level->actorById(id) == nullptr);
+}
+
+// A detector rail gives a signal while a minecart is on it; a hopper minecart picks up the items it passes
+TEST(detector_rail_and_hopper_minecart) {
+	LevelFixture f(1);
+	rail(f, 0, Y, 0, "minecraft:detector_rail");
+	Minecart* hopper = addMinecart(f, "minecraft:hopper_minecart", 0, Y, 0);
+	f.level->entities().add(std::make_unique<ItemEntity>(*f.level, Vec3{0.5, Y + 0.3, 0.5}, ItemStack(f.item("minecraft:iron_ingot"), 4), Vec3{}));
+	f.tick(10);
+	CHECK(f.data.getProperty(f.level->getBlockState({0, Y, 0}), "powered") == "true");
+	CHECK(f.items().empty());
+	hopper->hurtServer({"minecraft:generic", nullptr, nullptr, std::nullopt}, 100.0F); // Broken: its items drop
+	f.tick(30);
+	CHECK(f.data.getProperty(f.level->getBlockState({0, Y, 0}), "powered") == "false");
+	int ingots = 0;
+	for (ItemEntity* item : f.items()) {
+		if (item->item().item == f.item("minecraft:iron_ingot")) ingots += item->item().count;
+	}
+	CHECK_EQ(ingots, 4);
+}
