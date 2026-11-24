@@ -167,3 +167,27 @@ TEST(bed_explodes_in_the_nether) {
 	CHECK(d.nameAt(level, {0, 64, -1}) != "minecraft:red_bed[facing=north,occupied=false,part=head]");
 	CHECK(d.nameAt(level, {0, 63, 0}) == "minecraft:air"); // The netherrack under it blew up
 }
+
+// The weather and the time of day are kept in level.json: a world reopened rains and thunders where it stopped
+TEST(world_weather_and_time_saved) {
+	GameData data;
+	data.load("resources/gamedata");
+	std::filesystem::path directory = std::filesystem::temp_directory_path() / "mc-cpp-server-test-weather";
+	std::filesystem::remove_all(directory);
+	World::Settings settings;
+	settings.directory = directory;
+	settings.seed	   = 1;
+	{
+		World world(data, settings);
+		world.setWeather(true, true);
+		world.setDayTime(13000);
+	}
+	{
+		World world(data, settings);
+		CHECK(world.rainingFlag());
+		CHECK(world.thunderingFlag());
+		CHECK(world.isRaining());
+		CHECK_EQ(world.getDayTime(), int64_t(13000));
+	}
+	std::filesystem::remove_all(directory);
+}

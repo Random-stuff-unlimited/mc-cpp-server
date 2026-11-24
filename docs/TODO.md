@@ -139,7 +139,7 @@ Les 85 types de mobs vanilla ont leur classe et leur IA (`src/world/entity/mobs`
 
 ## Monde (hors générateur)
 
-- [ ] Enregistrement du temps/weather dans `level.json` (persistance de la météo et de l'heure)
+- [x] Enregistrement du temps/weather dans `level.json` (persistance de la météo et de l'heure)
 - [ ] Spawn conditionnel des mobs par biome (tableaux par type), caps par dimension
 - [ ] Portails End : activation, plateforme, retour — à vérifier/compléter
 - [ ] Climat : neige (blocage de la pluie), températures par biome appliquées

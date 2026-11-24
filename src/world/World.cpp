@@ -175,6 +175,17 @@ void World::loadLevel() {
 
 	_gameTime = level.value("time", int64_t(0));
 	_dayTime  = level.value("day-time", int64_t(0));
+	// The weather (ServerLevelData: its flags and countdowns; the levels the clients see start at their end values)
+	if (level.contains("weather")) {
+		const nlohmann::json& weather = level["weather"];
+		_weather.raining		  = weather.value("raining", false);
+		_weather.thundering		  = weather.value("thundering", false);
+		_weather.rainTime		  = weather.value("rain-time", 0);
+		_weather.thunderTime	  = weather.value("thunder-time", 0);
+		_weather.clearWeatherTime = weather.value("clear-weather-time", 0);
+		_weather.rainLevel = _weather.oRainLevel = _weather.raining ? 1.0F : 0.0F;
+		_weather.thunderLevel = _weather.oThunderLevel = _weather.raining && _weather.thundering ? 1.0F : 0.0F;
+	}
 
 	_generatorOptions = level.value("generator", defaultGenerator());
 	GeneratorSettings generatorSettings(_generatorOptions, _gameData, _layout.minY, dimension->height, level.value("seed", int64_t(0)));
@@ -215,6 +226,11 @@ void World::saveLevel() {
 		}
 		level["time"]	  = getGameTime();
 		level["day-time"] = _dayTime;
+		level["weather"]  = {{"raining", _weather.raining},
+							 {"thundering", _weather.thundering},
+							 {"rain-time", _weather.rainTime},
+							 {"thunder-time", _weather.thunderTime},
+							 {"clear-weather-time", _weather.clearWeatherTime}};
 		level["spawn"]	  = {{"x", _spawn.x}, {"y", _spawn.y}, {"z", _spawn.z}};
 		std::ofstream out(levelFile);
 		out << level.dump(2) << "\n";
