@@ -3,6 +3,7 @@
 #include "data/GameData.hpp"
 #include "player.hpp"
 #include "world/Level.hpp"
+#include "world/blockentity/BlockEntity.hpp"
 #include "world/entity/ItemEntity.hpp"
 
 #include <unordered_map>
@@ -99,4 +100,53 @@ void ComposterBlock::tick(Level& level, const BlockPos& pos, int) const {
 	if (levelOf(level, pos) != 7) return;
 	setLevel(level, pos, READY);
 	level.playSound(nullptr, pos, "minecraft:block.composter.ready", Level::SoundSource::Blocks);
+}
+
+namespace {
+	// InputContainer / OutputContainer: a slot that becomes compost or comes out as bone meal
+	class ComposterContainer : public Container {
+	  public:
+		ComposterContainer(Level& level, const BlockPos& pos, bool output) : _level(level), _pos(pos), _output(output) {
+			if (output) _slot = ItemStack(level.gameData().getStaticId("minecraft:item", "minecraft:bone_meal"), 1);
+		}
+		int		   size() const override { return 1; }
+		ItemStack& item(int) override { return _slot; }
+		int		   maxStackSize() const override { return 1; }
+		bool	   isWorldly() const override { return true; }
+		std::vector<int> slotsForFace(Direction face) override {
+			if (_output) return face == Direction::Down ? std::vector<int>{0} : std::vector<int>{};
+			return face == Direction::Up ? std::vector<int>{0} : std::vector<int>{};
+		}
+		bool canPlaceItemThroughFace(int, const ItemStack& stack, const Direction* face) override {
+			return !_output && !_changed && face && *face == Direction::Up && !stack.isEmpty() &&
+				   ComposterBlock::compostChance(_level.gameData().getStaticName("minecraft:item", stack.item)) > 0.0F;
+		}
+		bool canTakeItemThroughFace(int, const ItemStack&, Direction face) override { return _output && face == Direction::Down; }
+		bool canPlaceItem(int, const ItemStack&) const override { return !_output; }
+		void setChanged() override {
+			if (_changed) return;
+			if (_output && _slot.isEmpty()) {
+				// The bone meal was taken: empty again
+				int state = _level.gameData().withProperty(_level.getBlockState(_pos), "level", "0");
+				if (state >= 0) _level.setBlock(_pos, state, Level::UPDATE_ALL);
+				_changed = true;
+			} else if (!_output && !_slot.isEmpty()) {
+				ComposterBlock::insert(_level, _pos, _level.gameData().getStaticName("minecraft:item", _slot.item));
+				_slot	 = ItemStack();
+				_changed = true;
+			}
+		}
+
+	  private:
+		Level&	  _level;
+		BlockPos  _pos;
+		bool	  _output, _changed = false;
+		ItemStack _slot;
+	};
+} // namespace
+
+std::shared_ptr<Container> ComposterBlock::container(Level& level, const BlockPos& pos) {
+	int current = levelOf(level, pos);
+	if (current < 0 || current == 7) return nullptr;
+	return std::make_shared<ComposterContainer>(level, pos, current == READY);
 }

@@ -9,6 +9,7 @@
 #include "world/blockentity/BeaconBlockEntity.hpp"
 #include "world/inventory/BeaconMenu.hpp"
 #include "world/blocks/Composter.hpp"
+#include "world/blockentity/ContainerEntities.hpp"
 
 // Chiseled bookshelves, decorated pots, jukeboxes, lecterns, crafters and shelves
 
@@ -447,4 +448,27 @@ TEST(composter_fill_and_empty) {
 	CHECK(f.data.getProperty(f.at(0, Y, 0), "level") == "0");
 	CHECK_EQ(itemsNamed(f, "minecraft:bone_meal"), 1);
 	CHECK(ComposterBlock::compostChance("minecraft:wheat_seeds") == 0.3F);
+}
+
+// Hoppers: one above fills a composter with what can be composted; one below takes out the bone meal
+TEST(composter_with_hoppers) {
+	LevelFixture f(1);
+	BlockPos composter{0, Y + 1, 0};
+	f.level->setBlock({0, Y, 0}, f.data.getDefaultBlockState("minecraft:hopper"), Level::UPDATE_ALL); // Below, facing down
+	f.level->setBlock(composter, f.data.getDefaultBlockState("minecraft:composter"), Level::UPDATE_ALL);
+	f.level->setBlock({0, Y + 2, 0}, f.data.getDefaultBlockState("minecraft:hopper"), Level::UPDATE_ALL); // Above, into it
+	auto* top	 = dynamic_cast<HopperBlockEntity*>(f.level->getBlockEntity({0, Y + 2, 0}));
+	auto* bottom = dynamic_cast<HopperBlockEntity*>(f.level->getBlockEntity({0, Y, 0}));
+	CHECK(top && bottom);
+	if (!top || !bottom) return;
+	top->setItem(0, ItemStack(f.item("minecraft:pumpkin_pie"), 7)); // A layer each
+	top->setItem(1, ItemStack(f.item("minecraft:dirt"), 3));		 // Not compostable: stays
+	f.tick(200);
+	bool boneMeal = false;
+	for (int slot = 0; slot < bottom->size(); slot++) boneMeal |= bottom->item(slot).item == f.item("minecraft:bone_meal");
+	CHECK(boneMeal);
+	CHECK(f.data.getProperty(f.at(0, Y + 1, 0), "level") == "0");
+	int dirt = 0;
+	for (int slot = 0; slot < top->size(); slot++) dirt += top->item(slot).item == f.item("minecraft:dirt") ? top->item(slot).count : 0;
+	CHECK_EQ(dirt, 3);
 }

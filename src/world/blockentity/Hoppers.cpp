@@ -1,3 +1,4 @@
+#include "world/blocks/Composter.hpp"
 #include "world/blockentity/ContainerEntities.hpp"
 
 #include "data/GameData.hpp"
@@ -69,7 +70,13 @@ namespace Hoppers {
 	std::shared_ptr<Container> containerAt(Level& level, const BlockPos& pos) {
 		std::shared_ptr<BlockEntity> entity = level.getSharedBlockEntity(pos);
 		auto*						 container = dynamic_cast<Container*>(entity.get());
-		if (!container) return nullptr;
+		if (!container) {
+			// WorldlyContainerHolder blocks: the composter
+			if (level.gameData().getStaticName("minecraft:block", level.blocks().blockOf(level.getBlockState(pos))) == "minecraft:composter") {
+				return ComposterBlock::container(level, pos);
+			}
+			return nullptr;
+		}
 		// A chest: the double chest, blocked or not (ChestBlock.getContainer with ignoreBlocked)
 		if (dynamic_cast<ChestBlockEntity*>(entity.get())) {
 			bool						 first = false;

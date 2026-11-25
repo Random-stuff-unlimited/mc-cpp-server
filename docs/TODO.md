@@ -105,7 +105,7 @@ Les 85 types de mobs vanilla ont leur classe et leur IA (`src/world/entity/mobs`
 - [x] Golem de fer invoqué par les villageois
 - [x] Fermiers : moissons
 - [x] Composteur : table de compostage vanilla, niveaux, poudre d'os (joueurs et fermiers)
-- [ ] Composteur : entonnoirs (remplir/vider)
+- [x] Composteur : entonnoirs (remplir par le haut, poudre d'os par le bas)
 
 ## Boss
 
