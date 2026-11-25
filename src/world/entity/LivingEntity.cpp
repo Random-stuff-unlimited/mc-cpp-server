@@ -907,6 +907,8 @@ void LivingEntity::knockback(double strength, double x, double z) {
 void LivingEntity::die(const Combat::DamageSource& source) {
 	if (isRemoved() || _dead) return;
 	_dead = true;
+	// The scoreboard's totalKillCount of the player responsible
+	if (Player* killer = source.attackerPlayer()) _level.server().scoreboard().onKill(*killer);
 	dropAllDeathLoot(source);
 	broadcastEntityEvent(EVENT_DEATH);
 	if (_pose != POSE_DYING) {

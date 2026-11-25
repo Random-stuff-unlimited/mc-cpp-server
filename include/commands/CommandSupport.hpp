@@ -53,6 +53,7 @@ namespace Commands {
 	void registerServer();
 	void registerTitle();
 	void registerWorldBorder();
+	void registerScoreboard();
 } // namespace Commands
 
 #endif

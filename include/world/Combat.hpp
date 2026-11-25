@@ -44,6 +44,8 @@ namespace Combat {
 	void attack(Server& server, Player& attacker, LivingEntity& target);
 	// Applies damage after armor. Returns false if it had no effect (invulnerable, creative, already dead...)
 	bool damage(Server& server, Player& victim, float amount, const DamageSource& source);
+	// The armor points the player wears (the armor attribute from its equipment)
+	float armorValue(const GameData& gameData, const Player& player);
 
 	// After a movement packet: fall damage when landing, void damage below the world
 	void onMove(Server& server, Player& player, double previousY);

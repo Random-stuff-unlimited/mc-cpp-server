@@ -100,6 +100,7 @@ void enterPlay(Packet* packet, Server& server) {
 	playerAbilitiesPacket(*packet, server);
 	setHeldItemPacket(*packet, server);
 	server.refreshPermissions(*player); // PlayerList.sendPlayerPermissionLevel: its op level and commands
+	server.scoreboard().sendAll(*player); // PlayerList.updateEntireScoreboard
 	sendInitialRecipeBook(*packet, server);
 	synchronizePlayerPositionPacket(*packet, server);
 

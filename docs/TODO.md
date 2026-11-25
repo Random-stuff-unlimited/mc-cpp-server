@@ -131,7 +131,9 @@ Les 85 types de mobs vanilla ont leur classe et leur IA (`src/world/entity/mobs`
 - [ ] Recettes : `UPDATE_RECIPES` (le client connaît les recettes déverrouillées)
 - [ ] Advancements : `UPDATE_ADVANCEMENTS`, `SELECT_ADVANCEMENTS_TAB`, déclencheurs de critères
 - [ ] Statistiques : `AWARD_STATS`
-- [ ] Scoreboard / teams : `SET_SCORE`, `SET_OBJECTIVE`, `SET_DISPLAY_OBJECTIVE`, `SET_PLAYER_TEAM`, `RESET_SCORE`
+- [x] Scoreboard : `/scoreboard` (objectifs, scores, affichage), `SET_SCORE`, `SET_OBJECTIVE`, `SET_DISPLAY_OBJECTIVE`,
+      `RESET_SCORE`, critères deathCount/playerKillCount/totalKillCount/health/food/level/xp/air/armor, `scoreboard.json`
+- [ ] Équipes : `/team`, `SET_PLAYER_TEAM` ; `/scoreboard players operation`, `/trigger`
 - [x] World border : `INITIALIZE_BORDER`, `SET_BORDER_*`, `/worldborder`, dégâts hors limite, blocs interdits, sauvegarde
 - [ ] Cartes : `MAP_ITEM_DATA`, cartographie
 - [x] `SET_DEFAULT_SPAWN_POSITION` (compass qui pointe le spawn)

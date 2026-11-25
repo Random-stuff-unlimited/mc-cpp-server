@@ -174,6 +174,14 @@ namespace {
 		std::string		   victimName = victim.getPlayerName();
 		std::string		   sourceName = source.causing ? Combat::displayName(server.getGameData(), *source.causing) : "";
 		std::string		   killerName = credit ? state.lastAttacker : "";
+		// The scoreboard's deathCount, and the killer's kill counts
+		Player* killer = nullptr;
+		if (credit) {
+			for (const auto& other : server.getGamePlayers()) {
+				if (other->getPlayerName() == killerName) killer = other.get();
+			}
+		}
+		server.scoreboard().onPlayerDeath(victim, killer);
 		auto			   text		  = [&](const Player& reader) {
 			  return server.getDeathMessages().format(reader.getPlayerConfig()->getLocale(), source.type, victimName, sourceName, killerName);
 		};
@@ -669,4 +677,5 @@ namespace Combat {
 		}
 	}
 
+	float armorValue(const GameData& gameData, const Player& player) { return wornArmor(gameData, player).armor; }
 } // namespace Combat

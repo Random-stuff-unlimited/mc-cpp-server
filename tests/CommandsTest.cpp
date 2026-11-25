@@ -6,6 +6,8 @@
 #include "Test.hpp"
 #include "player.hpp"
 #include "world/Survival.hpp"
+#include "world/Combat.hpp"
+#include "world/Scoreboard.hpp"
 #include "world/item/Enchantments.hpp"
 
 #include <cmath>
@@ -313,4 +315,41 @@ TEST(commands_worldborder) {
 	Survival::tick(*f.level, *player); // The fixture doesn't tick players
 	CHECK(player->combat().health < health);
 	Commands::run(f.server, *player, "worldborder set 59999968");
+}
+
+// /scoreboard: objectives, scores for players and plain names, display slots, read-only criteria; deaths are counted
+TEST(commands_scoreboard) {
+	LevelFixture f;
+	Commands::registerCommands();
+	auto player = makePlayer(f);
+	f.addPlayer(player);
+	Scoreboard& board = f.server.scoreboard();
+	Commands::run(f.server, *player, "scoreboard objectives add kills dummy Kill count");
+	CHECK(board.objective("kills") && board.objective("kills")->displayName == "Kill count");
+	Commands::run(f.server, *player, "scoreboard objectives add kills dummy"); // Duplicate: unchanged
+	Commands::run(f.server, *player, "scoreboard objectives add nope notacriterion");
+	CHECK(!board.objective("nope"));
+	Commands::run(f.server, *player, "scoreboard players set @s kills 5");
+	Commands::run(f.server, *player, "scoreboard players add Alice kills 3");
+	Commands::run(f.server, *player, "scoreboard players remove @s kills 2");
+	CHECK(board.score("Bob", "kills") == 3);
+	CHECK(board.score("Alice", "kills") == 3);
+	Commands::run(f.server, *player, "scoreboard players add * kills 1");
+	CHECK(board.score("Bob", "kills") == 4 && board.score("Alice", "kills") == 4);
+	Commands::run(f.server, *player, "scoreboard objectives setdisplay sidebar kills");
+	CHECK(board.display(Scoreboard::slotByName("sidebar")) == "kills");
+	Commands::run(f.server, *player, "scoreboard players reset Alice kills");
+	CHECK(!board.score("Alice", "kills"));
+	// Automatic criteria
+	Commands::run(f.server, *player, "scoreboard objectives add hp health");
+	Commands::run(f.server, *player, "scoreboard players set @s hp 3"); // Read-only
+	board.tick();
+	CHECK(board.score("Bob", "hp") == 20);
+	CHECK(board.objective("hp")->hearts);
+	Commands::run(f.server, *player, "scoreboard objectives add deaths deathCount");
+	player->setGameMode(GameMode::Survival);
+	Combat::damage(f.server, *player, 1000.0F, {"minecraft:generic_kill", nullptr, nullptr, std::nullopt});
+	CHECK(board.score("Bob", "deaths") == 1);
+	Commands::run(f.server, *player, "scoreboard objectives remove kills");
+	CHECK(!board.objective("kills") && board.display(Scoreboard::slotByName("sidebar")).empty());
 }

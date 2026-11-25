@@ -237,6 +237,23 @@ namespace {
 			subs.push_back(t.literal("warning", false, {t.literal("distance", false, {t.integer("distance", 0, true)}), t.literal("time", false, {t.integer("time", 0, true)})}));
 			return t.literal("worldborder", false, subs);
 		}
+		if (name == "scoreboard") {
+			// The arguments are words and greedy text here: the client's own parsers for objectives and criteria would
+			// need the server's lists
+			auto rest = [&](const char* arg) { return message(arg); };
+			int	 objList = t.literal("list", true);
+			int	 objAdd	 = t.literal("add", false, {t.word("objective", false, {t.word("criteria", true, {rest("displayName")})})});
+			int	 objRem	 = t.literal("remove", false, {t.word("objective", true)});
+			int	 objDisp = t.literal("setdisplay", false, {t.word("slot", true, {t.word("objective", true)})});
+			int	 objMod	 = t.literal("modify", false, {t.word("objective", false, {t.literal("displayname", false, {rest("displayName")}),
+																					 t.literal("rendertype", false, t.choices({"hearts", "integer"}))})});
+			auto withScore = [&](const char* sub) { return t.literal(sub, false, {t.word("targets", false, {t.word("objective", false, {t.integer("score", -2147483647 - 1, true)})})}); };
+			int	 plList	 = t.literal("list", true, {t.word("target", true)});
+			int	 plGet	 = t.literal("get", false, {t.word("target", false, {t.word("objective", true)})});
+			int	 plReset = t.literal("reset", false, {t.word("targets", true, {t.word("objective", true)})});
+			return t.literal("scoreboard", false, {t.literal("objectives", false, {objList, objAdd, objRem, objDisp, objMod}),
+												   t.literal("players", false, {plList, plGet, withScore("set"), withScore("add"), withScore("remove"), plReset})});
+		}
 		if (name == "save-all") return t.literal("save-all", true, t.choices({"flush"}));
 		if (name == "say" || name == "me") return t.literal(name, false, {message(name == "say" ? "message" : "action")});
 		if (name == "tell" || name == "msg" || name == "w") return t.literal(name, false, {t.players("targets", false, false, {message("message")})});

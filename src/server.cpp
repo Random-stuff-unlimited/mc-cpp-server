@@ -121,6 +121,11 @@ Player& Server::console() {
 
 void Server::requestStop() { g_stopRequested = 1; }
 
+Scoreboard& Server::scoreboard() {
+	if (!_scoreboard) _scoreboard = std::make_unique<Scoreboard>(*this);
+	return *_scoreboard;
+}
+
 void Server::saveAll() {
 	savePlayers();
 	for (const auto& level : _levels) {
@@ -247,6 +252,7 @@ void Server::tick(bool worldRuns) {
 			Survival::tickDestroy(*player->level(), *player);
 		}
 	}
+	if (_scoreboard) _scoreboard->tick();
 	// The movements of this tick to the players that see them
 	_playerTracker.tick(_tickLoop.getTickCount());
 	// Their entity data that changed (air, item in use)
@@ -628,6 +634,7 @@ int Server::start_server() {
 			g_logger->logGameInfo(ERROR, "Failed to load world: " + std::string(e.what()), "SERVER");
 			return 1;
 		}
+		scoreboard().load(worldSettings.directory / "scoreboard.json");
 		_playerData = std::make_unique<PlayerDataStorage>(worldSettings.directory, [this](std::function<void()> job) { _world->submitSave(std::move(job)); });
 
 		_tickLoop.setTickRate(_config.getTickRate());
