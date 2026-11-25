@@ -87,7 +87,7 @@ Les 85 types de mobs vanilla ont leur classe et leur IA (`src/world/entity/mobs`
 - [x] Inventaire des chevaux/ânes/mules/lamas (`HORSE_SCREEN_OPEN`) : selle, armure/tapis, coffre ; laisses (tirer,
       casser à 10 blocs, nœud sur barrière, `SET_ENTITY_LINK`)
 - [x] Perroquets sur l'épaule (données 19/20, s'envolent en tombant, dans l'eau, en volant, en dormant, blessé, à la déconnexion)
-- [ ] Caravanes de lamas
+- [x] Caravanes de lamas (jusqu'à 8 derrière un lama en laisse)
 - [x] Foudre : éclairs d'orage (1/100000 par chunk et par tick), paratonnerres (attirent, signal 8 ticks), feu, creeper
       chargé, cochon → piglin zombifié, villageois → sorcière, mooshroom, tortue ; `/summon lightning_bolt`
 - [x] Foudre : piège du cheval squelette (squelettes à côté des chevaux : pas de mobs cavaliers), cuivre désoxydé

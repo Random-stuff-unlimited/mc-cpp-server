@@ -7,6 +7,7 @@
 #include "world/entity/ai/Goals.hpp"
 #include "world/entity/mobs/Wolf.hpp"
 
+#include <limits>
 #include <cmath>
 #include <stdexcept>
 
@@ -79,9 +80,87 @@ namespace {
 
 // ===================== Llama =====================
 
+// ----- Caravans -----
+
+Llama* Llama::caravanHead() {
+	if (!_caravanHead.isSet()) return nullptr;
+	auto* head = dynamic_cast<Llama*>(_level.actorByRef(_caravanHead));
+	return head && head->isAlive() ? head : nullptr;
+}
+
+bool Llama::hasCaravanTail() {
+	if (!_caravanTail.isSet()) return false;
+	auto* tail = dynamic_cast<Llama*>(_level.actorByRef(_caravanTail));
+	return tail && tail->isAlive() && tail->caravanHead() == this;
+}
+
+void Llama::joinCaravan(Llama& head) {
+	_caravanHead	  = EntityRef(head);
+	head._caravanTail = EntityRef(*this);
+}
+
+void Llama::leaveCaravan() {
+	if (Llama* head = caravanHead()) head->_caravanTail = EntityRef();
+	_caravanHead = EntityRef();
+}
+
+namespace {
+	// LlamaFollowCaravanGoal.firstIsLeashed: the caravan ahead ends with a leashed llama (8 at most)
+	bool firstIsLeashed(Llama& llama, int depth) {
+		if (depth > 8) return false;
+		Llama* head = llama.caravanHead();
+		if (!head) return false;
+		return head->isLeashed() || firstIsLeashed(*head, depth + 1);
+	}
+
+	// LlamaFollowCaravanGoal: an unleashed llama joins the end of a caravan near it (or a leashed llama) and follows,
+	// keeping 2 blocks behind
+	class LlamaFollowCaravanGoal : public Goal {
+	  public:
+		explicit LlamaFollowCaravanGoal(Llama& llama) : _llama(llama) { setFlags({Flag::Move}); }
+		bool canUse() override {
+			if (_llama.isLeashed() || _llama.inCaravan()) return false;
+			Llama* best	= nullptr;
+			double close = std::numeric_limits<double>::max();
+			// A caravan's tail first, else a leashed llama, without a follower
+			for (int pass = 0; pass < 2 && !best; pass++) {
+				for (Actor* actor : _llama.level().actorsIn(_llama.boundingBox().inflate(9.0, 4.0, 9.0), &_llama)) {
+					auto* other = dynamic_cast<Llama*>(actor);
+					if (!other || !other->isAlive() || other->hasCaravanTail()) continue;
+					if (pass == 0 ? !other->inCaravan() : !other->isLeashed()) continue;
+					double d = _llama.distanceToSqr(other->position());
+					if (d < close) close = d, best = other;
+				}
+			}
+			if (!best || close < 4.0) return false;
+			if (!best->isLeashed() && !firstIsLeashed(*best, 1)) return false;
+			_llama.joinCaravan(*best);
+			return true;
+		}
+		bool canContinueToUse() override {
+			Llama* head = _llama.caravanHead();
+			return head && !_llama.isLeashed() && firstIsLeashed(_llama, 0) && _llama.distanceToSqr(head->position()) < 676.0;
+		}
+		void stop() override { _llama.leaveCaravan(); }
+		void tick() override {
+			Llama* head = _llama.caravanHead();
+			if (!head) return;
+			Vec3   to	   = head->position() - _llama.position();
+			double length = std::sqrt(to.lengthSqr());
+			double keep	  = std::max(length - 2.0, 0.0);
+			if (length > 1e-6) to = Vec3{to.x / length * keep, to.y / length * keep, to.z / length * keep};
+			_llama.navigation().moveTo(_llama.position().x + to.x, _llama.position().y + to.y, _llama.position().z + to.z, 2.1);
+		}
+
+	  private:
+		Llama& _llama;
+	};
+} // namespace
+
 void Llama::registerGoals() {
 	_goalSelector.addGoal(0, std::make_unique<FloatGoal>(*this));
 	_goalSelector.addGoal(1, std::make_unique<RunAroundLikeCrazyGoal>(*this, 1.2));
+	_goalSelector.addGoal(2, std::make_unique<LlamaFollowCaravanGoal>(*this));
 	_goalSelector.addGoal(3, std::make_unique<RangedAttackGoal>(*this, 1.25, 40, 20.0F));
 	_goalSelector.addGoal(3, std::make_unique<PanicGoal>(*this, 1.2));
 	_goalSelector.addGoal(4, std::make_unique<BreedGoal>(*this, 1.0));

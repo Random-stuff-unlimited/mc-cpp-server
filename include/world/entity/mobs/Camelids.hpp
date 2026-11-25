@@ -6,7 +6,7 @@
 
 // Llama: a chested horse that spits (1 damage) at what hurt it and at wild wolves, once per provocation. Its strength
 // (1 to 5) is drawn at spawn and bred; four colors. Wild, it is tamed by its temper (30) like a horse but never saddled.
-// Caravans (leads) aren't ported
+// Unleashed llamas follow a leashed one in a caravan (up to 8)
 class Llama : public AbstractChestedHorse {
   public:
 	static constexpr int DATA_STRENGTH = 19, DATA_VARIANT = 20;
@@ -18,6 +18,12 @@ class Llama : public AbstractChestedHorse {
 	int	 variant() const { return _variant; }
 	void setVariant(int variant);
 	bool didSpit() const { return _didSpit; }
+	// The caravan: the llama it follows and the one following it
+	Llama* caravanHead();
+	bool   inCaravan() { return caravanHead() != nullptr; }
+	bool   hasCaravanTail();
+	void   joinCaravan(Llama& head);
+	void   leaveCaravan();
 	void setDidSpit(bool spit) { _didSpit = spit; }
 
 	void							registerGoals() override;
@@ -43,8 +49,9 @@ class Llama : public AbstractChestedHorse {
 	void writeData(Buffer& buf, uint32_t mask, bool onlyNonDefault) const override;
 
   private:
-	int	 _strength = 1, _variant = 0;
-	bool _didSpit = false;
+	int		  _strength = 1, _variant = 0;
+	bool	  _didSpit = false;
+	EntityRef _caravanHead, _caravanTail;
 };
 
 // TraderLlama: a wandering trader's llama; it despawns after 40 minutes unless a player tamed it, and defends its

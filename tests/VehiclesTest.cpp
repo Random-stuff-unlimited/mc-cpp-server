@@ -340,3 +340,28 @@ TEST(boat_two_passengers) {
 	CHECK(chest->interact(*alice, 0));
 	CHECK(!chest->interact(*carol, 0));
 }
+
+// A caravan: llamas near a leashed one follow it in a line, each the one before
+TEST(llama_caravan) {
+	LevelFixture f(2);
+	auto player = addPlayer(f, 0.5, Y, 0.5);
+	std::vector<Llama*> llamas;
+	for (int i = 0; i < 3; i++) {
+		auto* llama = dynamic_cast<Llama*>(spawnMob(f, "minecraft:llama", {3 + i * 3, Y, 0}));
+		CHECK(llama);
+		if (!llama) return;
+		llama->setBaby(false);
+		llamas.push_back(llama);
+	}
+	player->setSelectedSlot(0);
+	player->inventory().set(player->handSlot(0), ItemStack(f.item("minecraft:lead"), 1));
+	CHECK(llamas[0]->handleLeashInteraction(*player, 0));
+	f.tick(40);
+	CHECK(llamas[1]->caravanHead() == llamas[0] || llamas[2]->caravanHead() == llamas[0]);
+	int following = (llamas[1]->inCaravan() ? 1 : 0) + (llamas[2]->inCaravan() ? 1 : 0);
+	CHECK_EQ(following, 2);
+	// The lead goes: the caravan breaks up
+	llamas[0]->dropLeash(false);
+	f.tick(5);
+	CHECK(!llamas[1]->inCaravan() && !llamas[2]->inCaravan());
+}
