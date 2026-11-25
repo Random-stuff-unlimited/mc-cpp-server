@@ -95,7 +95,8 @@ Les 85 types de mobs vanilla ont leur classe et leur IA (`src/world/entity/mobs`
 - [x] Réglages de spawn : spawn par biome (tableaux de `worldgen/biome`, coûts de spawn), caps globaux et par joueur,
       caps configurables par dimension (`config.json` → `world.spawn-limits`)
 - [ ] Spawns liés aux structures (forteresse, cabane de sorcière, monument, avant-poste) : pas de structures générées
-- [ ] Sons par type (ambient/hurt/death/step) complets
+- [x] Sons : ambiance/blessure/mort par type, pas des mobs (le leur ou celui du bloc), pose de bloc entendue par les autres
+- [ ] Types de son exacts des blocs (ici déduits du nom : le gamedata ne les a pas)
 
 ## Villageois & commerce
 

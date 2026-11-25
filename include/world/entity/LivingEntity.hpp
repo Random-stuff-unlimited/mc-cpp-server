@@ -346,6 +346,9 @@ class LivingEntity : public Entity, public MobEffects::Host {
 	virtual float soundVolume() const { return 1.0F; }
 	void		 broadcastEntityEvent(int event);
 	virtual void playHurtSound();
+	// Entity.playStepSound: its type's step sound, else the block's under it
+	virtual void playStepSound(const BlockPos& on, int state);
+	friend class Entity; // Entity::move plays the steps
 	// LivingEntity.getHurtSound / getDeathSound: its type's by default
 	virtual std::string hurtSoundName() const { return typeSound("hurt", "minecraft:entity.generic.hurt"); }
 	virtual std::string deathSoundName() const { return typeSound("death", "minecraft:entity.generic.death"); }

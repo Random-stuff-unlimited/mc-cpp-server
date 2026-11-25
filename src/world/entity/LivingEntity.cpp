@@ -1,3 +1,4 @@
+#include "world/blocks/BlockSounds.hpp"
 #include "world/Stats.hpp"
 #include "world/entity/LivingEntity.hpp"
 
@@ -976,6 +977,12 @@ void LivingEntity::playSound(const std::string& sound, float volume, float pitch
 	if (sound.empty()) return;
 	_level.playSoundAt(nullptr, _position.x, _position.y, _position.z, sound, _hostileSounds ? Level::SoundSource::Hostile : Level::SoundSource::Neutral,
 					   volume, pitch);
+}
+
+void LivingEntity::playStepSound(const BlockPos&, int state) {
+	std::string own = typeSound("step", "");
+	if (!own.empty()) return playSound(own, 0.15F, 1.0F);
+	playSound(BlockSounds::sound(_level.gameData(), _level.blocks().blockOf(state), "step"), 0.15F, 1.0F);
 }
 
 float LivingEntity::voicePitch() { return (_random.nextFloat() - _random.nextFloat()) * 0.2F + (isBaby() ? 1.5F : 1.0F); }

@@ -1,3 +1,4 @@
+#include "world/entity/LivingEntity.hpp"
 #include "world/entity/Entity.hpp"
 
 #include "commands/CommandSupport.hpp"
@@ -242,6 +243,17 @@ void Entity::move(Vec3 movement) {
 	checkFallDamage(allowed.y, _onGround, getOnPos(0.2f)); // getOnPosLegacy
 	if (_removed) return;
 
+	// The steps of the living (Entity.move with MovementEmission.ALL): one sound per block walked or climbed
+	if (LivingEntity* living = asLiving()) {
+		BlockPos on	   = getOnPos(0.2f);
+		int		 state = _level.getBlockState(on);
+		double	 dy	   = 0.0; // Only counted while climbing (isStateClimbable): not here
+		_moveDist += static_cast<float>(std::sqrt(allowed.x * allowed.x + dy * dy + allowed.z * allowed.z) * 0.6);
+		if (_moveDist > _nextStep && !_level.blocks().isAir(state) && _onGround) {
+			_nextStep = _moveDist + 1.0F;
+			living->playStepSound(on, state);
+		}
+	}
 	if (_horizontalCollision) _delta = {collidedX ? 0.0 : _delta.x, _delta.y, collidedZ ? 0.0 : _delta.z};
 	// Block.updateEntityMovementAfterFallOn: landing stops the fall, slime and beds bounce (living: 1.0, others: 0.8)
 	if (movement.y != allowed.y) {

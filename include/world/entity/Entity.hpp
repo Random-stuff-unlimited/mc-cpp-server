@@ -197,6 +197,7 @@ class Entity : public Actor {
 	float					_yRot = 0, _xRot = 0, _yRotO = 0, _xRotO = 0;
 	Vec3					_oldPosition;
 	double					_fallDistance		= 0.0;
+	float					_moveDist = 0.0F, _nextStep = 1.0F; // Entity.moveDist and nextStep: when its steps sound
 	int						_remainingFireTicks = 0;
 
 	void baseTick();

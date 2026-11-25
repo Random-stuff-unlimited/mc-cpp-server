@@ -9,6 +9,7 @@
 #include "world/blockentity/BeaconBlockEntity.hpp"
 #include "world/inventory/BeaconMenu.hpp"
 #include "world/blocks/Composter.hpp"
+#include "world/blocks/BlockSounds.hpp"
 #include "world/blockentity/ContainerEntities.hpp"
 
 // Chiseled bookshelves, decorated pots, jukeboxes, lecterns, crafters and shelves
@@ -471,4 +472,16 @@ TEST(composter_with_hoppers) {
 	int dirt = 0;
 	for (int slot = 0; slot < top->size(); slot++) dirt += top->item(slot).item == f.item("minecraft:dirt") ? top->item(slot).count : 0;
 	CHECK_EQ(dirt, 3);
+}
+
+// Block sound types from the block names: their own when the game has one, else by material
+TEST(block_sound_types) {
+	LevelFixture f(1);
+	CHECK(BlockSounds::sound(f.data, f.block("minecraft:oak_planks"), "step") == "minecraft:block.wood.step");
+	CHECK(BlockSounds::sound(f.data, f.block("minecraft:cherry_log"), "place") == "minecraft:block.cherry_wood.place");
+	CHECK(BlockSounds::sound(f.data, f.block("minecraft:grass_block"), "step") == "minecraft:block.grass.step");
+	CHECK(BlockSounds::sound(f.data, f.block("minecraft:red_sand"), "step") == "minecraft:block.sand.step");
+	CHECK(BlockSounds::sound(f.data, f.block("minecraft:deepslate_bricks"), "break") == "minecraft:block.deepslate_bricks.break");
+	CHECK(BlockSounds::sound(f.data, f.block("minecraft:stone"), "hit") == "minecraft:block.stone.hit");
+	CHECK(BlockSounds::sound(f.data, f.block("minecraft:white_wool"), "fall") == "minecraft:block.wool.fall");
 }

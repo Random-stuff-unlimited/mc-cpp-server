@@ -1,3 +1,4 @@
+#include "world/blocks/BlockSounds.hpp"
 #include "world/blocks/Signs.hpp"
 #include "BlockPos.hpp"
 #include "PacketIds.hpp"
@@ -353,6 +354,8 @@ void handleUseItemOnPacket(Packet& packet, Server& server) {
 		// block entity (BlockEntity.applyComponentsFromItemStack)
 		if (BlockEntity* entity = level.getBlockEntity(target)) ContainerItems::apply(*entity, player.getStackInHand(hand), gameData);
 		level.behavior(state).setPlacedBy(level, target, state);
+		// BlockItem.place: the place sound for the others (the placer's client played it)
+		level.playSound(&player, target, BlockSounds::sound(gameData, level.blocks().blockOf(state), "place"), Level::SoundSource::Blocks, 1.0F, 0.8F);
 		Signs::afterPlaced(level, player, target); // A new sign opens its editor
 	}
 	// One item used, except with infinite materials (Stats.ITEM_USED)
