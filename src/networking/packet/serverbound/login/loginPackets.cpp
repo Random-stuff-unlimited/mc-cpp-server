@@ -22,7 +22,12 @@ void handleLoginStartPacket(Packet& packet, Server& server) {
 	// PlayerList.canPlayerLogin: banned (name or IP) or not on the whitelist
 	if (auto refusal = server.access().loginRefusal(UUID::fromOfflinePlayer(username), player->address())) {
 		player->setPlayerName(username);
-		server.kick(player, refusal->key, refusal->args);
+		if (refusal->expiration.empty()) {
+			server.kick(player, refusal->key, refusal->args);
+		} else {
+			// A temporary ban: the reason, then when it ends
+			server.kick(player, refusal->key, refusal->args, {"multiplayer.disconnect.banned.expiration", {refusal->expiration}});
+		}
 		return;
 	}
 

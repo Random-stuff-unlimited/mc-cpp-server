@@ -1725,6 +1725,7 @@ TEST(jockey_saved_with_chunk) {
 	CHECK(spider && skeleton);
 	if (!spider || !skeleton) return;
 	CHECK(spider->addEntityPassenger(*skeleton));
+	int spiderType = spider->typeId(), skeletonType = skeleton->typeId(); // The two are gone once unloaded
 	f.tick(1);
 	f.level->saveEntities();
 	std::shared_ptr<Chunk> chunk = f.world->loadedChunk(0, 0);
@@ -1740,8 +1741,8 @@ TEST(jockey_saved_with_chunk) {
 	f.level->entities().forEach([&](Entity& entity) {
 		Mob* mob = dynamic_cast<Mob*>(&entity);
 		if (!mob || mob->isRemoved()) return;
-		if (mob->typeId() == spider->typeId()) newSpider = mob;
-		if (mob->typeId() == skeleton->typeId()) newSkeleton = mob;
+		if (mob->typeId() == spiderType) newSpider = mob;
+		if (mob->typeId() == skeletonType) newSkeleton = mob;
 	});
 	CHECK(newSpider && newSkeleton);
 	if (newSpider && newSkeleton) CHECK(newSkeleton->isPassenger() && newSkeleton->vehicleId() == newSpider->id());

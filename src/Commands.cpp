@@ -11,6 +11,7 @@
 #include "player.hpp"
 #include "world/ChunkStreamer.hpp"
 
+#include <cctype>
 #include <cstdlib>
 #include <sstream>
 
@@ -119,7 +120,7 @@ namespace Commands {
 		// What the console may run: the commands that don't need a player, and those naming their target
 		static const std::vector<std::pair<std::string, int>> CONSOLE = {
 			{"help", CONSOLE_ALWAYS},	 {"list", CONSOLE_ALWAYS},		 {"op", CONSOLE_ALWAYS},	   {"deop", CONSOLE_ALWAYS},
-			{"kick", CONSOLE_ALWAYS},	 {"ban", CONSOLE_ALWAYS},		 {"ban-ip", CONSOLE_ALWAYS},   {"pardon", CONSOLE_ALWAYS},
+			{"kick", CONSOLE_ALWAYS},	 {"ban", CONSOLE_ALWAYS}, {"tempban", CONSOLE_ALWAYS},		 {"ban-ip", CONSOLE_ALWAYS},   {"pardon", CONSOLE_ALWAYS},
 			{"pardon-ip", CONSOLE_ALWAYS}, {"banlist", CONSOLE_ALWAYS},	 {"whitelist", CONSOLE_ALWAYS}, {"say", CONSOLE_ALWAYS},
 			{"tell", CONSOLE_ALWAYS},	 {"msg", CONSOLE_ALWAYS},		 {"w", CONSOLE_ALWAYS},		   {"me", CONSOLE_ALWAYS},
 			{"time", CONSOLE_ALWAYS},	 {"weather", CONSOLE_ALWAYS},	 {"difficulty", CONSOLE_ALWAYS}, {"stop", CONSOLE_ALWAYS},
@@ -178,10 +179,43 @@ namespace Commands {
 		for (const auto& other : server.getGamePlayers()) Packet::sendFrame(other, frame, server);
 	}
 
+	std::vector<std::string> consoleCompletions(const std::string& line, const std::vector<std::string>& playerNames) {
+		std::vector<std::string> words;
+		size_t					 start = line.find_first_not_of(" /");
+		size_t					 space = start == std::string::npos ? std::string::npos : line.find(' ', start);
+		if (space == std::string::npos) {
+			for (const Command& command : commandList()) {
+				if (command.run && command.console != CONSOLE_NEVER) words.push_back(command.name);
+			}
+			return words;
+		}
+		std::string name = line.substr(start, space - start);
+		for (const Command& command : commandList()) {
+			if (command.name != name) continue;
+			// The literal words of its usage, outside the <arguments>
+			int			depth = 0;
+			std::string word;
+			for (char c : command.usage + " ") {
+				if (c == '<') depth++;
+				if (depth == 0 && (std::isalnum(static_cast<unsigned char>(c)) || c == '-' || c == '_' || c == '@')) {
+					word += c;
+					continue;
+				}
+				if (c == '>') depth--;
+				if (!word.empty() && word != name) words.push_back(word);
+				word.clear();
+			}
+		}
+		words.insert(words.end(), playerNames.begin(), playerNames.end());
+		return words;
+	}
+
 	void translated(Server& server, Player& player, const std::string& key, const std::vector<std::string>& args) {
 		if (player.isConsole()) return g_logger->logGameInfo(INFO, englishText(key, args), "Console");
 		Buffer message;
-		TextComponent::writeTranslatable(message, key, args);
+		// "server.*" keys are this server's own (the clients don't know them): sent in English
+		if (key.rfind("server.", 0) == 0) TextComponent::writeText(message, englishText(key, args));
+		else TextComponent::writeTranslatable(message, key, args);
 		message.writeBool(false);
 		Packet::send(player.shared_from_this(), PacketId::Play::Clientbound::SYSTEM_CHAT, message, server);
 	}
@@ -189,7 +223,9 @@ namespace Commands {
 	void failure(Server& server, Player& player, const std::string& key, const std::vector<std::string>& args) {
 		if (player.isConsole()) return g_logger->logGameInfo(WARN, englishText(key, args), "Console");
 		Buffer message;
-		TextComponent::writeTranslatable(message, key, args, "red");
+		// "server.*" keys are this server's own (the clients don't know them): sent in English
+		if (key.rfind("server.", 0) == 0) TextComponent::writeText(message, englishText(key, args), "red");
+		else TextComponent::writeTranslatable(message, key, args, "red");
 		message.writeBool(false);
 		Packet::send(player.shared_from_this(), PacketId::Play::Clientbound::SYSTEM_CHAT, message, server);
 	}

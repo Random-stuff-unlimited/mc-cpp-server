@@ -6,7 +6,9 @@
 #include <algorithm>
 #include <cctype>
 #include <ctime>
+#include <cstdio>
 #include <fstream>
+#include <iterator>
 
 namespace {
 	using json = nlohmann::json;
@@ -54,6 +56,36 @@ namespace {
 	}
 
 	// BanListEntry.DATE_FORMAT: "yyyy-MM-dd HH:mm:ss Z"
+	std::string format(std::time_t t) {
+		std::tm tm{};
+		gmtime_r(&t, &tm);
+		char buf[32];
+		std::strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S +0000", &tm);
+		return buf;
+	}
+
+	// The same back (any "+hhmm"/"-hhmm" offset), nullopt if it isn't one
+	std::optional<std::time_t> parseDate(const std::string& text) {
+		int year, month, day, hour, minute, second;
+		char sign = '+';
+		int	 offset = 0;
+		int	 read	= std::sscanf(text.c_str(), "%d-%d-%d %d:%d:%d %c%d", &year, &month, &day, &hour, &minute, &second, &sign, &offset);
+		if (read < 6) return std::nullopt;
+		std::tm tm{};
+		tm.tm_year = year - 1900;
+		tm.tm_mon  = month - 1;
+		tm.tm_mday = day;
+		tm.tm_hour = hour;
+		tm.tm_min  = minute;
+		tm.tm_sec  = second;
+		std::time_t t = timegm(&tm);
+		if (read == 8) {
+			long shift = (offset / 100) * 3600L + (offset % 100) * 60L;
+			t -= sign == '-' ? -shift : shift;
+		}
+		return t;
+	}
+
 	std::string now() {
 		std::time_t t = std::time(nullptr);
 		std::tm		tm{};
@@ -89,6 +121,32 @@ namespace {
 		return entry;
 	}
 } // namespace
+
+bool ServerAccess::Ban::hasExpired(std::time_t now) const {
+	if (expires == "forever" || expires.empty()) return false;
+	auto end = parseDate(expires);
+	return end && *end <= now;
+}
+
+std::string ServerAccess::expiresIn(long long seconds) { return format(std::time(nullptr) + static_cast<std::time_t>(seconds)); }
+
+std::optional<long long> ServerAccess::parseBanDuration(const std::string& text) {
+	if (text.size() < 2 || !std::isdigit(static_cast<unsigned char>(text[0]))) return std::nullopt;
+	long long unit;
+	switch (std::tolower(static_cast<unsigned char>(text.back()))) {
+	case 's': unit = 1; break;
+	case 'm': unit = 60; break;
+	case 'h': unit = 3600; break;
+	case 'd': unit = 86400; break;
+	case 'w': unit = 604800; break;
+	default: return std::nullopt;
+	}
+	std::string number = text.substr(0, text.size() - 1);
+	if (number.size() > 9 || !std::all_of(number.begin(), number.end(), [](unsigned char c) { return std::isdigit(c); })) return std::nullopt;
+	long long value = std::stoll(number) * unit;
+	if (value <= 0) return std::nullopt;
+	return value;
+}
 
 void ServerAccess::load(const std::filesystem::path& directory) {
 	std::lock_guard lock(_mutex);
@@ -167,9 +225,10 @@ bool ServerAccess::whitelistEnabled() const {
 }
 
 std::optional<ServerAccess::Refusal> ServerAccess::loginRefusal(const UUID& uuid, const std::string& ip) const {
-	if (auto ban = banOf(uuid)) return Refusal{"multiplayer.disconnect.banned.reason", {ban->reason}};
+	auto expiration = [](const Ban& ban) { return ban.expires == "forever" ? std::string() : ban.expires; };
+	if (auto ban = banOf(uuid)) return Refusal{"multiplayer.disconnect.banned.reason", {ban->reason}, expiration(*ban)};
 	if (!ip.empty()) {
-		if (auto ban = ipBanOf(ip)) return Refusal{"multiplayer.disconnect.banned_ip.reason", {ban->reason}};
+		if (auto ban = ipBanOf(ip)) return Refusal{"multiplayer.disconnect.banned_ip.reason", {ban->reason}, expiration(*ban)};
 	}
 	if (whitelistEnabled() && permissionLevel(uuid) == 0 && !isWhitelisted(uuid)) return Refusal{"multiplayer.disconnect.not_whitelisted", {}};
 	return std::nullopt;
@@ -210,23 +269,27 @@ bool ServerAccess::isBanned(const UUID& uuid) const { return banOf(uuid).has_val
 std::optional<ServerAccess::Ban> ServerAccess::banOf(const UUID& uuid) const {
 	std::lock_guard lock(_mutex);
 	std::string		target = uuid.toString();
+	std::time_t		time   = std::time(nullptr);
 	for (const Ban& ban : _bans) {
-		if (ban.target == target) return ban;
+		if (ban.target == target && !ban.hasExpired(time)) return ban;
 	}
 	return std::nullopt;
 }
 
-bool ServerAccess::ban(const UUID& uuid, const std::string& name, const std::string& source, const std::string& reason) {
+bool ServerAccess::ban(const UUID& uuid, const std::string& name, const std::string& source, const std::string& reason, const std::string& expires) {
 	if (isBanned(uuid)) return false;
 	std::lock_guard lock(_mutex);
-	_bans.push_back({uuid.toString(), name, now(), source, "forever", reason});
+	std::string		target = uuid.toString();
+	std::erase_if(_bans, [&](const Ban& ban) { return ban.target == target; }); // Expired ones
+	_bans.push_back({target, name, now(), source, expires, reason});
 	saveBans();
 	return true;
 }
 
 bool ServerAccess::pardon(const std::string& name) {
 	std::lock_guard lock(_mutex);
-	auto it = std::find_if(_bans.begin(), _bans.end(), [&](const Ban& ban) { return lower(ban.name) == lower(name); });
+	std::time_t time = std::time(nullptr);
+	auto it = std::find_if(_bans.begin(), _bans.end(), [&](const Ban& ban) { return lower(ban.name) == lower(name) && !ban.hasExpired(time); });
 	if (it == _bans.end()) return false;
 	_bans.erase(it);
 	saveBans();
@@ -237,16 +300,18 @@ bool ServerAccess::isIpBanned(const std::string& ip) const { return ipBanOf(ip).
 
 std::optional<ServerAccess::Ban> ServerAccess::ipBanOf(const std::string& ip) const {
 	std::lock_guard lock(_mutex);
+	std::time_t		time = std::time(nullptr);
 	for (const Ban& ban : _ipBans) {
-		if (ban.target == ip) return ban;
+		if (ban.target == ip && !ban.hasExpired(time)) return ban;
 	}
 	return std::nullopt;
 }
 
-bool ServerAccess::banIp(const std::string& ip, const std::string& source, const std::string& reason) {
+bool ServerAccess::banIp(const std::string& ip, const std::string& source, const std::string& reason, const std::string& expires) {
 	if (isIpBanned(ip)) return false;
 	std::lock_guard lock(_mutex);
-	_ipBans.push_back({ip, "", now(), source, "forever", reason});
+	std::erase_if(_ipBans, [&](const Ban& ban) { return ban.target == ip; });
+	_ipBans.push_back({ip, "", now(), source, expires, reason});
 	saveIpBans();
 	return true;
 }
@@ -260,14 +325,21 @@ bool ServerAccess::pardonIp(const std::string& ip) {
 	return true;
 }
 
+// The bans still in force
 std::vector<ServerAccess::Ban> ServerAccess::bans() const {
-	std::lock_guard lock(_mutex);
-	return _bans;
+	std::lock_guard	 lock(_mutex);
+	std::vector<Ban> list;
+	std::time_t		 time = std::time(nullptr);
+	std::copy_if(_bans.begin(), _bans.end(), std::back_inserter(list), [&](const Ban& ban) { return !ban.hasExpired(time); });
+	return list;
 }
 
 std::vector<ServerAccess::Ban> ServerAccess::ipBans() const {
-	std::lock_guard lock(_mutex);
-	return _ipBans;
+	std::lock_guard	 lock(_mutex);
+	std::vector<Ban> list;
+	std::time_t		 time = std::time(nullptr);
+	std::copy_if(_ipBans.begin(), _ipBans.end(), std::back_inserter(list), [&](const Ban& ban) { return !ban.hasExpired(time); });
+	return list;
 }
 
 bool ServerAccess::isWhitelisted(const UUID& uuid) const {

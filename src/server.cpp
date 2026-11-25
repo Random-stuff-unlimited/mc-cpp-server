@@ -1,3 +1,4 @@
+#include "ConsoleInput.hpp"
 #include "config.hpp"
 #include "Commands.hpp"
 #include "lib/filesystem.hpp"
@@ -24,6 +25,7 @@
 
 #include <chrono>
 #include <csignal>
+#include <future>
 #include <cstddef>
 #include <cstdio>
 #include <exception>
@@ -81,6 +83,17 @@ void Server::kick(Player* player, const std::string& translationKey, const std::
 	json login = {{"translate", translationKey}};
 	for (const std::string& arg : args) login["with"].push_back(arg);
 	disconnect(player, login.dump(), [&](Buffer& buf) { TextComponent::writeTranslatable(buf, translationKey, args); }, translationKey);
+}
+
+void Server::kick(Player* player, const std::string& translationKey, const std::vector<std::string>& args,
+				  const std::pair<std::string, std::vector<std::string>>& appended) {
+	json message = {{"translate", translationKey}};
+	for (const std::string& arg : args) message["with"].push_back(arg);
+	json extra = {{"translate", appended.first}};
+	for (const std::string& arg : appended.second) extra["with"].push_back(arg);
+	message["extra"] = json::array({extra});
+	std::string text = message.dump();
+	disconnect(player, text, [&](Buffer& buf) { TextComponent::writeJson(buf, text); }, translationKey);
 }
 
 void Server::kickWithText(Player* player, const std::string& text) {
@@ -662,13 +675,28 @@ int Server::start_server() {
 		// Detached: it stays blocked on the input until the process ends
 		console();
 		std::thread([this] {
-			std::string line;
-			while (std::getline(std::cin, line)) {
+			auto onLine = [this](std::string line) {
 				while (!line.empty() && (line.back() == '\r' || line.back() == ' ')) line.pop_back();
 				size_t start = line.find_first_not_of(" /");
-				if (start == std::string::npos) continue;
+				if (start == std::string::npos) return;
 				_tickLoop.post([this, command = line.substr(start)] { Commands::run(*this, *_console, command); });
-			}
+			};
+			// Tab: the online players' names are read on the game thread
+			auto complete = [this](const std::string& line) {
+				auto names = std::make_shared<std::promise<std::vector<std::string>>>();
+				auto ready = names->get_future();
+				_tickLoop.post([this, names] {
+					std::vector<std::string> list;
+					for (const auto& player : getGamePlayers()) {
+						if (!player->isDisconnected()) list.push_back(player->getPlayerName());
+					}
+					names->set_value(std::move(list));
+				});
+				std::vector<std::string> players;
+				if (ready.wait_for(std::chrono::seconds(1)) == std::future_status::ready) players = ready.get();
+				return Commands::consoleCompletions(line, players);
+			};
+			ConsoleInput::run(onLine, complete);
 		}).detach();
 
 		struct sigaction sa = {};

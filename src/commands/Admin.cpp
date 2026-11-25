@@ -109,6 +109,24 @@ namespace Commands {
 				}
 				if (changed == 0) failure(server, player, "commands.ban.failed");
 			}, LEVEL_ADMINS});
+			// Not vanilla: a ban that ends by itself (banned-players.json's "expires"), e.g. /tempban Steve 7d griefing
+			commandList().push_back({"tempban", "tempban <targets> <duration> [<reason>]", [](Server& server, Player& player, const std::vector<std::string>& args) {
+				if (args.size() < 2) return usage(server, player, "tempban <targets> <duration> [<reason>]");
+				auto seconds = ServerAccess::parseBanDuration(args[1]);
+				if (!seconds) return failure(server, player, "server.tempban.invalid");
+				std::string reason	= joined(args, 2, "Banned by an operator.");
+				std::string expires = ServerAccess::expiresIn(*seconds);
+				int			changed = 0;
+				for (const Profile& profile : profiles(server, player, args[0])) {
+					if (!server.access().ban(profile.uuid, profile.name, player.getPlayerName(), reason, expires)) continue;
+					changed++;
+					translated(server, player, "server.tempban.success", {profile.name, expires, reason});
+					for (Player* online : onlineWith(server, profile.uuid)) {
+						server.kick(online, "multiplayer.disconnect.banned.reason", {reason}, {"multiplayer.disconnect.banned.expiration", {expires}});
+					}
+				}
+				if (changed == 0) failure(server, player, "commands.ban.failed");
+			}, LEVEL_ADMINS});
 			commandList().push_back({"ban-ip", "ban-ip <target> [<reason>]", [](Server& server, Player& player, const std::vector<std::string>& args) {
 				if (args.empty()) return usage(server, player, "ban-ip <target> [<reason>]");
 				// An IP, or an online player's

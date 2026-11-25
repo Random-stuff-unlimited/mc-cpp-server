@@ -77,6 +77,9 @@ class Server {
 	// Disconnects a player with a message (a translation key of the game, e.g. "multiplayer.disconnect.kicked", and
 	// its arguments)
 	void kick(Player* player, const std::string& translationKey, const std::vector<std::string>& args = {});
+	// The same followed by a second translated message (a temporary ban's end)
+	void kick(Player* player, const std::string& translationKey, const std::vector<std::string>& args,
+			  const std::pair<std::string, std::vector<std::string>>& appended);
 	// The same with a plain text message (/kick's reason)
 	void kickWithText(Player* player, const std::string& text);
 	// Ops, bans and the whitelist (ops.json, banned-players.json, banned-ips.json, whitelist.json)

@@ -4,6 +4,7 @@
 #include "network/buffer.hpp"
 #include "LevelFixture.hpp"
 #include "Test.hpp"
+#include "ConsoleInput.hpp"
 #include "player.hpp"
 #include "world/Survival.hpp"
 #include "world/Combat.hpp"
@@ -488,4 +489,46 @@ TEST(commands_team_collision_rule) {
 	CHECK(!board.canPush("A", "B") && board.canPush("A", "C"));
 	Commands::run(f.server, *player, "team modify blue collisionRule never");
 	CHECK(!board.canPush("A", "C") && !board.canPush("C", "D"));
+}
+
+// Temporary bans: /tempban, and an "expires" date in the past is no ban at all
+TEST(commands_temporary_ban) {
+	LevelFixture f;
+	Commands::registerCommands();
+	auto admin = makePlayer(f);
+	f.addPlayer(admin);
+	ServerAccess& access = f.server.access();
+	CHECK(ServerAccess::parseBanDuration("7d") == 604800LL && ServerAccess::parseBanDuration("30m") == 1800LL);
+	CHECK(!ServerAccess::parseBanDuration("d") && !ServerAccess::parseBanDuration("0s") && !ServerAccess::parseBanDuration("5x"));
+	UUID eve = UUID::fromOfflinePlayer("Eve");
+	Commands::run(f.server, *admin, "tempban Eve 2h spam");
+	auto refusal = access.loginRefusal(eve, "");
+	CHECK(refusal && refusal->args.at(0) == "spam" && !refusal->expiration.empty());
+	Commands::run(f.server, *admin, "tempban Eve soon"); // Not a duration
+	CHECK_EQ(access.bans().size(), 1u);
+	Commands::run(f.server, *admin, "pardon Eve");
+	// Expired: lets the player in, and can be replaced by a new ban
+	UUID mallory = UUID::fromOfflinePlayer("Mallory");
+	CHECK(access.ban(mallory, "Mallory", "Server", "old", "2001-01-01 00:00:00 +0000"));
+	CHECK(!access.loginRefusal(mallory, "") && access.bans().empty());
+	CHECK(access.ban(mallory, "Mallory", "Server", "new"));
+	refusal = access.loginRefusal(mallory, "");
+	CHECK(refusal && refusal->args.at(0) == "new" && refusal->expiration.empty());
+	ServerAccess::Ban offset{"x", "", "", "", "2001-01-01 02:00:00 +0200"};
+	CHECK(offset.hasExpired(978307200) && !offset.hasExpired(978307199));
+}
+
+// The console's Tab completion
+TEST(console_completion) {
+	Commands::registerCommands();
+	auto done = ConsoleInput::complete("whi", Commands::consoleCompletions("whi", {}));
+	CHECK(done.line == "whitelist " && done.matches.size() == 1);
+	done = ConsoleInput::complete("whitelist re", Commands::consoleCompletions("whitelist re", {}));
+	CHECK(done.line == "whitelist re" && done.matches.size() == 2); // reload, remove
+	done = ConsoleInput::complete("kick al", Commands::consoleCompletions("kick al", {"Alice", "Bob"}));
+	CHECK(done.line == "kick Alice ");
+	done = ConsoleInput::complete("tp", Commands::consoleCompletions("tp", {})); // Not a console command
+	CHECK(done.matches.empty());
+	done = ConsoleInput::complete("ba", Commands::consoleCompletions("ba", {}));
+	CHECK(done.line == "ban" && done.matches.size() == 3); // ban, ban-ip, banlist
 }

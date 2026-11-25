@@ -1,5 +1,7 @@
 #include "logger.hpp"
 
+#include "ConsoleInput.hpp"
+
 #include "lib/filesystem.hpp"
 
 #include <chrono>
@@ -127,7 +129,7 @@ void LogManager::log(LogLevel level, LogCategory category, const std::string& me
 
 	if (category == GAMEINFO || category == NETWORK) { // Remove category == NETWORK on release build
 		std::string formattedEntry = formatLogEntry(entry);
-		std::cout << formattedEntry << std::endl;
+		ConsoleInput::print(formattedEntry); // Above the console's line being typed
 	}
 }
 

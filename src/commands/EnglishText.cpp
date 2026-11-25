@@ -15,6 +15,8 @@ namespace Commands {
 				{"chat.type.text", "<%s> %s"},
 				{"commands.ban.failed", "Nothing changed. The player is already banned"},
 				{"commands.ban.success", "Banned %s: %s"},
+				{"server.tempban.success", "Banned %s until %s: %s"},
+				{"server.tempban.invalid", "Invalid duration (a number then s, m, h, d or w, e.g. 7d)"},
 				{"commands.banip.failed", "Nothing changed. That IP is already banned"},
 				{"commands.banip.info", "This ban affects %s player(s): %s"},
 				{"commands.banip.invalid", "Invalid IP address or unknown player"},

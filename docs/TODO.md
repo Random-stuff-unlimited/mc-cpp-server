@@ -33,7 +33,7 @@ les commandes d'admin ci-dessous. Sans être op, seules `help`, `list`, `spawn`,
       `ops.json`, `banned-players.json`, `banned-ips.json`, `whitelist.json` (format vanilla, à côté de `config.json`),
       refus au login ; `config.json` : `op-permission-level`, `white-list`, `enforce-whitelist`
 - [x] Console serveur (stdin, niveau 4, messages en anglais dans le log), `/stop`, `/save-all`
-- [ ] Bans temporaires ; historique et complétion dans la console
+- [x] Bans temporaires ; historique et complétion dans la console
 - [x] `/summon <entité> [x y z]`
 - [x] `/effect give|clear`
 - [x] `/xp` (`/experience`) `add|set|query`, en points ou niveaux

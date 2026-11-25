@@ -3,6 +3,7 @@
 
 #include "lib/UUID.hpp"
 
+#include <ctime>
 #include <filesystem>
 #include <mutex>
 #include <optional>
@@ -24,11 +25,14 @@ class ServerAccess {
 		int			level = 4;
 		bool		bypassesPlayerLimit = false;
 	};
-	// A ban, by player UUID or by IP (BanListEntry): only permanent ones ("expires": "forever")
+	// A ban, by player UUID or by IP (BanListEntry). "expires" is "forever" or a date (BanListEntry.DATE_FORMAT,
+	// "yyyy-MM-dd HH:mm:ss Z"): past it, the ban is gone (BanListEntry.hasExpired)
 	struct Ban {
 		std::string target; // The UUID (as text) or the IP
 		std::string name;	// The player's name (empty for IP bans)
 		std::string created, source, expires = "forever", reason = "Banned by an operator.";
+
+		bool hasExpired(std::time_t now) const;
 	};
 	struct Listed {
 		UUID		uuid;
@@ -38,6 +42,7 @@ class ServerAccess {
 	struct Refusal {
 		std::string				 key;
 		std::vector<std::string> args;
+		std::string				 expiration; // A temporary ban's end ("multiplayer.disconnect.banned.expiration"), else empty
 	};
 
 	// Reads the four files of the directory (missing ones: empty lists). An empty directory: kept in memory only
@@ -57,10 +62,12 @@ class ServerAccess {
 	std::vector<Op> ops() const;
 
 	bool					 isBanned(const UUID& uuid) const;
-	bool					 ban(const UUID& uuid, const std::string& name, const std::string& source, const std::string& reason);
+	// expires: "forever", or a date from expiresIn
+	bool					 ban(const UUID& uuid, const std::string& name, const std::string& source, const std::string& reason,
+								 const std::string& expires = "forever");
 	bool					 pardon(const std::string& name); // By name, ignoring case
 	bool					 isIpBanned(const std::string& ip) const;
-	bool					 banIp(const std::string& ip, const std::string& source, const std::string& reason);
+	bool					 banIp(const std::string& ip, const std::string& source, const std::string& reason, const std::string& expires = "forever");
 	bool					 pardonIp(const std::string& ip);
 	std::vector<Ban>		 bans() const;
 	std::vector<Ban>		 ipBans() const;
@@ -73,6 +80,11 @@ class ServerAccess {
 	std::vector<Listed> whitelist() const;
 	// /whitelist reload: the whitelist (and the ops) read again from their files
 	void reloadWhitelist();
+
+	// The date `seconds` from now, as banned-players.json writes it
+	static std::string expiresIn(long long seconds);
+	// A ban duration: a number and a unit, s, m(inutes), h, d or w ("30m", "7d"); nullopt if malformed or not positive
+	static std::optional<long long> parseBanDuration(const std::string& text);
 
 	// InetAddresses.isInetAddress for IPv4: four numbers of 0 to 255
 	static bool isIpAddress(const std::string& text);

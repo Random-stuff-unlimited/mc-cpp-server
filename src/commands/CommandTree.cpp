@@ -216,6 +216,7 @@ namespace {
 		};
 		if (name == "op" || name == "deop" || name == "pardon") return t.literal(name, false, {profile("targets", true)});
 		if (name == "ban") return t.literal("ban", false, {profile("targets", true, {message("reason")})});
+		if (name == "tempban") return t.literal("tempban", false, {profile("targets", false, {t.word("duration", true, {message("reason")})})});
 		if (name == "kick") return t.literal("kick", false, {t.players("targets", false, true, {message("reason")})});
 		if (name == "ban-ip") return t.literal("ban-ip", false, {t.word("target", true, {message("reason")})});
 		if (name == "pardon-ip") return t.literal("pardon-ip", false, {t.word("target", true)});

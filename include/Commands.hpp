@@ -52,6 +52,9 @@ namespace Commands {
 	// A translation key with its arguments as English text, for the console ("Made Bob a server operator"); keys it
 	// doesn't know: the key and its arguments
 	std::string englishText(const std::string& key, const std::vector<std::string>& args);
+	// The console's Tab: the console's command names for the first word; then the words of the command's usage
+	// ("whitelist (on|off|...)") and the given player names
+	std::vector<std::string> consoleCompletions(const std::string& line, const std::vector<std::string>& playerNames);
 	// Whether the player may run this command (its op level)
 	bool canUse(const Player& player, const Command& command);
 	// Its usage, after a wrong call ("Usage: /<usage>")
