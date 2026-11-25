@@ -5,6 +5,8 @@
 #include "LevelFixture.hpp"
 #include "Test.hpp"
 #include "ConsoleInput.hpp"
+#include "network/PluginChannels.hpp"
+#include "network/buffer.hpp"
 #include "player.hpp"
 #include "world/Survival.hpp"
 #include "world/Combat.hpp"
@@ -544,4 +546,58 @@ TEST(simulation_distance) {
 	CHECK(f.level->isSimulated(x + 2, z - 2));
 	CHECK(!f.level->isSimulated(x + 3, z));
 	f.server.getConfig().setSimulationDistance(f.server.getConfig().getViewDistance());
+}
+
+// Plugin channels (minecraft:brand, register/unregister, own handlers) and cookie answers
+TEST(plugin_channels_and_cookies) {
+	LevelFixture f;
+	auto player = makePlayer(f);
+	f.addPlayer(player);
+	auto payload = [&](const std::string& channel, const std::string& bytes) {
+		Buffer data;
+		data.writeString(channel);
+		data.writeBytes(bytes);
+		PluginChannels::handle(f.server, *player, data);
+	};
+	Buffer brand;
+	brand.writeString("fabric");
+	Buffer brandPacket;
+	brandPacket.writeString("minecraft:brand");
+	brandPacket.writeBytes(brand.getData());
+	PluginChannels::handle(f.server, *player, brandPacket);
+	CHECK(player->clientBrand() == "fabric");
+	payload("minecraft:register", std::string("mod:a\0mod:b", 11));
+	CHECK(PluginChannels::listensTo(*player, "mod:a") && PluginChannels::listensTo(*player, "mod:b"));
+	payload("minecraft:unregister", "mod:a");
+	CHECK(!PluginChannels::listensTo(*player, "mod:a"));
+	std::string got;
+	PluginChannels::registerHandler("test:echo", [&](Server&, Player&, Buffer& data) { got = data.readString(64); });
+	Buffer echo;
+	echo.writeString("hi");
+	payload("test:echo", std::string(echo.getData().begin(), echo.getData().end()));
+	CHECK(got == "hi");
+	payload("unknown:channel", "xyz"); // Ignored
+
+	// A cookie answer reaches the request's callback, once; one never asked for is ignored
+	int									calls = 0;
+	std::optional<std::vector<uint8_t>> value;
+	CHECK(Cookies::request(f.server, *player, "test:cookie", [&](std::optional<std::vector<uint8_t>> v) {
+		calls++;
+		value = std::move(v);
+	}));
+	auto answer = [&](bool present) {
+		Buffer data;
+		data.writeString("test:cookie");
+		data.writeBool(present);
+		if (present) {
+			data.writeVarInt(3);
+			data.writeBytes(std::string("abc"));
+		}
+		Cookies::handleResponse(*player, data);
+	};
+	answer(true);
+	CHECK(calls == 1 && value && value->size() == 3 && (*value)[0] == 'a');
+	answer(false);
+	CHECK(calls == 1);
+	CHECK(!Cookies::store(f.server, *player, "test:big", std::vector<uint8_t>(Cookies::MAX_SIZE + 1)));
 }

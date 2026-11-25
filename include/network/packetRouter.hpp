@@ -53,7 +53,6 @@ void handleBlockEntityTagQuery(Packet& packet, Server& server);
 void handleEntityTagQuery(Packet& packet, Server& server);
 void handlePickItemFromEntity(Packet& packet, Server& server);
 void handleTeleportToEntity(Packet& packet, Server& server);
-void handlePlayCustomPayload(Packet& packet, Server& server);
 void tryPickItem(Packet& packet, Server& server, Player& player, Level& level, ItemStack picked, bool infinite);
 
 // Network threads: Handshake, Status, Login and Configuration states

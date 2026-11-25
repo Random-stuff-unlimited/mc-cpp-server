@@ -165,7 +165,7 @@ Les 85 types de mobs vanilla ont leur classe et leur IA (`src/world/entity/mobs`
 ## Réseau / divers
 
 - [x] `BLOCK_CHANGED_ACK` (fin de tick), `BLOCK_ENTITY_TAG_QUERY`
-- [ ] `COOKIE_REQUEST`/`COOKIE_RESPONSE`, `CUSTOM_PAYLOAD` (plugin channels)
+- [x] `COOKIE_REQUEST`/`COOKIE_RESPONSE`, `CUSTOM_PAYLOAD` (plugin channels)
 - [x] Resource packs : `RESOURCE_PACK_PUSH` (config.json `resource-pack`, `require-resource-pack`), refus → expulsion
 - [x] Transfert de serveur : `/transfer`, `TRANSFER`, transferts entrants (`accepts-transfers`)
 - [x] `PING_REQUEST`/`PONG_RESPONSE` play, `CLIENT_TICK_END`, `CHANGE_DIFFICULTY`, `LOCK_DIFFICULTY`, `CHANGE_GAME_MODE` (F3+F4),

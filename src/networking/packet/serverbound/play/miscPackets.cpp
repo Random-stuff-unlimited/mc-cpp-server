@@ -158,8 +158,3 @@ void handleTeleportToEntity(Packet& packet, Server& server) {
 	}
 }
 
-// ServerboundCustomPayloadPacket in play: minecraft:brand is kept (the client's name), the other channels ignored
-void handlePlayCustomPayload(Packet& packet, Server&) {
-	std::string channel = packet.getData().readString(32767);
-	if (channel == "minecraft:brand") packet.getPlayer()->setClientBrand(packet.getData().readString(32767));
-}

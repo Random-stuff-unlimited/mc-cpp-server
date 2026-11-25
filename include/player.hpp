@@ -10,6 +10,9 @@
 #include "world/entity/MobEffects.hpp"
 #include "world/item/PlayerInventory.hpp"
 
+#include <functional>
+#include <optional>
+#include <set>
 #include <map>
 #include <algorithm>
 #include <array>
@@ -152,6 +155,13 @@ class PlayerConfig {
 	void setServerListings(bool serverListings) { _allowServerListings = serverListings; }
 };
 
+// A player's plugin channels and pending cookie requests (network and game threads: its mutex)
+struct PluginState {
+	std::mutex																			   mutex;
+	std::set<std::string>																   channels;
+	std::map<std::string, std::vector<std::function<void(std::optional<std::vector<uint8_t>>)>>> cookieRequests;
+};
+
 class Player : public Actor, public std::enable_shared_from_this<Player>, public MobEffects::Host {
   private:
 	std::string				 _name;
@@ -200,6 +210,7 @@ class Player : public Actor, public std::enable_shared_from_this<Player>, public
 	int			  _permissionLevel = 0;
 	bool		  _console		   = false;
 	std::string	  _clientBrand;
+	PluginState	  _pluginState;
 	bool		  _resourcePackSent = false;
 	int			  _playerId;
 	Server&		  _server;
@@ -515,6 +526,9 @@ class Player : public Actor, public std::enable_shared_from_this<Player>, public
 	void			   setResourcePackSent(bool sent) { _resourcePackSent = sent; }
 	const std::string& clientBrand() const { return _clientBrand; }
 	void			   setClientBrand(std::string brand) { _clientBrand = std::move(brand); }
+	// Plugin channels and cookies (PluginChannels, Cookies): the channels its client registered (minecraft:register),
+	// the cookie requests waiting for its answer
+	PluginState&	   pluginState() { return _pluginState; }
 	// The server console's command source (not in the game: its messages go to the log)
 	bool isConsole() const { return _console; }
 	void setConsole(bool console) { _console = console; }

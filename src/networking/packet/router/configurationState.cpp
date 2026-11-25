@@ -1,5 +1,6 @@
 #include "PacketIds.hpp"
 #include "network/buffer.hpp"
+#include "network/PluginChannels.hpp"
 #include "network/packetRouter.hpp"
 #include "network/TextComponent.hpp"
 #include "lib/UUID.hpp"
@@ -23,7 +24,11 @@ void handleConfigurationState(Packet* packet, Server& server) {
 		handleFinishConfigurationPacket(*packet, server);
 		break;
 	case PacketId::Configuration::Serverbound::COOKIE_RESPONSE:
+		if (packet->getPlayer()) Cookies::handleResponse(*packet->getPlayer(), packet->getData());
+		break;
 	case PacketId::Configuration::Serverbound::CUSTOM_PAYLOAD:
+		if (packet->getPlayer()) PluginChannels::handle(server, *packet->getPlayer(), packet->getData());
+		break;
 	case PacketId::Configuration::Serverbound::KEEP_ALIVE:
 	case PacketId::Configuration::Serverbound::PONG:
 	case PacketId::Configuration::Serverbound::CUSTOM_CLICK_ACTION:

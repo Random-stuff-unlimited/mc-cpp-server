@@ -1,3 +1,4 @@
+#include "network/PluginChannels.hpp"
 #include "world/Stats.hpp"
 #include "world/inventory/BeaconMenu.hpp"
 #include "world/item/Books.hpp"
@@ -150,7 +151,8 @@ void handlePlayState(Packet* packet, Server& server) {
 	case PacketId::Play::Serverbound::ENTITY_TAG_QUERY: handleEntityTagQuery(*packet, server); break;
 	case PacketId::Play::Serverbound::PICK_ITEM_FROM_ENTITY: handlePickItemFromEntity(*packet, server); break;
 	case PacketId::Play::Serverbound::TELEPORT_TO_ENTITY: handleTeleportToEntity(*packet, server); break;
-	case PacketId::Play::Serverbound::CUSTOM_PAYLOAD: handlePlayCustomPayload(*packet, server); break;
+	case PacketId::Play::Serverbound::CUSTOM_PAYLOAD: PluginChannels::handle(server, *player, packet->getData()); break;
+	case PacketId::Play::Serverbound::COOKIE_RESPONSE: Cookies::handleResponse(*player, packet->getData()); break;
 	case PacketId::Play::Serverbound::PICK_ITEM_FROM_BLOCK:
 		handlePickItemFromBlock(*packet, server);
 		break;
