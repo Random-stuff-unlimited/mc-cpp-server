@@ -344,6 +344,12 @@ void LivingEntity::livingBaseTick() {
 		// In-wall suffocation isn't ported (needs each block's isSuffocating)
 		if (!_resting) updateFluidOnEyes();
 		updateAir();
+		// Beyond the world border (and its safe zone): damage per block outside
+		const WorldBorder& border  = _level.world().border();
+		double			   outside = border.distanceToBorder(_position.x, _position.z, _level.getGameTime()) + border.safeZone;
+		if (outside < 0.0 && border.damagePerBlock > 0.0) {
+			hurtServer({"minecraft:outside_border", nullptr, nullptr, std::nullopt}, static_cast<float>(std::max(1, Mth::floor(-outside * border.damagePerBlock))));
+		}
 	}
 	if (_hurtTime > 0) _hurtTime--;
 	if (_invulnerableTime > 0) _invulnerableTime--;

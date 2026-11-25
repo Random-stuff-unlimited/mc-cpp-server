@@ -132,7 +132,7 @@ Les 85 types de mobs vanilla ont leur classe et leur IA (`src/world/entity/mobs`
 - [ ] Advancements : `UPDATE_ADVANCEMENTS`, `SELECT_ADVANCEMENTS_TAB`, déclencheurs de critères
 - [ ] Statistiques : `AWARD_STATS`
 - [ ] Scoreboard / teams : `SET_SCORE`, `SET_OBJECTIVE`, `SET_DISPLAY_OBJECTIVE`, `SET_PLAYER_TEAM`, `RESET_SCORE`
-- [ ] World border : `INITIALIZE_BORDER`, `SET_BORDER_*`
+- [x] World border : `INITIALIZE_BORDER`, `SET_BORDER_*`, `/worldborder`, dégâts hors limite, blocs interdits, sauvegarde
 - [ ] Cartes : `MAP_ITEM_DATA`, cartographie
 - [x] `SET_DEFAULT_SPAWN_POSITION` (compass qui pointe le spawn)
 - [x] Titles : `SET_TITLE_TEXT`, `SET_SUBTITLE_TEXT`, `SET_TITLES_ANIMATION`, `CLEAR_TITLES`, `SET_ACTION_BAR_TEXT`, commande `/title` (texte brut ou JSON)

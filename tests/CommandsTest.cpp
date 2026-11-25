@@ -5,6 +5,7 @@
 #include "LevelFixture.hpp"
 #include "Test.hpp"
 #include "player.hpp"
+#include "world/Survival.hpp"
 #include "world/item/Enchantments.hpp"
 
 #include <cmath>
@@ -280,4 +281,36 @@ TEST(commands_title) {
 		Commands::run(f.server, *player, line);
 	}
 	CHECK(Commands::englishText("commands.title.show.title.single", {"Bob"}) == "Showing new title for Bob");
+}
+
+// /worldborder: set, add over time, center, damage; a player beyond it (and its 5-block buffer) is hurt
+TEST(commands_worldborder) {
+	LevelFixture f;
+	Commands::registerCommands();
+	auto player = makePlayer(f);
+	f.addPlayer(player);
+	WorldBorder& border = f.level->world().border();
+	int64_t		 now	= f.level->getGameTime();
+	CHECK(border.size(now) == WorldBorder::MAX_SIZE);
+	Commands::run(f.server, *player, "worldborder set 20");
+	CHECK(border.size(now) == 20.0);
+	Commands::run(f.server, *player, "worldborder add 20 10"); // To 40 over 10 seconds
+	CHECK(border.toSize == 40.0 && border.lerpRemaining(now) == 200);
+	CHECK(std::abs(border.size(now + 100) - 30.0) < 1e-9);
+	Commands::run(f.server, *player, "worldborder set 0.5"); // Too small
+	CHECK(border.toSize == 40.0);
+	Commands::run(f.server, *player, "worldborder center 100 -50");
+	CHECK(border.centerX == 100.0 && border.centerZ == -50.0);
+	Commands::run(f.server, *player, "worldborder center 0 0");
+	Commands::run(f.server, *player, "worldborder set 10");
+	Commands::run(f.server, *player, "worldborder damage amount 1");
+	CHECK(border.damagePerBlock == 1.0);
+	CHECK(border.isWithinBounds(4, 4, now) && !border.isWithinBounds(5, 0, now) && !border.isWithinBounds(-6, 0, now));
+	// 20 blocks out, beyond the buffer of 5 (15 blocks): hurt
+	player->setPosition(25.5, LevelFixture::SURFACE + 1, 0.5);
+	player->setGameMode(GameMode::Survival);
+	float health = player->combat().health;
+	Survival::tick(*f.level, *player); // The fixture doesn't tick players
+	CHECK(player->combat().health < health);
+	Commands::run(f.server, *player, "worldborder set 59999968");
 }

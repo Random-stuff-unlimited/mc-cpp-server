@@ -1,6 +1,7 @@
 #ifndef WORLD_HPP
 #define WORLD_HPP
 
+#include "world/WorldBorder.hpp"
 #include "world/AnvilImporter.hpp"
 #include "world/Chunk.hpp"
 #include "world/ChunkStorage.hpp"
@@ -152,6 +153,12 @@ class World {
 	void submitSave(std::function<void()> job);
 
 	const Spawn&	   getSpawn() const { return _spawn; }
+	// The world border (the overworld's, for every dimension); changes are saved with the level
+	WorldBorder&	   border() { return _primary ? _primary->border() : _border; }
+	void			   saveBorder() {
+		  if (_primary) return _primary->saveBorder();
+		  saveLevel();
+	}
 	// The world's spawn point (from level.json, the vanilla world's level.dat, or the generator): where players
 	// without a bed appear. Saved to level.json
 	void			   setSpawn(double x, double y, double z);
@@ -177,6 +184,7 @@ class World {
 	Settings		_settings;
 	std::string		_dimensionName;
 	Spawn			_spawn{};
+	WorldBorder		_border{};
 
 	PalettedContainer::Config		_blockConfig{};
 	PalettedContainer::Config		_biomeConfig{};

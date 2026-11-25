@@ -223,6 +223,20 @@ namespace {
 			actions.push_back(t.literal("times", false, {t.integer("fadeIn", 0, false, {t.integer("stay", 0, false, {fadeOut})})}));
 			return t.literal("title", false, {t.players("targets", false, false, actions)});
 		}
+		if (name == "worldborder") {
+			auto num = [&](const char* arg, bool exec, std::vector<int> children = {}) { return t.argument(arg, "brigadier:double", exec, std::move(children), [] {
+				Buffer props;
+				props.writeUByte(0); // No bounds
+				return props;
+			}()); };
+			std::vector<int> subs = t.choices({"get"});
+			subs.push_back(t.literal("set", false, {num("distance", true, {t.integer("time", 0, true)})}));
+			subs.push_back(t.literal("add", false, {num("distance", true, {t.integer("time", 0, true)})}));
+			subs.push_back(t.literal("center", false, {t.argument("pos", "minecraft:vec2", true)}));
+			subs.push_back(t.literal("damage", false, {t.literal("amount", false, {num("damagePerBlock", true)}), t.literal("buffer", false, {num("distance", true)})}));
+			subs.push_back(t.literal("warning", false, {t.literal("distance", false, {t.integer("distance", 0, true)}), t.literal("time", false, {t.integer("time", 0, true)})}));
+			return t.literal("worldborder", false, subs);
+		}
 		if (name == "save-all") return t.literal("save-all", true, t.choices({"flush"}));
 		if (name == "say" || name == "me") return t.literal(name, false, {message(name == "say" ? "message" : "action")});
 		if (name == "tell" || name == "msg" || name == "w") return t.literal(name, false, {t.players("targets", false, false, {message("message")})});

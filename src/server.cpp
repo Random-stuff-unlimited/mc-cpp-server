@@ -404,16 +404,18 @@ void Server::sendDefaultSpawn(const std::shared_ptr<Player>& to) {
 }
 
 void Server::sendLevelInfo(const std::shared_ptr<Player>& player, Level& level) {
-	// The world border (no border command yet: vanilla's default, centered on 0, 0)
-	Buffer border;
-	border.writeDouble(0.0);						   // Center x
-	border.writeDouble(0.0);						   // Center z
-	border.writeDouble(static_cast<double>(5.999997E7F)); // Old size
-	border.writeDouble(static_cast<double>(5.999997E7F)); // New size
-	border.writeVarLong(0);							   // Lerp time
-	border.writeVarInt(29999984);					   // Absolute max size
-	border.writeVarInt(5);							   // Warning blocks
-	border.writeVarInt(15);							   // Warning time
+	// The world border (ClientboundInitializeBorderPacket)
+	const WorldBorder& wb  = level.world().border();
+	int64_t			   now = level.getGameTime();
+	Buffer			   border;
+	border.writeDouble(wb.centerX);
+	border.writeDouble(wb.centerZ);
+	border.writeDouble(wb.size(now));
+	border.writeDouble(wb.toSize);
+	border.writeVarLong(wb.lerpRemaining(now) * 50); // Milliseconds
+	border.writeVarInt(WorldBorder::ABSOLUTE_MAX_SIZE);
+	border.writeVarInt(wb.warningBlocks);
+	border.writeVarInt(wb.warningTime);
 	Packet::send(player, PacketId::Play::Clientbound::INITIALIZE_BORDER, border, *this);
 	sendTime(player);
 	sendDefaultSpawn(player);

@@ -368,6 +368,13 @@ namespace Survival {
 			if (!state.sleeping) {
 				// Player.tick: LivingEntity.baseTick, LivingEntity.tick's updatingUsingItem, aiStep's tickRegeneration, the pose
 				baseTick(level, player);
+				// LivingEntity.baseTick: beyond the world border (and its safe zone), damage per block outside
+				const WorldBorder& border  = level.world().border();
+				double			   outside = border.distanceToBorder(player.getX(), player.getZ(), level.getGameTime()) + border.safeZone;
+				if (outside < 0.0 && border.damagePerBlock > 0.0 && !player.combat().dead) {
+					Combat::damage(level.server(), player, static_cast<float>(std::max(1, Mth::floor(-outside * border.damagePerBlock))),
+								   {"minecraft:outside_border", nullptr, nullptr, std::nullopt});
+				}
 				if (!player.combat().dead) applyFireEffectsFromBlocks(level, player);
 				if (!player.combat().dead) ItemUse::updatingUsingItem(level, player);
 				if (!player.combat().dead) tickRegeneration(level, player);

@@ -192,6 +192,19 @@ void World::loadLevel() {
 	_generator = createGenerator(generatorSettings);
 	_random	   = JavaRandom(level.value("seed", int64_t(0)));
 
+	if (level.contains("world-border")) {
+		const nlohmann::json& b = level["world-border"];
+		_border.centerX		   = b.value("center-x", 0.0);
+		_border.centerZ		   = b.value("center-z", 0.0);
+		_border.setSize(b.value("size", WorldBorder::MAX_SIZE));
+		double target		   = b.value("target-size", _border.toSize);
+		int64_t remaining	   = b.value("lerp-time", int64_t(0));
+		if (remaining > 0) _border.lerpSizeBetween(_border.toSize, target, remaining, level.value("time", int64_t(0)));
+		_border.damagePerBlock = b.value("damage-per-block", 0.2);
+		_border.safeZone	   = b.value("safe-zone", 5.0);
+		_border.warningBlocks  = b.value("warning-blocks", 5);
+		_border.warningTime	   = b.value("warning-time", 15);
+	}
 	if (level.contains("spawn")) {
 		_spawn = {level["spawn"].value("x", 0.0), level["spawn"].value("y", 64.0), level["spawn"].value("z", 0.0)};
 	} else {
@@ -232,6 +245,14 @@ void World::saveLevel() {
 							 {"thunder-time", _weather.thunderTime},
 							 {"clear-weather-time", _weather.clearWeatherTime}};
 		level["spawn"]	  = {{"x", _spawn.x}, {"y", _spawn.y}, {"z", _spawn.z}};
+		if (!_primary) {
+			int64_t now = getGameTime();
+			level["world-border"] = {{"center-x", _border.centerX},		  {"center-z", _border.centerZ},
+									 {"size", _border.size(now)},		  {"target-size", _border.toSize},
+									 {"lerp-time", _border.lerpRemaining(now)}, {"damage-per-block", _border.damagePerBlock},
+									 {"safe-zone", _border.safeZone},	  {"warning-blocks", _border.warningBlocks},
+									 {"warning-time", _border.warningTime}};
+		}
 		std::ofstream out(levelFile);
 		out << level.dump(2) << "\n";
 	} catch (const std::exception& e) {

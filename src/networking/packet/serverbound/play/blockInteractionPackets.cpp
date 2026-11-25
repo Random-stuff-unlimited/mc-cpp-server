@@ -213,7 +213,8 @@ void handlePlayerActionPacket(Packet& packet, Server& server) {
 		player.stopDigging();
 	} else if (status == START_DIGGING) {
 		int state = level.getBlockState({x, y, z});
-		if (!canBuild || !inReach(player, x, y, z) || !level.hasChunkAt({x, y, z})) {
+		// Level.mayInteract: not beyond the world border
+		if (!canBuild || !inReach(player, x, y, z) || !level.hasChunkAt({x, y, z}) || !level.world().border().isWithinBounds(x, z, level.getGameTime())) {
 			refused = true;
 		} else if (player.getGameMode() == GameMode::Creative || server.getGameData().getDestroyTime(state) == 0) {
 			// Instant break: always in creative, and for blocks that take no time (flowers, torches...)
@@ -317,7 +318,7 @@ void handleUseItemOnPacket(Packet& packet, Server& server) {
 	BlockPos target		   = context.clickedPos;
 
 	std::vector<BlockChange> parts;
-	bool					 fits = context.replaceClicked || replaceable(target);
+	bool					 fits = (context.replaceClicked || replaceable(target)) && level.world().border().isWithinBounds(target.x, target.z, level.getGameTime());
 	if (fits) {
 		int state = level.behaviors().placer(placedBlock).getStateForPlacement(level, context);
 		if (state == GENERIC_PLACEMENT) {

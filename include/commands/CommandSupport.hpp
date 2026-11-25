@@ -52,6 +52,7 @@ namespace Commands {
 	// stop, save-all (level 4)
 	void registerServer();
 	void registerTitle();
+	void registerWorldBorder();
 } // namespace Commands
 
 #endif
