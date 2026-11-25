@@ -105,7 +105,7 @@ void sendPlayPacket(Packet& packet, Server& server) {
 	buf.writeString("minecraft:the_end");
 	buf.writeVarInt(server.getConfig().getServerSize());   // 4. Max Players
 	buf.writeVarInt(server.getConfig().getViewDistance()); // 5. View Distance
-	buf.writeVarInt(server.getConfig().getViewDistance()); // 6. Simulation Distance
+	buf.writeVarInt(server.getConfig().getSimulationDistance()); // 6. Simulation Distance
 	buf.writeBool(false);								  // 7. Reduced Debug Info
 	buf.writeBool(true);								  // 8. Enable respawn screen
 	buf.writeBool(false);								  // 9. Do limited crafting

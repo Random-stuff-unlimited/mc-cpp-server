@@ -54,11 +54,11 @@ Level::Level(Server& server, World& world, const GameData& gameData)
 	  _behaviors(gameData.getBlockCount()),
 	  _neighborUpdater(*this), _blockTicks([this](int64_t key) {
 		  auto it = _chunks.find(key);
-		  return it != _chunks.end() && !it->second->isUnloaded() && it->second->isTicking();
+		  return it != _chunks.end() && !it->second->isUnloaded() && it->second->isTicking() && isSimulated(it->second->x(), it->second->z());
 	  }),
 	  _fluidTicks([this](int64_t key) {
 		  auto it = _chunks.find(key);
-		  return it != _chunks.end() && !it->second->isUnloaded() && it->second->isTicking();
+		  return it != _chunks.end() && !it->second->isUnloaded() && it->second->isTicking() && isSimulated(it->second->x(), it->second->z());
 	  }),
 	  _minY(world.getMinY()), _maxY(world.getMinY() + world.getSectionCount() * 16),
 	  _random(std::chrono::steady_clock::now().time_since_epoch().count()), _mobs(gameData) {
@@ -454,7 +454,19 @@ float Level::getLightLevelDependentMagicValue(const BlockPos& pos) {
 
 bool Level::shouldTickBlocksAt(const BlockPos& pos) {
 	Chunk* chunk = chunkAt(pos.chunkX(), pos.chunkZ());
-	return chunk && chunk->isTicking();
+	return chunk && chunk->isTicking() && isSimulated(pos.chunkX(), pos.chunkZ());
+}
+
+bool Level::isSimulated(int chunkX, int chunkZ) const {
+	const Config& config   = _server.getConfig();
+	int			  distance = config.getSimulationDistance();
+	if (distance >= config.getViewDistance()) return true;
+	for (const auto& player : _players) {
+		if (player->isDisconnected()) continue; // Spectators too (spectatorsGenerateChunks)
+		int x = static_cast<int>(std::floor(player->getX())) >> 4, z = static_cast<int>(std::floor(player->getZ())) >> 4;
+		if (std::abs(x - chunkX) <= distance && std::abs(z - chunkZ) <= distance) return true;
+	}
+	return false;
 }
 
 
@@ -1062,13 +1074,13 @@ void Level::tickChunks() {
 	if (_mobSpawning && difficulty() != 0) tickPhantomSpawner();
 	if (_randomTickSpeed <= 0) return;
 	for (const auto& [key, chunk] : _chunks) {
-		if (!chunk->isUnloaded() && chunk->isTicking()) tickChunk(*chunk, _randomTickSpeed);
+		if (!chunk->isUnloaded() && chunk->isTicking() && isSimulated(chunk->x(), chunk->z())) tickChunk(*chunk, _randomTickSpeed);
 	}
 }
 
 void Level::forEachTickingChunk(const std::function<void(Chunk&)>& f) {
 	for (const auto& [key, chunk] : _chunks) {
-		if (!chunk->isUnloaded() && chunk->isTicking()) f(*chunk);
+		if (!chunk->isUnloaded() && chunk->isTicking() && isSimulated(chunk->x(), chunk->z())) f(*chunk);
 	}
 }
 

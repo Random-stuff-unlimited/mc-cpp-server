@@ -28,6 +28,14 @@ namespace {
 
 PlayerTracker::PlayerTracker(Server& server) : _server(server) {}
 
+void PlayerTracker::setViewDistance(Player& player, int viewDistance) {
+	auto it = _players.find(&player);
+	if (it == _players.end() || it->second.viewDistance == viewDistance) return;
+	it->second.viewDistance = viewDistance;
+	_maxViewDistance		= std::max(_maxViewDistance, viewDistance);
+	updateVisibilityAround(it->second);
+}
+
 void PlayerTracker::join(const std::shared_ptr<Player>& player, int viewDistance) {
 	Tracked& joined		= _players[player.get()];
 	joined.player		= player;

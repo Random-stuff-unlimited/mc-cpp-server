@@ -16,6 +16,7 @@ class Config {
 	int			_serverSize;
 
 	int			_viewDistance;
+	int			_simulationDistance = 10; // server.simulation-distance (chunks around the players that tick)
 	int			_compressionThreshold;
 	float		_tickRate; // Ticks per second, 20 in vanilla
 	int			_fillLimit; // Max blocks per /fill, 32768 in vanilla
@@ -49,6 +50,8 @@ class Config {
 	std::string getGamemode();
 	std::string getDifficulty();
 	int			getViewDistance() const { return _viewDistance; }
+	int			getSimulationDistance() const { return _simulationDistance; }
+	void		setSimulationDistance(int distance) { _simulationDistance = distance; }
 	int			getCompressionThreshold() const { return _compressionThreshold; }
 	float		getTickRate() const { return _tickRate; }
 	int			getAutosaveInterval() const { return _autosaveInterval; }

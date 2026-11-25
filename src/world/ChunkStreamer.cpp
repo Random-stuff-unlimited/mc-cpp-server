@@ -63,20 +63,32 @@ void ChunkStreamer::start(double x, double z, int viewDistance) {
 }
 
 void ChunkStreamer::onPlayerMove(double x, double z) {
-	std::vector<int64_t> entering, leaving;			  // Tickets
-	std::vector<int64_t> enteringView;				  // Chunks to send once lit
+	int newX = toChunk(x);
+	int newZ = toChunk(z);
+	if (!_active || (newX == _centerX && newZ == _centerZ)) return;
+	_centerX = newX;
+	_centerZ = newZ;
+
+	Buffer center;
+	center.writeVarInt(_centerX);
+	center.writeVarInt(_centerZ);
+	Packet::send(_player.shared_from_this(), PacketId::Play::Clientbound::SET_CHUNK_CACHE_CENTER, center, _server);
+	refreshView();
+}
+
+// ChunkMap.updateChunkTracking after a change of the player's view distance (its client settings)
+void ChunkStreamer::setViewDistance(int viewDistance) {
+	if (!_active || viewDistance == _viewDistance) return;
+	_viewDistance = viewDistance;
+	refreshView();
+}
+
+// The tickets and the chunks in view for the current center and distance: what leaves is released (and forgotten
+// by the client), what enters is loaded then sent
+void ChunkStreamer::refreshView() {
+	std::vector<int64_t> entering, leaving; // Tickets
+	std::vector<int64_t> enteringView;		// Chunks to send once lit
 	{
-		int newX = toChunk(x);
-		int newZ = toChunk(z);
-		if (!_active || (newX == _centerX && newZ == _centerZ)) return;
-		_centerX = newX;
-		_centerZ = newZ;
-
-		Buffer center;
-		center.writeVarInt(_centerX);
-		center.writeVarInt(_centerZ);
-		Packet::send(_player.shared_from_this(), PacketId::Play::Clientbound::SET_CHUNK_CACHE_CENTER, center, _server);
-
 		std::vector<int64_t>		newTickets = viewAround(_centerX, _centerZ, _viewDistance + 1);
 		std::vector<int64_t>		newView	   = viewAround(_centerX, _centerZ, _viewDistance);
 		std::unordered_set<int64_t> newTicketSet(newTickets.begin(), newTickets.end());

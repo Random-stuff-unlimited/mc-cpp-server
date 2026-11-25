@@ -32,6 +32,8 @@ class PlayerTracker {
 
 	void join(const std::shared_ptr<Player>& player, int viewDistance);
 	void leave(Player* player);
+	// The player's view distance changed (its render distance): who it sees, again
+	void setViewDistance(Player& player, int viewDistance);
 	// After the player's position and/or rotation changed: sent at the next update
 	void move(Player* player);
 	// Every tick: visibility of the players that changed chunk, and every UPDATE_INTERVAL ticks their movements

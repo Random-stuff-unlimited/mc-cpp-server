@@ -171,7 +171,7 @@ Les 85 types de mobs vanilla ont leur classe et leur IA (`src/world/entity/mobs`
 - [x] `PING_REQUEST`/`PONG_RESPONSE` play, `CLIENT_TICK_END`, `CHANGE_DIFFICULTY`, `LOCK_DIFFICULTY`, `CHANGE_GAME_MODE` (F3+F4),
       `BLOCK_ENTITY_TAG_QUERY`/`ENTITY_TAG_QUERY` (F3+I), `PICK_ITEM_FROM_ENTITY`, `TELEPORT_TO_ENTITY`, `CUSTOM_PAYLOAD` (brand)
 - [ ] Chat sécurisé / signature : completion `DELETE_CHAT`, `DISGUISED_CHAT`
-- [ ] `SET_SIMULATION_DISTANCE`, `SET_CHUNK_CACHE_RADIUS`
+- [x] `SET_SIMULATION_DISTANCE`, `SET_CHUNK_CACHE_RADIUS` (simulation-distance limite les ticks ; distance de rendu du client suivie en jeu ; les deux paquets ne servent que si le serveur change ses distances à chaud, ce qu'il ne fait pas)
 
 ## Monde (hors générateur)
 

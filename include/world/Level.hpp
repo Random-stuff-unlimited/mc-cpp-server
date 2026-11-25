@@ -189,8 +189,12 @@ class Level : public NeighborUpdateTarget {
 	// The chunk at these chunk coordinates if it is loaded, nullptr otherwise
 	Chunk* loadedChunk(int chunkX, int chunkZ) { return chunkAt(chunkX, chunkZ); }
 	bool isOutsideBuildHeight(int y) const { return y < _minY || y >= _maxY; }
-	// Whether blocks tick at this position (vanilla's shouldTickBlocksAt)
+	// Whether blocks tick at this position (vanilla's shouldTickBlocksAt): a ticking chunk within the simulation
+	// distance of a player
 	bool shouldTickBlocksAt(const BlockPos& pos);
+	// ChunkMap's simulation distance: the chunk is within server.simulation-distance of a player. Always when that
+	// distance isn't below the view distance (every ticking chunk then is)
+	bool isSimulated(int chunkX, int chunkZ) const;
 	// How much the night takes from the sky light (Level.skyDarken, 0 at noon, 11 at midnight)
 	int	 skyDarken() const { return _skyDarken; }
 	// Level.getTimeOfDay: 0 at noon, 0.5 at midnight

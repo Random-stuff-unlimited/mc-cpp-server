@@ -34,6 +34,7 @@ bool Config::loadConfig() {
 		Config::setGamemode(config["world"]["gamemode"]);
 		Config::setDifficulty(config["world"]["difficulty"]);
 		_viewDistance		  = std::clamp(config["server"].value("view-distance", _viewDistance), 2, 32);
+		_simulationDistance	  = std::clamp(config["server"].value("simulation-distance", _viewDistance), 2, 32);
 		_compressionThreshold = config["server"].value("compression-threshold", _compressionThreshold);
 		_tickRate			  = config["server"].value("tick-rate", _tickRate);
 		_autosaveInterval	  = std::max(10, config["world"].value("autosave-interval", _autosaveInterval));
@@ -83,6 +84,7 @@ bool Config::reloadConfig() {
 		Config::setGamemode(config["world"]["gamemode"]);
 		Config::setDifficulty(config["world"]["difficulty"]);
 		_viewDistance		  = std::clamp(config["server"].value("view-distance", _viewDistance), 2, 32);
+		_simulationDistance	  = std::clamp(config["server"].value("simulation-distance", _viewDistance), 2, 32);
 		_compressionThreshold = config["server"].value("compression-threshold", _compressionThreshold);
 		_autosaveInterval	  = std::max(10, config["world"].value("autosave-interval", _autosaveInterval));
 		_fillLimit			  = std::max(1, config["server"].value("fill-limit", _fillLimit));

@@ -532,3 +532,16 @@ TEST(console_completion) {
 	done = ConsoleInput::complete("ba", Commands::consoleCompletions("ba", {}));
 	CHECK(done.line == "ban" && done.matches.size() == 3); // ban, ban-ip, banlist
 }
+
+// server.simulation-distance: below the view distance, only the chunks that close to a player tick
+TEST(simulation_distance) {
+	LevelFixture f;
+	auto player = makePlayer(f);
+	f.addPlayer(player);
+	CHECK(f.level->isSimulated(20, 20)); // Not below the view distance: every ticking chunk
+	f.server.getConfig().setSimulationDistance(2);
+	int x = static_cast<int>(std::floor(player->getX())) >> 4, z = static_cast<int>(std::floor(player->getZ())) >> 4;
+	CHECK(f.level->isSimulated(x + 2, z - 2));
+	CHECK(!f.level->isSimulated(x + 3, z));
+	f.server.getConfig().setSimulationDistance(f.server.getConfig().getViewDistance());
+}

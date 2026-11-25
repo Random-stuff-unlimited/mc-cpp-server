@@ -30,6 +30,8 @@ class ChunkStreamer {
 	// Streams the chunks of the player's dimension around x, z
 	void start(double x, double z, int viewDistance);
 	void onPlayerMove(double x, double z);
+	// A new view distance (the player changed its render distance): chunks sent or forgotten accordingly
+	void setViewDistance(int viewDistance);
 	void onBatchReceived(float chunksPerTick);
 	// Releases every chunk. Called when the player disconnects or leaves the dimension
 	void stop();
@@ -38,6 +40,7 @@ class ChunkStreamer {
 	int	 viewDistance() const { return _viewDistance; }
 
   private:
+	void refreshView();
 	static constexpr int MAX_BATCHES_IN_FLIGHT = 4;
 	static constexpr int MIN_BATCH_SIZE		   = 4;
 	static constexpr int MAX_BATCH_SIZE		   = 64;

@@ -307,6 +307,12 @@ void handlePlayState(Packet* packet, Server& server) {
 	case PacketId::Play::Serverbound::CLIENT_INFORMATION:
 		// Sent again when the player changes its settings (language...)
 		handleClientInformationPacket(*packet, server);
+		// ChunkMap.getPlayerViewDistance: its render distance, within 2 and the server's view distance
+		if (ChunkStreamer* streamer = player->getChunkStreamer()) {
+			int distance = std::clamp<int>(player->getPlayerConfig()->getViewDistance(), 2, server.getConfig().getViewDistance());
+			streamer->setViewDistance(distance);
+			server.getPlayerTracker().setViewDistance(*player, distance);
+		}
 		break;
 	case PacketId::Play::Serverbound::CHAT: {
 		// ServerboundChat: message, then its timestamp, salt and signature, which aren't verified
