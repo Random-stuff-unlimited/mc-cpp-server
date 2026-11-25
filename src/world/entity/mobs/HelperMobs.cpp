@@ -1,3 +1,5 @@
+#include "world/Chunk.hpp"
+#include "world/blockentity/StorageEntities.hpp"
 #include "world/entity/mobs/HelperMobs.hpp"
 
 #include "network/buffer.hpp"
@@ -395,6 +397,21 @@ int Allay::addToInventory(const ItemStack& stack) {
 
 bool Allay::mobInteract(Player& player, int hand) {
 	ItemStack held = player.getStackInHand(hand);
+	// Allay.mobInteract: an amethyst shard while dancing duplicates it (duplicateAllay)
+	if (_dancing && canDuplicate() && isItem(_level, held, "minecraft:amethyst_shard")) {
+		if (!player.isCreative()) player.inventory().getMutable(player.handSlot(hand)).shrink(1);
+		std::unique_ptr<Mob> copy = _level.mobs().create(_level, _typeId);
+		if (auto* twin = dynamic_cast<Allay*>(copy.get())) {
+			twin->snapTo(_position, _yRot, _xRot);
+			twin->setPersistenceRequired();
+			twin->setDuplicationCooldown(6000);
+			_level.addFreshEntity(std::move(copy));
+		}
+		setDuplicationCooldown(6000);
+		broadcastEntityEvent(18); // EntityEvent.IN_LOVE_HEARTS
+		_level.playSoundAt(nullptr, _position.x, _position.y, _position.z, "minecraft:block.amethyst_block.chime", Level::SoundSource::Neutral, 2.0F, 1.0F);
+		return true;
+	}
 	if (!hasItemInHand() && !held.isEmpty()) {
 		// Allay.mobInteract: it takes one, and likes this player
 		setItemSlot(EquipmentSlot::MainHand, held.copyWithCount(1));
@@ -422,8 +439,41 @@ bool Allay::hurtServer(const Combat::DamageSource& source, float amount) {
 	return Mob::hurtServer(source, amount);
 }
 
+void Allay::setDancing(bool dancing) {
+	if (dancing == _dancing) return;
+	_dancing = dancing;
+	markData(DATA_DANCING);
+}
+
+void Allay::setDuplicationCooldown(int ticks) {
+	bool before			 = canDuplicate();
+	_duplicationCooldown = ticks;
+	if (before != canDuplicate()) markData(DATA_CAN_DUPLICATE);
+}
+
+// The JUKEBOX_PLAY vibrations: a playing jukebox within 10 blocks
+bool Allay::jukeboxNearby() {
+	BlockPos at = blockPosition();
+	for (int cx = (at.x - 10) >> 4; cx <= (at.x + 10) >> 4; cx++) {
+		for (int cz = (at.z - 10) >> 4; cz <= (at.z + 10) >> 4; cz++) {
+			Chunk* chunk = _level.loadedChunk(cx, cz);
+			if (!chunk) continue;
+			for (const auto& [key, entity] : chunk->blockEntities()) {
+				auto* jukebox = dynamic_cast<JukeboxBlockEntity*>(entity.get());
+				if (!jukebox || !jukebox->isPlaying()) continue;
+				const BlockPos& pos = jukebox->pos();
+				double			dx = pos.x + 0.5 - _position.x, dy = pos.y + 0.5 - _position.y, dz = pos.z + 0.5 - _position.z;
+				if (dx * dx + dy * dy + dz * dz <= 100.0) return true;
+			}
+		}
+	}
+	return false;
+}
+
 void Allay::customServerAiStep() {
 	Mob::customServerAiStep();
+	if (_duplicationCooldown > 0) setDuplicationCooldown(_duplicationCooldown - 1);
+	if (_tickCount % 20 == 0) setDancing(jukeboxNearby());
 	if (throwCooldown > 0) throwCooldown--;
 	if (_tickCount % 10 == 0) heal(1.0F);
 }
@@ -436,8 +486,8 @@ void Allay::dropAllDeathLoot(const Combat::DamageSource& source) {
 
 void Allay::writeData(Buffer& buf, uint32_t mask, bool onlyNonDefault) const {
 	Mob::writeData(buf, mask, onlyNonDefault);
-	if (wantsData(mask, DATA_DANCING, onlyNonDefault, true)) writeBoolData(buf, DATA_DANCING, false);
-	if (wantsData(mask, DATA_CAN_DUPLICATE, onlyNonDefault, true)) writeBoolData(buf, DATA_CAN_DUPLICATE, true);
+	if (wantsData(mask, DATA_DANCING, onlyNonDefault, !_dancing)) writeBoolData(buf, DATA_DANCING, _dancing);
+	if (wantsData(mask, DATA_CAN_DUPLICATE, onlyNonDefault, canDuplicate())) writeBoolData(buf, DATA_CAN_DUPLICATE, canDuplicate());
 }
 
 void Allay::save(Buffer& buf) const {

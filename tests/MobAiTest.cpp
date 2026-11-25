@@ -1,4 +1,5 @@
 #include "LevelFixture.hpp"
+#include "world/blockentity/StorageEntities.hpp"
 #include "world/item/ItemUse.hpp"
 #include "world/blocks/Composter.hpp"
 #include "world/entity/mobs/FlyingAnimals.hpp"
@@ -1571,4 +1572,53 @@ TEST(village_events_saved) {
 	VillageEvents copy(*f.level);
 	copy.load(f.world->directory() / "village_events.json");
 	CHECK_EQ(static_cast<int>(copy.raids().size()), 1);
+}
+
+// An allay dances by a playing jukebox; an amethyst shard then makes a second one, and not again right after
+TEST(allay_dances_and_duplicates) {
+	LevelFixture f(1);
+	f.set(3, Y, 0, "minecraft:jukebox[has_record=false]");
+	auto* jukebox = f.level->getBlockEntity<JukeboxBlockEntity>({3, Y, 0});
+	auto* allay	  = dynamic_cast<Allay*>(spawn(f, "minecraft:allay", {0, Y, 0}));
+	CHECK(jukebox && allay);
+	if (!jukebox || !allay) return;
+	jukebox->setTheItem(ItemStack(f.item("minecraft:music_disc_cat"), 1));
+	f.tick(25);
+	CHECK(allay->isDancing());
+	auto player = addPlayer(f, 1.5, 0.5);
+	player->setSelectedSlot(0);
+	player->inventory().set(player->handSlot(0), ItemStack(f.item("minecraft:amethyst_shard"), 2));
+	CHECK(allay->mobInteract(*player, 0));
+	CHECK_EQ(countOf(f, "minecraft:allay"), 2);
+	CHECK(!allay->canDuplicate());
+	allay->mobInteract(*player, 0);
+	CHECK_EQ(countOf(f, "minecraft:allay"), 2);
+	jukebox->setTheItem(ItemStack());
+	f.tick(25);
+	CHECK(!allay->isDancing());
+}
+
+// Piglins: mining gold near them makes them angry (not when wearing gold or in creative); adults hunt a hoglin
+TEST(piglins_guard_gold_and_hunt) {
+	LevelFixture f(2, "minecraft:the_nether");
+	auto* piglin = dynamic_cast<Piglin*>(spawn(f, "minecraft:piglin", {0, Y, 0}));
+	CHECK(piglin);
+	if (!piglin) return;
+	piglin->setBaby(false);
+	piglin->setPersistenceRequired();
+	auto player = addPlayer(f, 4.5, 0.5);
+	player->inventory().set(5, ItemStack(f.item("minecraft:golden_helmet"), 1)); // Neutral to it
+	f.tick(20);
+	CHECK(piglin->getTarget() != player.get());
+	Piglin::angerNearby(*f.level, *player, false);
+	CHECK(piglin->getTarget() == player.get());
+	// A hoglin near another piglin: hunted
+	auto* hunter = dynamic_cast<Piglin*>(spawn(f, "minecraft:piglin", {10, Y, 10}));
+	Mob*  hoglin = spawn(f, "minecraft:hoglin", {14, Y, 10});
+	CHECK(hunter && hoglin);
+	if (!hunter || !hoglin) return;
+	hunter->setBaby(false);
+	hoglin->setBaby(false);
+	f.tick(40);
+	CHECK(hunter->getTarget() == hoglin);
 }

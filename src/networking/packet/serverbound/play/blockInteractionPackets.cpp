@@ -1,3 +1,4 @@
+#include "world/entity/mobs/Piglins.hpp"
 #include "world/blocks/BlockSounds.hpp"
 #include "world/blocks/Signs.hpp"
 #include "BlockPos.hpp"
@@ -133,6 +134,8 @@ namespace {
 		if (creative && held && !held->canDestroyBlocksInCreative) return false;
 		if (!creative && gameData.getDestroyTime(state) < 0) return false; // Bedrock...
 
+		// PiglinAi.angerNearbyPiglins: mining what piglins guard (gold...)
+		if (gameData.isInTag("minecraft:block", "minecraft:guarded_by_piglins", level.blocks().blockOf(state))) Piglin::angerNearby(level, player, false);
 		// Block.playerWillDestroy: the block's own (a shulker box dropping itself in creative, a pot cracking), then
 		// particles and sound for the others (the breaker's client played them already)
 		level.behavior(state).playerWillDestroy(level, pos, state, player);
@@ -271,6 +274,10 @@ void handleUseItemOnPacket(Packet& packet, Server& server) {
 		bool				 used	= result == UseResult::Success || result == UseResult::Consume;
 		if (!used && result == UseResult::TryWithEmptyHand && hand == 0) used = behavior.useWithoutItemAt(level, hit, state, player, blockHit);
 		if (used) {
+			// Opening a chest, barrel... piglins guard: the ones that see it get angry
+			if (gameData.isInTag("minecraft:block", "minecraft:guarded_by_piglins", level.blocks().blockOf(state)) && player.openMenuSlot()) {
+				Piglin::angerNearby(level, player, true);
+			}
 			player.acknowledgeBlockChanges(sequence);
 			return;
 		}

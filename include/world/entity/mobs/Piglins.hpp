@@ -37,7 +37,8 @@ class AbstractPiglin : public Monster {
 // Piglin: neutral to the players wearing gold, hostile to the others (and to wither skeletons). It loves gold: it
 // picks up gold ingots and the #piglin_loved items it sees, admires them for 6 seconds and, for an ingot, gives
 // something back (the bartering table); it gets angry at who hurt it (with the piglins around). Crossbow or golden
-// sword. Babies don't fight. Hunting hoglins, dancing and anger at opened chests aren't ported
+// sword. Babies don't fight. Now and then the adults hunt a hoglin (the ones around then wait 30 to 120 seconds before
+// another hunt) and may dance after the kill; mining gold or opening a chest near them makes them angry
 class Piglin : public AbstractPiglin, public CrossbowAttackMob {
   public:
 	static constexpr int DATA_BABY = 17, DATA_IS_CHARGING_CROSSBOW = 18, DATA_IS_DANCING = 19;
@@ -57,6 +58,10 @@ class Piglin : public AbstractPiglin, public CrossbowAttackMob {
 	// PiglinAi.isPlayerHoldingLovedItem: a player it wants to stare at
 	bool isLovedItem(const ItemStack& stack);
 	const std::vector<ItemStack>& inventory() const { return _inventory; }
+	bool						  isDancing() const { return _dancingTicks > 0; }
+	// PiglinAi.angerNearbyPiglins: a player broke or opened a block piglins guard (#guarded_by_piglins); with
+	// onlyIfSeen, only the ones that see it
+	static void					  angerNearby(Level& level, Player& player, bool onlyIfSeen);
 
 	void							registerGoals() override;
 	bool							canAttack(Actor& target) override;
@@ -76,7 +81,10 @@ class Piglin : public AbstractPiglin, public CrossbowAttackMob {
 
   private:
 	bool				   _baby = false, _chargingCrossbow = false;
-	int					   _admireTicks = 0;
+	int					   _admireTicks = 0, _dancingTicks = 0, _huntedRecently = 0;
+	EntityRef			   _hunted; // The hoglin it hunts
+
+	void tickHunting();
 	std::vector<ItemStack> _inventory; // What it keeps (8 slots in vanilla)
 
 	void finishAdmiring();

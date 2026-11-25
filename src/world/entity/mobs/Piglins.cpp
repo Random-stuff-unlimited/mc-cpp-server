@@ -285,7 +285,58 @@ void Piglin::throwItem(ItemStack stack) {
 	_level.entities().add(std::move(item));
 }
 
+void Piglin::angerNearby(Level& level, Player& player, bool onlyIfSeen) {
+	if (player.isCreative() || player.isSpectator()) return;
+	AABB area = player.boundingBox().inflate(16.0, 16.0, 16.0);
+	for (Actor* actor : level.actorsIn(area)) {
+		auto* piglin = dynamic_cast<Piglin*>(actor);
+		if (!piglin || !piglin->isAlive() || piglin->isBaby()) continue;
+		if (onlyIfSeen && !piglin->hasLineOfSight(player)) continue;
+		piglin->setTarget(&player);
+	}
+}
+
+// StartHuntingHoglin and the celebration after (RememberIfHoglinWasKilled, dancing)
+void Piglin::tickHunting() {
+	if (_huntedRecently > 0) _huntedRecently--;
+	if (_dancingTicks > 0 && --_dancingTicks == 0) markData(DATA_IS_DANCING);
+	if (_hunted.isSet()) {
+		Actor* hoglin = _level.actorByRef(_hunted);
+		if (!hoglin || !hoglin->isAlive()) {
+			_hunted = EntityRef();
+			// The hoglin is dead: the piglins around dance, one in ten, for 15 seconds
+			for (Actor* actor : _level.actorsIn(boundingBox().inflate(16.0, 8.0, 16.0))) {
+				auto* piglin = dynamic_cast<Piglin*>(actor);
+				if (piglin && piglin->isAlive() && !piglin->isBaby() && piglin->_random.nextFloat() < 0.1F) {
+					piglin->_dancingTicks = 300;
+					piglin->markData(DATA_IS_DANCING);
+				}
+			}
+		}
+		return;
+	}
+	if (_baby || getTarget() || isAdmiring() || _huntedRecently > 0 || _tickCount % 20 != 0) return;
+	// The nearest adult hoglin it sees, within 16 blocks
+	Actor* prey = nullptr;
+	double best = 16.0 * 16.0;
+	for (Actor* actor : _level.actorsIn(boundingBox().inflate(16.0, 8.0, 16.0), this)) {
+		auto* hoglin = dynamic_cast<Mob*>(actor);
+		if (!hoglin || !hoglin->isAlive() || hoglin->isBaby()) continue;
+		if (_level.gameData().getStaticName("minecraft:entity_type", hoglin->typeId()) != "minecraft:hoglin") continue;
+		double d = distanceToSqr(hoglin->position());
+		if (d < best && hasLineOfSight(*hoglin)) best = d, prey = hoglin;
+	}
+	if (!prey) return;
+	// hoglinHuntedRecently for the piglins around: 30 to 120 seconds
+	for (Actor* actor : _level.actorsIn(boundingBox().inflate(16.0, 8.0, 16.0))) {
+		if (auto* piglin = dynamic_cast<Piglin*>(actor)) piglin->_huntedRecently = 600 + piglin->_random.nextInt(1801);
+	}
+	_hunted = EntityRef(*prey);
+	setTarget(prey);
+}
+
 void Piglin::customServerAiStep() {
+	tickHunting();
 	if (_admireTicks > 0 && --_admireTicks == 0) finishAdmiring();
 	AbstractPiglin::customServerAiStep();
 }
@@ -359,6 +410,7 @@ void Piglin::writeData(Buffer& buf, uint32_t mask, bool onlyNonDefault) const {
 	AbstractPiglin::writeData(buf, mask, onlyNonDefault);
 	if (wantsData(mask, DATA_BABY, onlyNonDefault, !_baby)) writeBoolData(buf, DATA_BABY, _baby);
 	if (wantsData(mask, DATA_IS_CHARGING_CROSSBOW, onlyNonDefault, !_chargingCrossbow)) writeBoolData(buf, DATA_IS_CHARGING_CROSSBOW, _chargingCrossbow);
+	if (wantsData(mask, DATA_IS_DANCING, onlyNonDefault, !isDancing())) writeBoolData(buf, DATA_IS_DANCING, isDancing());
 }
 
 void Piglin::save(Buffer& buf) const {

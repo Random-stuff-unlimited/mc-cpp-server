@@ -23,6 +23,10 @@ class Allay : public Mob {
 	int				 addToInventory(const ItemStack& stack);
 	int				 throwCooldown = 0;
 	using Mob::playSound;
+	// Dancing by a playing jukebox (within 10 blocks); an amethyst shard given while dancing makes a second allay
+	// (then 5 minutes before it can again)
+	bool			 isDancing() const { return _dancing; }
+	bool			 canDuplicate() const { return _duplicationCooldown == 0; }
 
 	void		registerGoals() override;
 	bool		mobInteract(Player& player, int hand) override;
@@ -43,6 +47,12 @@ class Allay : public Mob {
   private:
 	ItemStack _inventory;
 	EntityRef _liked;
+	bool	  _dancing = false;
+	int		  _duplicationCooldown = 0;
+
+	void setDancing(bool dancing);
+	void setDuplicationCooldown(int ticks);
+	bool jukeboxNearby();
 };
 
 // CopperGolem: a golem of copper that sorts: it takes up to 16 items from a copper chest nearby and puts them into a
