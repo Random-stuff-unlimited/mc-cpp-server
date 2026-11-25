@@ -308,11 +308,14 @@ bool VillageEvents::spawnWanderingTrader(Player& player) {
 	trader->setDespawnDelay(48000);
 	trader->setWanderTarget(base);
 	trader->setHomeTo(base, 16);
-	// Its two llamas (their leads aren't ported: they stay around it)
+	// tryToSpawnLlamaFor: its two llamas, on leads it holds
 	for (int i = 0; i < 2; i++) {
 		BlockPos at = spot->offset(random.nextInt(5) - 2, 0, random.nextInt(5) - 2);
 		if (std::optional<BlockPos> surface = surfaceNear(at)) {
-			if (Mob* llama = _level.mobs().spawn(_level, typeId(_level, "minecraft:trader_llama"), *surface, MobRegistry::SpawnReason::Event)) llama->setHomeTo(base, 16);
+			if (Mob* llama = _level.mobs().spawn(_level, typeId(_level, "minecraft:trader_llama"), *surface, MobRegistry::SpawnReason::Event)) {
+				llama->setHomeTo(base, 16);
+				llama->setLeashedTo(*trader);
+			}
 		}
 	}
 	return true;

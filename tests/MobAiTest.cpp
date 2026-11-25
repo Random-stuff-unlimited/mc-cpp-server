@@ -1,4 +1,5 @@
 #include "LevelFixture.hpp"
+#include "world/item/ItemUse.hpp"
 #include "world/blocks/Composter.hpp"
 #include "world/entity/mobs/FlyingAnimals.hpp"
 #include "world/blockentity/EndGatewayBlockEntity.hpp"
@@ -1355,6 +1356,17 @@ TEST(patrol_and_bad_omen) {
 	CHECK((captain->position() - start).horizontalDistanceSqr() > 4.0);
 	player->setGameMode(GameMode::Survival);
 	captain->hurtServer({"minecraft:player_attack", player.get(), nullptr, std::nullopt}, 1000.0F);
+	// It drops an ominous bottle; drunk, it gives Bad Omen
+	ItemStack bottle;
+	for (ItemEntity* item : f.items()) {
+		if (item->item().item == f.data.getStaticId("minecraft:item", "minecraft:ominous_bottle")) bottle = item->item();
+	}
+	CHECK(!bottle.isEmpty());
+	if (bottle.isEmpty()) return;
+	player->setSelectedSlot(0);
+	player->inventory().set(player->handSlot(0), bottle);
+	ItemUse::useItem(*f.level, *player, 0);
+	for (int i = 0; i < 40; i++) ItemUse::updatingUsingItem(*f.level, *player);
 	CHECK(player->hasEffect(MobEffects::BadOmen));
 }
 

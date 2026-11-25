@@ -1,3 +1,4 @@
+#include "world/item/Components.hpp"
 #include "world/entity/mobs/Illagers.hpp"
 
 #include "PacketIds.hpp"
@@ -449,14 +450,15 @@ void Raider::setCelebrating(bool celebrating) {
 }
 
 void Raider::die(const Combat::DamageSource& source) {
-	// A captain killed by a player (outside raids): Bad Omen, one level more (vanilla 1.21 drops an ominous bottle that
-	// gives it: bottles aren't drinkable here yet)
-	if (isCaptain() && _raidId < 0 && source.attackerPlayer()) {
-		Player*						player = source.attackerPlayer();
-		const MobEffects::Instance* omen   = player->effects().get(MobEffects::BadOmen);
-		int							level  = omen ? std::min(omen->amplifier + 1, 4) : 0;
-		player->removeEffect(MobEffects::BadOmen);
-		player->addEffect({MobEffects::BadOmen, 120000, level});
+	// A captain killed outside raids drops an ominous bottle (Bad Omen I to V when drunk)
+	if (isCaptain() && _raidId < 0) {
+		const GameData& data = _level.gameData();
+		ItemStack		bottle(data.getStaticId("minecraft:item", "minecraft:ominous_bottle"), 1);
+		std::vector<uint8_t> amplifier;
+		int					 value = _random.nextInt(5);
+		amplifier.push_back(static_cast<uint8_t>(value)); // A VarInt below 128
+		Components::set(bottle, data, "minecraft:ominous_bottle_amplifier", amplifier);
+		spawnAtLocation(bottle);
 	}
 	if (VillageEvents* events = _level.villageEvents(); events && _raidId >= 0) events->onRaiderDied(*this);
 	Monster::die(source);

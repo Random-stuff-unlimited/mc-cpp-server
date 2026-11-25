@@ -429,6 +429,13 @@ namespace {
 			playerSound(level, player, "minecraft:item.spyglass.stop_using", 1.0F, 1.0F);
 		} else if (props && props->consumable) {
 			stack = onConsume(level, player, std::move(stack), *props);
+			// OminousBottleItem: Bad Omen for 100 minutes, its level from the bottle's amplifier
+			if (itemName(gd, before) == "minecraft:ominous_bottle") {
+				int amplifier = 0;
+				if (auto value = Components::get(before, gd, "minecraft:ominous_bottle_amplifier"); value && !value->empty()) amplifier = (*value)[0] & 0x7F;
+				player.removeEffect(MobEffects::BadOmen);
+				player.addEffect(MobEffects::Instance(MobEffects::BadOmen, 120000, std::min(amplifier, 4), false, false, true));
+			}
 		}
 		return applyAfterUse(level, player, std::move(stack), before);
 	}
