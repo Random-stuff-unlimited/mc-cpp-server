@@ -158,6 +158,10 @@ class Level : public NeighborUpdateTarget {
 	const GameData::Biome& getBiome(const BlockPos& pos);
 	// Level.isRainingAt: rain falls on this block (raining, open sky, nothing above, a biome where it rains)
 	bool isRainingAt(const BlockPos& pos);
+	// Biome.getTemperature: the biome's, colder high up (above sea level + 17)
+	float temperatureAt(const BlockPos& pos);
+	// ServerLevel.tickPrecipitation: water freezes and snow piles up where it is cold enough, cauldrons fill
+	void  tickPrecipitation(const BlockPos& pos);
 	// ChunkMap.anyPlayerCloseEnoughForSpawning: a player (not a spectator) within 128 blocks of the chunk's center
 	bool anyPlayerCloseEnoughForSpawning(const BlockPos& pos);
 	// The world's difficulty (0 peaceful, 1 easy, 2 normal, 3 hard)

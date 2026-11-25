@@ -1494,3 +1494,36 @@ TEST(beehive_harvest_and_smoke) {
 	CHECK_EQ(combs, 3);
 	CHECK(bee->getTarget() == player.get());
 }
+
+// Snowy plains in the rain: snow covers the ground, still water freezes, a cauldron fills with powder snow; in plains it
+// fills with water and nothing freezes
+TEST(precipitation_snow_ice_cauldrons) {
+	LevelFixture cold(1, "minecraft:overworld", flatOf("minecraft:snowy_plains"));
+	cold.world->setWeather(true, false, 1000);
+	for (int i = 0; i < 100; i++) cold.world->tickWeather(true); // The rain level ramps up (the server ticks the weather)
+	CHECK(cold.level->isRaining());
+	cold.level->setBlock({2, Y - 1, 2}, cold.data.getDefaultBlockState("minecraft:water"), Level::UPDATE_ALL);
+	cold.level->setBlock({4, Y, 4}, cold.data.getDefaultBlockState("minecraft:cauldron"), Level::UPDATE_ALL);
+	for (int i = 0; i < 200; i++) {
+		cold.level->tickPrecipitation({0, Y, 0});
+		cold.level->tickPrecipitation({2, Y, 2});
+		cold.level->tickPrecipitation({4, Y, 4});
+	}
+	CHECK(cold.nameAt(0, Y, 0).find("minecraft:snow[") == 0);
+	CHECK(cold.nameAt(2, Y - 1, 2) == "minecraft:ice");
+	CHECK(cold.nameAt(4, Y, 4).find("minecraft:powder_snow_cauldron") == 0);
+
+	LevelFixture warm(1);
+	warm.world->setWeather(true, false, 1000);
+	for (int i = 0; i < 100; i++) warm.world->tickWeather(true);
+	warm.level->setBlock({2, Y - 1, 2}, warm.data.getDefaultBlockState("minecraft:water"), Level::UPDATE_ALL);
+	warm.level->setBlock({4, Y, 4}, warm.data.getDefaultBlockState("minecraft:cauldron"), Level::UPDATE_ALL);
+	for (int i = 0; i < 200; i++) {
+		warm.level->tickPrecipitation({0, Y, 0});
+		warm.level->tickPrecipitation({2, Y, 2});
+		warm.level->tickPrecipitation({4, Y, 4});
+	}
+	CHECK(warm.nameAt(0, Y, 0) == "minecraft:air");
+	CHECK(warm.nameAt(2, Y - 1, 2).find("minecraft:water") == 0);
+	CHECK(warm.nameAt(4, Y, 4).find("minecraft:water_cauldron") == 0);
+}

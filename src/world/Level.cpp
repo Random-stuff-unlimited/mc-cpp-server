@@ -204,7 +204,48 @@ bool Level::isRainingAt(const BlockPos& pos) {
 	// Biome.getPrecipitationAt: rain where it isn't cold enough to snow (the height adjustment of the temperature
 	// isn't ported: the biome's own temperature decides)
 	const GameData::Biome& biome = getBiome(pos);
-	return biome.hasPrecipitation && biome.temperature >= 0.15F;
+	return biome.hasPrecipitation && temperatureAt(pos) >= 0.15F;
+}
+
+float Level::temperatureAt(const BlockPos& pos) {
+	const GameData::Biome& biome = getBiome(pos);
+	float				   temperature = biome.temperature;
+	// The temperature noise isn't ported: the plain height adjustment
+	int top = seaLevel() + 17;
+	if (pos.y > top) temperature -= static_cast<float>(pos.y - top) * 0.05F / 40.0F;
+	return temperature;
+}
+
+void Level::tickPrecipitation(const BlockPos& at) {
+	BlockPos			   top{at.x, getHeight(Heightmap::MotionBlocking, at.x, at.z), at.z};
+	BlockPos			   below = top.below();
+	const GameData::Biome& biome = getBiome(top);
+	bool				   cold	 = biome.hasPrecipitation && temperatureAt(below) < 0.15F;
+	// Biome.shouldFreeze: still water under the open sky, dark enough
+	if (cold && getBlockLight(below) < 10) {
+		int state = getBlockState(below);
+		if (state == _gameData.getDefaultBlockState("minecraft:water")) setBlock(below, _gameData.getDefaultBlockState("minecraft:ice"), UPDATE_ALL);
+	}
+	if (!isRaining()) return;
+	// Biome.shouldSnow: one layer of snow (snowAccumulationHeight 1) where snow can lie
+	if (cold && temperatureAt(top) < 0.15F && getBlockLight(top) < 10 && _blocks.isAir(getBlockState(top))) {
+		int snow = _gameData.getDefaultBlockState("minecraft:snow");
+		if (behavior(snow).canSurvive(*this, top, snow)) setBlock(top, snow, UPDATE_ALL);
+	}
+	// Block.handlePrecipitation: cauldrons (CauldronBlock, LayeredCauldronBlock)
+	if (!biome.hasPrecipitation) return;
+	bool		snowing = temperatureAt(below) < 0.15F;
+	int			state	= getBlockState(below);
+	std::string name	= _gameData.getStaticName("minecraft:block", _blocks.blockOf(state));
+	float		chance	= snowing ? 0.1F : 0.05F;
+	if (name == "minecraft:cauldron") {
+		if (_random.nextFloat() < chance) setBlock(below, _gameData.getDefaultBlockState(snowing ? "minecraft:powder_snow_cauldron" : "minecraft:water_cauldron"), UPDATE_ALL);
+	} else if ((name == "minecraft:water_cauldron" && !snowing) || (name == "minecraft:powder_snow_cauldron" && snowing)) {
+		std::string level = _gameData.getProperty(state, "level");
+		if (!level.empty() && level != "3" && _random.nextFloat() < chance) {
+			setBlock(below, _gameData.withProperty(state, "level", std::to_string(std::stoi(level) + 1)), UPDATE_ALL);
+		}
+	}
 }
 
 bool Level::anyPlayerCloseEnoughForSpawning(const BlockPos& pos) {
@@ -1008,9 +1049,9 @@ void Level::forEachTickingChunk(const std::function<void(Chunk&)>& f) {
 void Level::tickChunk(Chunk& chunk, int speed) {
 	int minX = chunk.x() * 16, minZ = chunk.z() * 16;
 	LightningBolt::tickThunder(*this, chunk.x(), chunk.z()); // ServerLevel.tickThunder
-	// Snow and ice with the weather (not there yet): the random numbers are drawn all the same
+	// Snow and ice with the weather, cauldrons in the rain (ServerLevel.tickPrecipitation)
 	for (int i = 0; i < speed; i++) {
-		if (_random.nextInt(48) == 0) getBlockRandomPos(minX, 0, minZ, 15);
+		if (_random.nextInt(48) == 0) tickPrecipitation(getBlockRandomPos(minX, 0, minZ, 15));
 	}
 	std::vector<uint16_t>& counts = chunk.randomTickingCounts();
 	for (size_t section = 0; section < counts.size(); section++) {

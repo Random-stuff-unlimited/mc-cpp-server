@@ -170,7 +170,7 @@ Les 85 types de mobs vanilla ont leur classe et leur IA (`src/world/entity/mobs`
 - [x] Enregistrement du temps/weather dans `level.json` (persistance de la météo et de l'heure)
 - [x] Spawn conditionnel des mobs par biome (tableaux par type), caps par dimension
 - [ ] Portails End : activation, plateforme, retour — à vérifier/compléter
-- [ ] Climat : neige (blocage de la pluie), températures par biome appliquées
+- [x] Climat : neige qui tient et eau qui gèle dans les biomes froids, chaudrons remplis par la pluie/neige, température selon l'altitude
 - [ ] Structuration `AnvilImporter` : biomes nether/end, block entities, entités importées
 - [ ] Horloge de sauvegarde plus fine, sauvegarde des block entities (partiel)
 
