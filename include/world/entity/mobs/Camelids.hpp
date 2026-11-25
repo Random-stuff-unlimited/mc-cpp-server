@@ -93,6 +93,10 @@ class Camel : public AbstractHorse {
 	Camel(Level& level, int typeId);
 
 	bool	isCamelSitting() const { return _lastPoseChangeTick < 0; }
+	// Camel.executeRidersJump: its rider's jump is a dash forward (the client moves it), then 55 ticks to rest
+	void	handleStartJump() override;
+	bool	isDashing() const { return _dashing; }
+	void	tick() override;
 	int64_t poseTime() const;
 	void	sitDown();
 	void	standUp();
@@ -119,6 +123,8 @@ class Camel : public AbstractHorse {
 
   private:
 	int64_t _lastPoseChangeTick = 0;
+	bool	_dashing = false;
+	int		_dashCooldown = 0;
 
 	void resetLastPoseChangeTick(int64_t tick);
 };

@@ -1,3 +1,4 @@
+#include "world/entity/ai/LongJumpGoal.hpp"
 #include "world/entity/mobs/Amphibians.hpp"
 
 #include "network/buffer.hpp"
@@ -159,6 +160,8 @@ void Frog::registerGoals() {
 	_goalSelector.addGoal(3, std::make_unique<FrogLayEggGoal>(*this));
 	_goalSelector.addGoal(4, std::make_unique<TemptGoal>(*this, 1.25, [this](const ItemStack& stack) { return isFood(stack); }, false));
 	_goalSelector.addGoal(5, std::make_unique<FrogTongueGoal>(*this));
+	// FrogAi: a hop every 5 to 7 seconds, 4 blocks out, 2 up or down
+	_goalSelector.addGoal(6, std::make_unique<LongJumpGoal>(*this, 100, 140, 2, 4, 3.5F, "minecraft:entity.frog.long_jump"));
 	_goalSelector.addGoal(6, std::make_unique<RandomStrollGoal>(*this, 1.0));
 	_goalSelector.addGoal(7, std::make_unique<LookAtPlayerGoal>(*this, "Player", 6.0F));
 	_goalSelector.addGoal(8, std::make_unique<RandomLookAroundGoal>(*this));

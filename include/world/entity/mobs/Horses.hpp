@@ -42,7 +42,7 @@ class AbstractHorse : public Animal {
 	void makeMad();
 	void tameWithName(Player& player);
 	// PlayerRideableJumping.handleStartJump
-	void handleStartJump();
+	virtual void handleStartJump();
 	bool canParent();
 	int	 ambientStandInterval() const { return ambientSoundInterval(); }
 	std::string ambientStandSound() { return ambientSoundName(); }

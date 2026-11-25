@@ -1,3 +1,4 @@
+#include "world/entity/ai/LongJumpGoal.hpp"
 #include "world/item/Components.hpp"
 #include "world/entity/mobs/Critters.hpp"
 
@@ -279,6 +280,8 @@ void Goat::registerGoals() {
 	_goalSelector.addGoal(2, std::make_unique<BreedGoal>(*this, 1.0));
 	_goalSelector.addGoal(3, std::make_unique<TemptGoal>(*this, 1.25, [this](const ItemStack& stack) { return isFood(stack); }, false));
 	_goalSelector.addGoal(4, std::make_unique<GoatRamGoal>(*this));
+	// GoatAi: a long jump every 30 to 60 seconds, 5 blocks out and up
+	_goalSelector.addGoal(5, std::make_unique<LongJumpGoal>(*this, 600, 1200, 5, 5, 1.5F, isScreamingGoat() ? "minecraft:entity.goat.screaming.long_jump" : "minecraft:entity.goat.long_jump"));
 	_goalSelector.addGoal(5, std::make_unique<FollowParentGoal>(*this, 1.25));
 	_goalSelector.addGoal(6, std::make_unique<WaterAvoidingRandomStrollGoal>(*this, 1.0));
 	_goalSelector.addGoal(7, std::make_unique<LookAtPlayerGoal>(*this, "Player", 6.0F));

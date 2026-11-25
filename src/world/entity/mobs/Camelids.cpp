@@ -450,7 +450,7 @@ std::shared_ptr<SpawnGroupData> Camel::finalizeSpawn(DifficultyInstance& difficu
 
 void Camel::writeData(Buffer& buf, uint32_t mask, bool onlyNonDefault) const {
 	AbstractHorse::writeData(buf, mask, onlyNonDefault);
-	if (wantsData(mask, DATA_DASH, onlyNonDefault, true)) writeBoolData(buf, DATA_DASH, false);
+	if (wantsData(mask, DATA_DASH, onlyNonDefault, !_dashing)) writeBoolData(buf, DATA_DASH, _dashing);
 	if (wantsData(mask, DATA_LAST_POSE_CHANGE_TICK, onlyNonDefault, _lastPoseChangeTick == 0)) {
 		buf.writeUByte(static_cast<uint8_t>(DATA_LAST_POSE_CHANGE_TICK));
 		buf.writeVarInt(SERIALIZER_LONG);
@@ -469,4 +469,23 @@ void Camel::load(Buffer& buf) {
 	if (buf.readUByte() != SAVE_VERSION) throw std::runtime_error("unknown camel data version");
 	_lastPoseChangeTick = buf.readLong();
 	if (isCamelSitting()) setPose(POSE_SITTING);
+}
+
+void Camel::handleStartJump() {
+	if (_dashCooldown > 0 || !onGround()) return;
+	standUp();
+	_dashing	  = true;
+	_dashCooldown = 55;
+	markData(DATA_DASH);
+	playSound("minecraft:entity.camel.dash", 1.0F, 1.0F);
+}
+
+void Camel::tick() {
+	AbstractHorse::tick();
+	if (_dashCooldown > 0) _dashCooldown--;
+	// The dash ends on landing (or in a liquid)
+	if (_dashing && _dashCooldown < 50 && (onGround() || isInWaterNow())) {
+		_dashing = false;
+		markData(DATA_DASH);
+	}
 }

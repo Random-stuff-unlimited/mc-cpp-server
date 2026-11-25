@@ -1672,3 +1672,29 @@ TEST(ender_pearl_and_chorus_fruit) {
 	CHECK(std::abs(player->getX() - 0.5) > 1e-6 || std::abs(player->getZ() - 0.5) > 1e-6);
 	CHECK(ItemUse::isOnCooldown(*f.level, *player, ItemStack(f.item("minecraft:chorus_fruit"), 1)));
 }
+
+// Frogs leap now and then (several blocks in one jump); a ridden camel dashes once, then rests
+TEST(frog_long_jump_and_camel_dash) {
+	LevelFixture f(1);
+	Mob* frog = spawn(f, "minecraft:frog", {0, Y, 0});
+	CHECK(frog);
+	if (!frog) return;
+	f.world->setDayTime(1000);
+	double longest = 0.0;
+	Vec3   last	   = frog->position();
+	for (int i = 0; i < 600; i++) {
+		f.tick();
+		longest = std::max(longest, std::sqrt((frog->position() - last).horizontalDistanceSqr()));
+		last	= frog->position();
+	}
+	CHECK(longest > 0.25); // A leap moves it far faster than a walk
+	auto* camel = dynamic_cast<Camel*>(spawn(f, "minecraft:camel", {5, Y, 5}));
+	CHECK(camel);
+	if (!camel) return;
+	camel->setBaby(false);
+	f.tick(5);
+	camel->handleStartJump();
+	CHECK(camel->isDashing());
+	f.tick(60);
+	CHECK(!camel->isDashing());
+}
