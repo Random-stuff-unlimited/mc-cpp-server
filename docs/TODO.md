@@ -95,7 +95,9 @@ Les 85 types de mobs vanilla ont leur classe et leur IA (`src/world/entity/mobs`
 - [x] Allay : danse près d'un jukebox, duplication à l'améthyste (5 min de délai) ; perroquets : danse côté client
 - [x] Piglins : chasse aux hoglins (30-120 s entre deux), danse après la prise, colère quand on mine l'or ou ouvre un
       coffre gardé (#guarded_by_piglins)
-- [ ] Comportements : cornes de chèvre, sauts longs (chèvre, grenouille), dash du chameau
+- [x] Cornes de chèvre (perdues en chargeant un bloc dur, sonnent, 7 s de recharge), cooldowns d'objets (`COOLDOWN`,
+      `use_cooldown`), perle de l'End, charge de vent du joueur, fruit de chorus (téléportation aléatoire)
+- [ ] Comportements : sauts longs (chèvre, grenouille), dash du chameau
 - [x] Réglages de spawn : spawn par biome (tableaux de `worldgen/biome`, coûts de spawn), caps globaux et par joueur,
       caps configurables par dimension (`config.json` → `world.spawn-limits`)
 - [ ] Spawns liés aux structures (forteresse, cabane de sorcière, monument, avant-poste) : pas de structures générées

@@ -1622,3 +1622,53 @@ TEST(piglins_guard_gold_and_hunt) {
 	f.tick(40);
 	CHECK(hunter->getTarget() == hoglin);
 }
+
+// Goat horns: a goat loses a horn (a goat horn of a regular instrument); blown, the horn cools down 7 seconds; ender
+// pearls cool down a second
+TEST(goat_horns_and_item_cooldowns) {
+	LevelFixture f(1);
+	auto* goat = dynamic_cast<Goat*>(spawn(f, "minecraft:goat", {0, Y, 0}));
+	CHECK(goat);
+	if (!goat) return;
+	CHECK(goat->dropHorn());
+	CHECK(goat->dropHorn());
+	CHECK(!goat->dropHorn() && !goat->hasLeftHorn() && !goat->hasRightHorn());
+	ItemStack horn;
+	for (ItemEntity* item : f.items()) {
+		if (item->item().item == f.item("minecraft:goat_horn")) horn = item->item();
+	}
+	CHECK(!horn.isEmpty());
+	auto player = addPlayer(f, 3.5, 0.5);
+	player->setSelectedSlot(0);
+	player->inventory().set(player->handSlot(0), horn);
+	CHECK(ItemUse::useItem(*f.level, *player, 0) == ItemUse::Result::Consume);
+	CHECK(ItemUse::isOnCooldown(*f.level, *player, horn));
+	CHECK(ItemUse::useItem(*f.level, *player, 0) == ItemUse::Result::Pass);
+	f.tick(141);
+	CHECK(!ItemUse::isOnCooldown(*f.level, *player, horn));
+	ItemStack pearl(f.item("minecraft:ender_pearl"), 4);
+	player->inventory().set(player->handSlot(0), pearl);
+	ItemUse::useItem(*f.level, *player, 0);
+	CHECK(ItemUse::isOnCooldown(*f.level, *player, pearl));
+}
+
+// An ender pearl thrown ahead takes its thrower where it lands (5 damage); a chorus fruit moves the eater nearby
+TEST(ender_pearl_and_chorus_fruit) {
+	LevelFixture f(2);
+	auto player = addPlayer(f, 0.5, 0.5);
+	player->setRotation(0.0F, 30.0F); // South, a little down
+	player->setSelectedSlot(0);
+	player->inventory().set(player->handSlot(0), ItemStack(f.item("minecraft:ender_pearl"), 2));
+	CHECK(ItemUse::useItem(*f.level, *player, 0) == ItemUse::Result::Success);
+	f.tick(40);
+	CHECK(player->getZ() > 2.0);
+	CHECK(player->combat().health <= 15.0F);
+	// Chorus fruit
+	player->setPosition(0.5, Y, 0.5);
+	player->foodData().setFoodLevel(10);
+	player->inventory().set(player->handSlot(0), ItemStack(f.item("minecraft:chorus_fruit"), 1));
+	ItemUse::useItem(*f.level, *player, 0);
+	for (int i = 0; i < 40; i++) ItemUse::updatingUsingItem(*f.level, *player);
+	CHECK(std::abs(player->getX() - 0.5) > 1e-6 || std::abs(player->getZ() - 0.5) > 1e-6);
+	CHECK(ItemUse::isOnCooldown(*f.level, *player, ItemStack(f.item("minecraft:chorus_fruit"), 1)));
+}

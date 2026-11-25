@@ -10,6 +10,7 @@
 #include "world/entity/MobEffects.hpp"
 #include "world/item/PlayerInventory.hpp"
 
+#include <map>
 #include <algorithm>
 #include <array>
 #include <atomic>
@@ -221,6 +222,7 @@ class Player : public Actor, public std::enable_shared_from_this<Player>, public
 	std::unique_ptr<AttributeMap> _attributes;
 	MobEffects::Active			  _effects;
 	PlayerStats					  _stats;
+	std::map<std::string, int64_t> _itemCooldowns;
 	float						  _absorption = 0.0F;
 	EntityRef					  _lastHurtByMob, _lastHurtMob;
 	int							  _lastHurtByMobTimestamp = 0, _lastHurtMobTimestamp = 0;
@@ -383,6 +385,8 @@ class Player : public Actor, public std::enable_shared_from_this<Player>, public
 	float					  maxHealth();
 	MobEffects::Active&		  effects() { return _effects; }
 	// Its statistics (Stats screen)
+	// ItemCooldowns: per cooldown group (an item's name, or its use_cooldown group), the game time it ends
+	std::map<std::string, int64_t>& itemCooldowns() { return _itemCooldowns; }
 	PlayerStats&			  stats() { return _stats; }
 	const PlayerStats&		  stats() const { return _stats; }
 	const MobEffects::Active& effects() const { return _effects; }

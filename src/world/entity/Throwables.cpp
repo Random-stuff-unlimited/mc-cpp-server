@@ -1,3 +1,7 @@
+#include "world/entity/Mob.hpp"
+#include "world/Explosion.hpp"
+#include "Commands.hpp"
+#include "commands/CommandSupport.hpp"
 #include "world/entity/AreaEffectCloud.hpp"
 #include "world/entity/Throwables.hpp"
 
@@ -257,4 +261,42 @@ void ThrownSplashPotion::onHitAsPotion(const std::string& potion, float duration
 		if (LivingEntity* l = entity.asLiving(); l && !l->isRemoved() && l->isAlive()) living.push_back(l);
 	});
 	for (LivingEntity* target : living) splash(*target, *target, target->effects());
+}
+
+// ===================== ThrownEnderpearl =====================
+
+ThrownEnderpearl::ThrownEnderpearl(Level& level, Actor* thrower, ItemStack item)
+	: ThrowableProjectile(level, "minecraft:ender_pearl", thrower, orDefault(level, std::move(item), "minecraft:ender_pearl")) {}
+
+void ThrownEnderpearl::onHit(const Hit& hit) {
+	if (hit.actor) hurtActor(_level, *hit.actor, {"minecraft:thrown", owner(), this, std::nullopt}, 0.0F);
+	Actor*	by	   = owner();
+	Player* player = by ? by->asPlayer() : nullptr;
+	if (player && !player->isDisconnected() && !player->combat().dead && player->level() == &_level) {
+		// Now and then an endermite (5%)
+		if (_level.mobSpawning() && _random.nextFloat() < 0.05F) {
+			std::unique_ptr<Mob> mite = _level.mobs().create(_level, _level.gameData().getStaticId("minecraft:entity_type", "minecraft:endermite"));
+			if (mite) {
+				mite->snapTo(player->position(), player->getYaw(), player->getPitch());
+				_level.addFreshEntity(std::move(mite));
+			}
+		}
+		Commands::teleport(_level.server(), *player, _position.x, _position.y, _position.z);
+		_level.playSoundAt(nullptr, _position.x, _position.y, _position.z, "minecraft:entity.player.teleport", Level::SoundSource::Players, 1.0F, 1.0F);
+		Combat::damage(_level.server(), *player, 5.0F, {"minecraft:ender_pearl", nullptr, this, std::nullopt});
+	}
+	discard();
+}
+
+// ===================== WindCharge =====================
+
+WindCharge::WindCharge(Level& level, Actor* thrower, ItemStack item)
+	: ThrowableProjectile(level, "minecraft:wind_charge", thrower, orDefault(level, std::move(item), "minecraft:wind_charge")) {}
+
+void WindCharge::onHit(const Hit& hit) {
+	if (hit.actor && hit.actor != owner()) hurtActor(_level, *hit.actor, {"minecraft:wind_charge", owner(), this, std::nullopt}, 1.0F);
+	Explosions::explode(_level, this, Combat::DamageSource{"minecraft:wind_charge", owner(), this, std::nullopt}, nullptr, hit.location, 1.2F, false,
+						Explosions::Interaction::Trigger);
+	_level.playSoundAt(nullptr, hit.location.x, hit.location.y, hit.location.z, "minecraft:entity.wind_charge.wind_burst", Level::SoundSource::Neutral, 1.0F, 1.0F);
+	discard();
 }

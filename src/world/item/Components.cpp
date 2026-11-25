@@ -220,6 +220,13 @@ namespace {
 			} else {
 				in.string();
 			}
+		} else if (type == "minecraft:instrument") {
+			// EitherHolder<Instrument>: a registry holder (its id + 1, 0: inline, not read here) or a key
+			if (in.boolean()) {
+				if (in.varint() == 0) throw std::runtime_error("inline instrument");
+			} else {
+				in.string();
+			}
 		} else if (type == "minecraft:writable_book_content") {
 			for (int i = in.varint(); i > 0; i--) { // Pages: raw text, maybe filtered
 				in.string();

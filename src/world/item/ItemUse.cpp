@@ -1,3 +1,5 @@
+#include "Commands.hpp"
+#include "commands/CommandSupport.hpp"
 #include "world/entity/AreaEffectCloud.hpp"
 #include "world/item/Books.hpp"
 #include "world/entity/Vehicles.hpp"
@@ -136,8 +138,27 @@ namespace {
 				}
 			}
 		}
-		// The consume effects (teleport_randomly, the chorus fruit's, isn't ported)
+		// The consume effects
 		for (const GD::ConsumeEffect& effect : consumable.onConsumeEffects) {
+			if (effect.type == "minecraft:teleport_randomly") {
+				// TeleportRandomlyConsumeEffect (diameter 16): up to 16 tries at a random spot, down onto the ground
+				JavaRandom& random = player.random();
+				for (int i = 0; i < 16; i++) {
+					double x = player.getX() + (random.nextDouble() - 0.5) * 16.0;
+					int	   y = std::clamp(Mth::floor(player.getY()) + random.nextInt(16) - 8, level.minY(), level.maxY() - 1);
+					double z = player.getZ() + (random.nextDouble() - 0.5) * 16.0;
+					// LivingEntity.randomTeleport: down to the first block that holds it, free of blocks and liquids
+					BlockPos at{Mth::floor(x), y, Mth::floor(z)};
+					while (at.y > level.minY() && !level.gameData().getStateProperties(level.getBlockState(at.below())).blocksMotion) at = at.below();
+					AABB box{x - 0.3, static_cast<double>(at.y), z - 0.3, x + 0.3, at.y + 1.8, z + 0.3};
+					if (at.y <= level.minY() || level.hasBlockCollision(box) || !level.getFluidState(at).isEmpty()) continue;
+					double fromX = player.getX(), fromY = player.getY(), fromZ = player.getZ();
+					Commands::teleport(level.server(), player, x, at.y, z);
+					level.playSoundAt(nullptr, fromX, fromY, fromZ, "minecraft:item.chorus_fruit.teleport", Level::SoundSource::Players, 1.0F, 1.0F);
+					break;
+				}
+				continue;
+			}
 			if (effect.type == "minecraft:apply_effects") {
 				// ApplyStatusEffectsConsumeEffect: all of them, with this probability
 				if (player.random().nextFloat() >= effect.probability) continue;
@@ -361,6 +382,23 @@ namespace {
 		if (name == "minecraft:water_bucket") return useBucket(level, player, stack, level.fluids().water());
 		if (name == "minecraft:lava_bucket") return useBucket(level, player, stack, level.fluids().lava());
 		if (name == "minecraft:glass_bottle") return useBottle(level, player, stack);
+		// InstrumentItem.use: the horn's sound for everyone within 256 blocks, then 7 seconds to wait
+		if (name == "minecraft:goat_horn") {
+			std::string instrument = "minecraft:ponder_goat_horn";
+			if (auto value = Components::get(stack, gd, "minecraft:instrument"); value && value->size() > 1 && (*value)[0] == 0) {
+				Buffer in(*value);
+				in.readBool();
+				instrument = in.readString(256);
+			}
+			static const std::vector<std::string> ORDER = {"ponder", "sing", "seek", "feel", "admire", "call", "yearn", "dream"};
+			std::string							  shortName = instrument.substr(instrument.find(':') + 1);
+			shortName = shortName.substr(0, shortName.find("_goat_horn"));
+			int index = static_cast<int>(std::find(ORDER.begin(), ORDER.end(), shortName) - ORDER.begin()) % 8;
+			level.playSoundAt(nullptr, player.getX(), player.getY(), player.getZ(), "minecraft:item.goat_horn.sound." + std::to_string(index),
+							  Level::SoundSource::Records, 256.0F / 16.0F, 1.0F);
+			ItemUse::addCooldown(level, player, stack, 140);
+			return {Result::Consume, {}};
+		}
 		// The thrown items (SnowballItem, EggItem, ExperienceBottleItem, SplashPotionItem): the sound, the projectile
 		// along the player's look (Projectile.spawnProjectileFromRotation), one used (none in creative)
 		struct Throwable {
@@ -375,6 +413,8 @@ namespace {
 				{"minecraft:experience_bottle", "minecraft:entity.experience_bottle.throw", false, -20.0F, 0.7F},
 				{"minecraft:splash_potion", "minecraft:entity.splash_potion.throw", true, -20.0F, 0.5F},
 				{"minecraft:lingering_potion", "minecraft:entity.lingering_potion.throw", true, -20.0F, 0.5F},
+				{"minecraft:ender_pearl", "minecraft:entity.ender_pearl.throw", false, 0.0F, 1.5F},
+				{"minecraft:wind_charge", "minecraft:entity.wind_charge.throw", false, 0.0F, 1.5F},
 		};
 		for (const Throwable& t : throwables) {
 			if (name != t.item) continue;
@@ -387,6 +427,10 @@ namespace {
 				thrown = std::make_unique<ThrownEgg>(level, &player, stack);
 			} else if (name == "minecraft:experience_bottle") {
 				thrown = std::make_unique<ThrownExperienceBottle>(level, &player, stack);
+			} else if (name == "minecraft:ender_pearl") {
+				thrown = std::make_unique<ThrownEnderpearl>(level, &player, stack);
+			} else if (name == "minecraft:wind_charge") {
+				thrown = std::make_unique<WindCharge>(level, &player, stack);
 			} else if (name == "minecraft:lingering_potion") {
 				thrown = ThrownSplashPotion::lingering(level, &player, stack);
 			} else {
@@ -429,6 +473,7 @@ namespace {
 			playerSound(level, player, "minecraft:item.spyglass.stop_using", 1.0F, 1.0F);
 		} else if (props && props->consumable) {
 			stack = onConsume(level, player, std::move(stack), *props);
+			if (props->useCooldownSeconds > 0.0F) ItemUse::addCooldown(level, player, before, static_cast<int>(props->useCooldownSeconds * 20.0F));
 			// OminousBottleItem: Bad Omen for 100 minutes, its level from the bottle's amplifier
 			if (itemName(gd, before) == "minecraft:ominous_bottle") {
 				int amplifier = 0;
@@ -510,16 +555,44 @@ namespace ItemUse {
 		return props->blocksAttacks ? BLOCKING_USE_DURATION : 0;
 	}
 
+	std::string cooldownGroup(const GameData& gameData, const ItemStack& stack) {
+		const GD::ItemProperties* props = gameData.getItemProperties(stack.item);
+		if (props && !props->useCooldownGroup.empty()) return props->useCooldownGroup;
+		return gameData.getStaticName("minecraft:item", stack.item);
+	}
+
+	bool isOnCooldown(Level& level, Player& player, const ItemStack& stack) {
+		auto it = player.itemCooldowns().find(cooldownGroup(level.gameData(), stack));
+		return it != player.itemCooldowns().end() && it->second > level.getGameTime();
+	}
+
+	void addCooldown(Level& level, Player& player, const ItemStack& stack, int ticks) {
+		std::string group				= cooldownGroup(level.gameData(), stack);
+		player.itemCooldowns()[group] = level.getGameTime() + ticks;
+		// ClientboundCooldownPacket: the group, the ticks
+		Buffer data;
+		data.writeString(group);
+		data.writeVarInt(ticks);
+		Packet::send(player.shared_from_this(), PacketId::Play::Clientbound::COOLDOWN, data, level.server());
+	}
+
 	Result useItem(Level& level, Player& player, int hand) {
 		if (player.getGameMode() == GameMode::Spectator) return Result::Pass;
 		const GameData& gd	   = level.gameData();
 		ItemStack		stack  = player.getStackInHand(hand);
 		if (stack.isEmpty()) return Result::Pass;
+		// ItemCooldowns: still cooling down
+		if (isOnCooldown(level, player, stack)) return Result::Pass;
 		// ItemStack.use: the use_remainder of items used at once
 		ItemStack before	  = stack;
 		bool	  instant	  = getUseDuration(gd, stack) <= 0;
 		Outcome	  outcome	  = use(level, player, hand, stack);
 		bool	  success	  = outcome.result == Result::Success || outcome.result == Result::Consume;
+		// UseCooldown.apply: items with a use_cooldown (ender pearls, wind charges) cool down once used
+		if (success) {
+			const GD::ItemProperties* props = gd.getItemProperties(before.item);
+			if (props && props->useCooldownSeconds > 0.0F && !props->consumable) addCooldown(level, player, before, static_cast<int>(props->useCooldownSeconds * 20.0F));
+		}
 		if (instant && success) outcome.transformed = applyAfterUse(level, player, outcome.transformed ? *outcome.transformed : player.getStackInHand(hand), before);
 
 		// ServerPlayerGameMode.useItem

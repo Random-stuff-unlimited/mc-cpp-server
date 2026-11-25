@@ -16,6 +16,10 @@ class Goat : public Animal {
 	void setScreamingGoat(bool screaming);
 	// GoatAi.RAM_COOLDOWN_TICKS / TIME_BETWEEN_RAMS_SCREAMER: a new cooldown after a ram
 	int	 nextRamCooldown();
+	bool hasLeftHorn() const { return _leftHorn; }
+	bool hasRightHorn() const { return _rightHorn; }
+	// Goat.dropHorn: one of its horns falls off (a goat horn of a random instrument of its kind); false if it has none
+	bool dropHorn();
 
 	void							registerGoals() override;
 	bool							mobInteract(Player& player, int hand) override;

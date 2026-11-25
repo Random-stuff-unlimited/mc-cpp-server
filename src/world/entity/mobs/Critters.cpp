@@ -1,3 +1,4 @@
+#include "world/item/Components.hpp"
 #include "world/entity/mobs/Critters.hpp"
 
 #include "network/buffer.hpp"
@@ -122,6 +123,16 @@ namespace {
 				return;
 			}
 			Vec3 left = _end - _goat.position();
+			if (_goat.horizontalCollision()) {
+				// RamTarget: into a block that snaps horns (logs, stone, ores, packed ice), a horn may fall off
+				BlockPos ahead{Mth::floor(_goat.position().x + _direction.x), Mth::floor(_goat.position().y + 0.5), Mth::floor(_goat.position().z + _direction.z)};
+				const GameData& data  = _goat.level().gameData();
+				int				block = _goat.level().blocks().blockOf(_goat.level().getBlockState(ahead));
+				if (data.isInTag("minecraft:block", "minecraft:snaps_goat_horn", block)) {
+					_goat.dropHorn();
+					_goat.playSound(_goat.isScreamingGoat() ? "minecraft:entity.goat.screaming.horn_break" : "minecraft:entity.goat.horn_break", 1.0F, 1.0F);
+				}
+			}
 			if (_ticks > 40 || left.horizontalDistanceSqr() < 0.25 || _goat.horizontalCollision()) _phase = Phase::Done;
 		}
 
@@ -536,4 +547,25 @@ void Sniffer::load(Buffer& buf) {
 	Animal::load(buf);
 	if (buf.readUByte() != SAVE_VERSION) throw std::runtime_error("unknown sniffer data version");
 	_sniffCooldown = buf.readInt();
+}
+
+bool Goat::dropHorn() {
+	if (!_leftHorn && !_rightHorn) return false;
+	bool left = _leftHorn && (!_rightHorn || _random.nextBoolean());
+	(left ? _leftHorn : _rightHorn) = false;
+	markData(left ? DATA_HAS_LEFT_HORN : DATA_HAS_RIGHT_HORN);
+	// createHorn: an instrument of its kind (#screaming_goat_horns or #regular_goat_horns)
+	const GameData&			 data	   = _level.gameData();
+	static const std::vector<std::string> REGULAR	= {"minecraft:ponder_goat_horn", "minecraft:sing_goat_horn", "minecraft:seek_goat_horn", "minecraft:feel_goat_horn"};
+	static const std::vector<std::string> SCREAMING = {"minecraft:admire_goat_horn", "minecraft:call_goat_horn", "minecraft:yearn_goat_horn", "minecraft:dream_goat_horn"};
+	const std::vector<std::string>&		  instruments = _screaming ? SCREAMING : REGULAR;
+	ItemStack				 horn(data.getStaticId("minecraft:item", "minecraft:goat_horn"), 1);
+	if (!instruments.empty()) {
+		Buffer instrument;
+		instrument.writeBool(false); // A key, not a holder id
+		instrument.writeString(instruments[_random.nextInt(static_cast<int>(instruments.size()))]);
+		Components::set(horn, data, "minecraft:instrument", instrument.getData());
+	}
+	spawnAtLocation(horn, 1.0F);
+	return true;
 }

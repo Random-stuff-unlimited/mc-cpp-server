@@ -58,6 +58,27 @@ class ThrownEgg : public ThrowableProjectile {
 	void onHit(const Hit& hit) override;
 };
 
+// ThrownEnderpearl: where it lands, its thrower (a player in the same level) arrives, takes 5 damage; one time in 20
+// an endermite comes out
+class ThrownEnderpearl : public ThrowableProjectile {
+  public:
+	ThrownEnderpearl(Level& level, Actor* thrower, ItemStack item = {});
+
+  protected:
+	void onHit(const Hit& hit) override;
+};
+
+// WindCharge (the player's): flies straight; what it hits takes 1 damage, then a gust (radius 1.2) pushes what is
+// around and works the doors, buttons and levers
+class WindCharge : public ThrowableProjectile {
+  public:
+	WindCharge(Level& level, Actor* thrower, ItemStack item = {});
+
+  protected:
+	double gravity() const override { return 0.0; }
+	void   onHit(const Hit& hit) override;
+};
+
 // ThrownExperienceBottle: breaks into 3 to 11 experience
 class ThrownExperienceBottle : public ThrowableProjectile {
   public:

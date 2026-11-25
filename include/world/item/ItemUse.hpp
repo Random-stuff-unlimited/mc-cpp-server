@@ -28,6 +28,11 @@ namespace ItemUse {
 
 	// ServerboundUseItemPacket: hand (0 main, 1 offhand), after the rotation was applied
 	Result useItem(Level& level, Player& player, int hand);
+	// ItemCooldowns: the group of an item (its use_cooldown group, else its name), whether it cools down, and a new one
+	// (the client greys the item out: Cooldown packet)
+	std::string cooldownGroup(const GameData& gameData, const ItemStack& stack);
+	bool		isOnCooldown(Level& level, Player& player, const ItemStack& stack);
+	void		addCooldown(Level& level, Player& player, const ItemStack& stack, int ticks);
 	// ItemUtils.createFilledResult: one of `stack` becomes `result` (a bucket milked), the rest stays in hand; returns
 	// what the hand holds then
 	ItemStack filledResult(Level& level, Player& player, ItemStack stack, ItemStack result);
