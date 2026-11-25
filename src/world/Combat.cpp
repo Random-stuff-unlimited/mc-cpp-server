@@ -316,6 +316,10 @@ namespace Combat {
 		int				typeId	 = gameData.getSyncedId("minecraft:damage_type", source.type);
 		bool bypassesInvulnerability = gameData.isInTag("minecraft:damage_type", "minecraft:bypasses_invulnerability", typeId);
 		if ((victim.getGameMode() == GameMode::Creative || victim.getGameMode() == GameMode::Spectator) && !bypassesInvulnerability) return false;
+		// Teams without friendly fire
+		if (Player* attacker = source.attackerPlayer(); attacker && attacker != &victim && !server.scoreboard().canHurt(attacker->getPlayerName(), victim.getPlayerName())) {
+			return false;
+		}
 		if (victim.hasEffect(MobEffects::FireResistance) && gameData.isInTag("minecraft:damage_type", "minecraft:is_fire", typeId)) return false;
 		// Damage wakes a sleeping player up (LivingEntity.hurt stops the sleep first)
 		if (victim.survival().sleeping) server.wakeUp(victim);

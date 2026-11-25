@@ -237,6 +237,17 @@ namespace {
 			subs.push_back(t.literal("warning", false, {t.literal("distance", false, {t.integer("distance", 0, true)}), t.literal("time", false, {t.integer("time", 0, true)})}));
 			return t.literal("worldborder", false, subs);
 		}
+		if (name == "team") {
+			std::vector<int> options;
+			for (const char* option : {"color", "prefix", "suffix", "displayName", "friendlyFire", "seeFriendlyInvisibles", "nametagVisibility", "collisionRule"}) {
+				options.push_back(t.literal(option, false, {message("value")}));
+			}
+			return t.literal("team", false, {t.literal("list", true, {t.word("team", true)}), t.literal("add", false, {t.word("team", true, {message("displayName")})}),
+											 t.literal("remove", false, {t.word("team", true)}), t.literal("empty", false, {t.word("team", true)}),
+											 t.literal("join", false, {t.word("team", true, {t.word("members", true)})}),
+											 t.literal("leave", false, {t.word("members", true)}),
+											 t.literal("modify", false, {t.word("team", false, options)})});
+		}
 		if (name == "scoreboard") {
 			// The arguments are words and greedy text here: the client's own parsers for objectives and criteria would
 			// need the server's lists

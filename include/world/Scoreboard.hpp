@@ -24,6 +24,16 @@ class Scoreboard {
 		bool		hearts = false; // ObjectiveCriteria.RenderType
 	};
 
+	// PlayerTeam: its members (player names), its color, prefix and suffix, friendly fire, and how its members' names
+	// and collisions show to others
+	struct Team {
+		std::string				 name, displayName, prefix, suffix;
+		int						 color			  = 21; // ChatFormatting id: 21 is reset (none)
+		bool					 friendlyFire	  = true, seeFriendlyInvisibles = true;
+		std::string				 nametagVisibility = "always", collisionRule = "always";
+		std::vector<std::string> members;
+	};
+
 	explicit Scoreboard(Server& server) : _server(server) {}
 	void load(const std::filesystem::path& file);
 	void save() const;
@@ -53,6 +63,22 @@ class Scoreboard {
 	std::vector<std::string>	   owners() const;
 	std::map<std::string, int>	   scoresOf(const std::string& owner) const;
 
+	const Team*			  team(const std::string& name) const;
+	std::vector<const Team*> teams() const;
+	// The team of a player name (or any score holder), null if none
+	const Team*			  teamOf(const std::string& member) const;
+	bool				  addTeam(const std::string& name, const std::string& displayName);
+	bool				  removeTeam(const std::string& name);
+	// Joins a team (leaving its old one); false if it was already in it
+	bool				  join(const std::string& team, const std::string& member);
+	bool				  leave(const std::string& member);
+	// Changes a team's options ("color", "prefix", "friendlyFire"...); false if the value isn't valid
+	bool				  modifyTeam(const std::string& name, const std::string& option, const std::string& value);
+	// Whether one may hurt the other (PlayerTeam.isAllowFriendlyFire): false only in the same team without friendly fire
+	bool				  canHurt(const std::string& attacker, const std::string& victim) const;
+	// ChatFormatting colors by name ("red"... "reset"), -1 if unknown
+	static int			  colorByName(const std::string& name);
+
 	// The criteria the game counts
 	void onPlayerDeath(Player& victim, Player* killer);
 	void onKill(Player& killer);
@@ -67,6 +93,10 @@ class Scoreboard {
 	std::map<std::string, Objective>				   _objectives;
 	std::map<std::string, std::map<std::string, int>>  _scores; // Owner -> objective -> value
 	std::array<std::string, SLOT_COUNT>				   _display;
+	std::map<std::string, Team>						   _teams;
+
+	// ClientboundSetPlayerTeamPacket: 0 add, 1 remove, 2 change, 3 join, 4 leave
+	void sendTeam(const Team& team, int method, const std::vector<std::string>& members, Player* to = nullptr);
 
 	void addToCriterion(const std::string& criterion, const std::string& owner, int amount);
 	void sendObjective(const Objective& objective, int mode, Player* to = nullptr);

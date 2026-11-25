@@ -353,3 +353,36 @@ TEST(commands_scoreboard) {
 	Commands::run(f.server, *player, "scoreboard objectives remove kills");
 	CHECK(!board.objective("kills") && board.display(Scoreboard::slotByName("sidebar")).empty());
 }
+
+// /team: teams, members, options; no friendly fire between teammates when it is off
+TEST(commands_team) {
+	LevelFixture f;
+	Commands::registerCommands();
+	auto bob = makePlayer(f);
+	f.addPlayer(bob);
+	auto alice = std::make_shared<Player>("Alice", PlayerState::Play, -1, f.server);
+	alice->setPosition(1.5, LevelFixture::SURFACE + 1, 0.5);
+	alice->setGameMode(GameMode::Survival);
+	f.addPlayer(alice);
+	Scoreboard& board = f.server.scoreboard();
+	Commands::run(f.server, *bob, "team add red Red Team");
+	CHECK(board.team("red") && board.team("red")->displayName == "Red Team");
+	Commands::run(f.server, *bob, "team join red");
+	Commands::run(f.server, *bob, "team join red Alice");
+	CHECK(board.teamOf("Bob") == board.team("red") && board.teamOf("Alice") == board.team("red"));
+	Commands::run(f.server, *bob, "team modify red color red");
+	CHECK_EQ(board.team("red")->color, 12);
+	Commands::run(f.server, *bob, "team modify red color pink"); // Not a color
+	CHECK_EQ(board.team("red")->color, 12);
+	Commands::run(f.server, *bob, "team modify red prefix [R] ");
+	CHECK(board.team("red")->prefix == "[R]");
+	Commands::run(f.server, *bob, "team modify red friendlyFire false");
+	CHECK(!board.canHurt("Bob", "Alice"));
+	float health = alice->combat().health;
+	Combat::damage(f.server, *alice, 4.0F, {"minecraft:player_attack", bob.get(), nullptr, std::nullopt});
+	CHECK(alice->combat().health == health);
+	Commands::run(f.server, *bob, "team leave Alice");
+	CHECK(!board.teamOf("Alice") && board.canHurt("Bob", "Alice"));
+	Commands::run(f.server, *bob, "team remove red");
+	CHECK(!board.team("red") && !board.teamOf("Bob"));
+}

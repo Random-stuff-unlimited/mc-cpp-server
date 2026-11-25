@@ -202,6 +202,150 @@ void Scoreboard::tick() {
 	}
 }
 
+// ----- Teams -----
+
+int Scoreboard::colorByName(const std::string& name) {
+	// ChatFormatting, by id: the 16 colors (0-15), then the styles, then reset (21)
+	for (int i = 0; i < 16; i++) {
+		if (name == COLORS[i]) return i;
+	}
+	return name == "reset" ? 21 : -1;
+}
+
+const Scoreboard::Team* Scoreboard::team(const std::string& name) const {
+	auto it = _teams.find(name);
+	return it == _teams.end() ? nullptr : &it->second;
+}
+
+std::vector<const Scoreboard::Team*> Scoreboard::teams() const {
+	std::vector<const Team*> list;
+	for (const auto& [name, team] : _teams) list.push_back(&team);
+	return list;
+}
+
+const Scoreboard::Team* Scoreboard::teamOf(const std::string& member) const {
+	for (const auto& [name, team] : _teams) {
+		if (std::find(team.members.begin(), team.members.end(), member) != team.members.end()) return &team;
+	}
+	return nullptr;
+}
+
+bool Scoreboard::addTeam(const std::string& name, const std::string& displayName) {
+	if (_teams.count(name)) return false;
+	Team& team		  = _teams[name];
+	team.name		  = name;
+	team.displayName = displayName.empty() ? name : displayName;
+	sendTeam(team, 0, {});
+	save();
+	return true;
+}
+
+bool Scoreboard::removeTeam(const std::string& name) {
+	auto it = _teams.find(name);
+	if (it == _teams.end()) return false;
+	sendTeam(it->second, 1, {});
+	_teams.erase(it);
+	save();
+	return true;
+}
+
+bool Scoreboard::join(const std::string& name, const std::string& member) {
+	auto it = _teams.find(name);
+	if (it == _teams.end()) return false;
+	if (const Team* current = teamOf(member)) {
+		if (current->name == name) return false;
+		leave(member);
+	}
+	it->second.members.push_back(member);
+	sendTeam(it->second, 3, {member});
+	save();
+	return true;
+}
+
+bool Scoreboard::leave(const std::string& member) {
+	for (auto& [name, team] : _teams) {
+		auto at = std::find(team.members.begin(), team.members.end(), member);
+		if (at == team.members.end()) continue;
+		team.members.erase(at);
+		sendTeam(team, 4, {member});
+		save();
+		return true;
+	}
+	return false;
+}
+
+bool Scoreboard::modifyTeam(const std::string& name, const std::string& option, const std::string& value) {
+	auto it = _teams.find(name);
+	if (it == _teams.end()) return false;
+	Team& team = it->second;
+	auto  boolean = [&](bool& field) {
+		 if (value != "true" && value != "false") return false;
+		 field = value == "true";
+		 return true;
+	};
+	bool ok = true;
+	if (option == "color") {
+		int color = colorByName(value);
+		ok		  = color >= 0;
+		if (ok) team.color = color;
+	} else if (option == "prefix") {
+		team.prefix = value;
+	} else if (option == "suffix") {
+		team.suffix = value;
+	} else if (option == "displayName") {
+		team.displayName = value.empty() ? name : value;
+	} else if (option == "friendlyFire") {
+		ok = boolean(team.friendlyFire);
+	} else if (option == "seeFriendlyInvisibles") {
+		ok = boolean(team.seeFriendlyInvisibles);
+	} else if (option == "nametagVisibility") {
+		ok = value == "always" || value == "never" || value == "hideForOtherTeams" || value == "hideForOwnTeam";
+		if (ok) team.nametagVisibility = value;
+	} else if (option == "collisionRule") {
+		ok = value == "always" || value == "never" || value == "pushOtherTeams" || value == "pushOwnTeam";
+		if (ok) team.collisionRule = value;
+	} else {
+		ok = false;
+	}
+	if (!ok) return false;
+	sendTeam(team, 2, {});
+	save();
+	return true;
+}
+
+bool Scoreboard::canHurt(const std::string& attacker, const std::string& victim) const {
+	const Team* a = teamOf(attacker);
+	return !a || a != teamOf(victim) || a->friendlyFire;
+}
+
+void Scoreboard::sendTeam(const Team& team, int method, const std::vector<std::string>& members, Player* to) {
+	Buffer data;
+	data.writeString(team.name);
+	data.writeByte(static_cast<int8_t>(method));
+	if (method == 0 || method == 2) {
+		// Parameters: the display name, the options, the visibility and collision rules (ids), the color, prefix and suffix
+		static const std::vector<std::string> VISIBILITY = {"always", "never", "hideForOtherTeams", "hideForOwnTeam"};
+		static const std::vector<std::string> COLLISION	 = {"always", "never", "pushOtherTeams", "pushOwnTeam"};
+		TextComponent::writeJson(data, team.displayName);
+		data.writeByte(static_cast<int8_t>((team.friendlyFire ? 1 : 0) | (team.seeFriendlyInvisibles ? 2 : 0)));
+		data.writeVarInt(static_cast<int>(std::find(VISIBILITY.begin(), VISIBILITY.end(), team.nametagVisibility) - VISIBILITY.begin()));
+		data.writeVarInt(static_cast<int>(std::find(COLLISION.begin(), COLLISION.end(), team.collisionRule) - COLLISION.begin()));
+		data.writeVarInt(team.color);
+		TextComponent::writeJson(data, team.prefix);
+		TextComponent::writeJson(data, team.suffix);
+	}
+	if (method == 0 || method == 3 || method == 4) {
+		const std::vector<std::string>& list = method == 0 ? team.members : members;
+		data.writeVarInt(static_cast<int>(list.size()));
+		for (const std::string& member : list) data.writeString(member);
+	}
+	if (to) {
+		Packet::send(to->shared_from_this(), PacketId::Play::Clientbound::SET_PLAYER_TEAM, data, _server);
+	} else {
+		broadcast(PacketId::Play::Clientbound::SET_PLAYER_TEAM, data);
+	}
+}
+
 // ----- Network -----
 
 void Scoreboard::broadcast(int packetId, Buffer& data) {
@@ -255,6 +399,7 @@ void Scoreboard::sendDisplay(int slot, Player* to) {
 }
 
 void Scoreboard::sendAll(Player& player) {
+	for (const auto& [name, team] : _teams) sendTeam(team, 0, {}, &player);
 	for (const auto& [name, objective] : _objectives) sendObjective(objective, 0, &player);
 	for (int slot = 0; slot < SLOT_COUNT; slot++) {
 		if (!_display[slot].empty()) sendDisplay(slot, &player);
@@ -293,6 +438,21 @@ void Scoreboard::load(const std::filesystem::path& file) {
 			int index = slotByName(slot);
 			if (index >= 0 && objective.is_string() && _objectives.count(objective.get<std::string>())) _display[index] = objective.get<std::string>();
 		}
+		for (const auto& t : data.value("teams", nlohmann::json::array())) {
+			Team team;
+			team.name				   = t.value("name", "");
+			if (team.name.empty()) continue;
+			team.displayName		   = t.value("display-name", team.name);
+			team.prefix				   = t.value("prefix", "");
+			team.suffix				   = t.value("suffix", "");
+			team.color				   = t.value("color", 21);
+			team.friendlyFire		   = t.value("friendly-fire", true);
+			team.seeFriendlyInvisibles = t.value("see-friendly-invisibles", true);
+			team.nametagVisibility	   = t.value("nametag-visibility", "always");
+			team.collisionRule		   = t.value("collision-rule", "always");
+			team.members			   = t.value("members", std::vector<std::string>{});
+			_teams[team.name]		   = team;
+		}
 	} catch (const std::exception& e) {
 		g_logger->logGameInfo(ERROR, "Couldn't read " + file.string() + ": " + e.what(), "Scoreboard");
 	}
@@ -314,6 +474,19 @@ void Scoreboard::save() const {
 	data["display"] = nlohmann::json::object();
 	for (int slot = 0; slot < SLOT_COUNT; slot++) {
 		if (!_display[slot].empty()) data["display"][slotName(slot)] = _display[slot];
+	}
+	data["teams"] = nlohmann::json::array();
+	for (const auto& [name, t] : _teams) {
+		data["teams"].push_back({{"name", t.name},
+								 {"display-name", t.displayName},
+								 {"prefix", t.prefix},
+								 {"suffix", t.suffix},
+								 {"color", t.color},
+								 {"friendly-fire", t.friendlyFire},
+								 {"see-friendly-invisibles", t.seeFriendlyInvisibles},
+								 {"nametag-visibility", t.nametagVisibility},
+								 {"collision-rule", t.collisionRule},
+								 {"members", t.members}});
 	}
 	std::ofstream out(_file);
 	if (out) out << data.dump(2) << "\n";

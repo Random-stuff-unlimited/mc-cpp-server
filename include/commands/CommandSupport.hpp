@@ -54,6 +54,7 @@ namespace Commands {
 	void registerTitle();
 	void registerWorldBorder();
 	void registerScoreboard();
+	void registerTeam();
 } // namespace Commands
 
 #endif
