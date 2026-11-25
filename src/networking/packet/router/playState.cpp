@@ -1,4 +1,5 @@
 #include "network/PluginChannels.hpp"
+#include "world/SpectatorCamera.hpp"
 #include "world/Stats.hpp"
 #include "world/inventory/BeaconMenu.hpp"
 #include "world/item/Books.hpp"
@@ -174,6 +175,9 @@ void handlePlayState(Packet* packet, Server& server) {
 				animation.writeUByte(hand == 0 ? ANIMATE_SWING_MAIN_HAND : ANIMATE_SWING_OFF_HAND);
 				server.getPlayerTracker().broadcast(player, PacketId::Play::Clientbound::ANIMATE, animation, false);
 			}
+		} else if (type == ATTACK && player->getGameMode() == GameMode::Spectator) {
+			// ServerPlayer.attack in spectator: watches from the entity (or player) instead
+			if (Actor* target = server.levelOf(*player).actorById(entityId)) SpectatorCamera::setCamera(server, *player, target);
 		} else if (type == ATTACK) {
 			if (auto target = server.getPlayerTracker().findVisible(player, entityId)) {
 				Combat::attack(server, *player, *target);

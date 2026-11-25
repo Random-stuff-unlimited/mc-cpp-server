@@ -2,6 +2,7 @@
 
 #include "commands/CommandSupport.hpp"
 #include "network/PacketIds.hpp"
+#include "world/SpectatorCamera.hpp"
 #include "network/buffer.hpp"
 #include "network/packet.hpp"
 #include "network/packetRouter.hpp"
@@ -80,6 +81,7 @@ namespace Commands {
 				return;
 			}
 			target->setPreviousGameMode(static_cast<int>(old));
+			if (old == GameMode::Spectator) SpectatorCamera::setCamera(server, *target, nullptr); // ServerPlayer.setGameMode
 			target->setGameMode(mode);
 			// Only spectator flies on its own; leaving a flying mode stops it (survival lets gravity take over)
 			if (mode == GameMode::Spectator) target->survival().flying = true;

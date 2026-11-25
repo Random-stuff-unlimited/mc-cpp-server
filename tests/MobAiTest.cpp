@@ -5,6 +5,7 @@
 #include "world/entity/mobs/FlyingAnimals.hpp"
 #include "world/blockentity/EndGatewayBlockEntity.hpp"
 #include "world/Portals.hpp"
+#include "world/SpectatorCamera.hpp"
 
 #include <cstdio>
 #include "Test.hpp"
@@ -1746,4 +1747,29 @@ TEST(jockey_saved_with_chunk) {
 	});
 	CHECK(newSpider && newSkeleton);
 	if (newSpider && newSkeleton) CHECK(newSkeleton->isPassenger() && newSkeleton->vehicleId() == newSpider->id());
+}
+
+// A spectator hitting a mob watches from it and follows it; sneaking brings the camera back
+TEST(spectator_camera) {
+	LevelFixture f(1);
+	auto player = addPlayer(f, 0.5, 0.5);
+	player->setGameMode(GameMode::Spectator);
+	Mob* cow = spawn(f, "minecraft:cow", {6, Y, 6});
+	CHECK(cow);
+	if (!cow) return;
+	SpectatorCamera::setCamera(f.server, *player, cow);
+	CHECK_EQ(player->cameraId(), cow->id());
+	cow->setPos({8.5, static_cast<double>(Y), 9.5});
+	SpectatorCamera::tick(f.server, *player);
+	CHECK_EQ(player->getX(), 8.5);
+	CHECK_EQ(player->getZ(), 9.5);
+	player->setShiftKeyDown(true);
+	SpectatorCamera::tick(f.server, *player);
+	CHECK_EQ(player->cameraId(), -1);
+	player->setShiftKeyDown(false);
+	// Gone: back to itself
+	SpectatorCamera::setCamera(f.server, *player, cow);
+	cow->discard();
+	SpectatorCamera::tick(f.server, *player);
+	CHECK_EQ(player->cameraId(), -1);
 }

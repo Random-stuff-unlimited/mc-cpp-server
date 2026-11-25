@@ -211,6 +211,7 @@ class Player : public Actor, public std::enable_shared_from_this<Player>, public
 	bool		  _console		   = false;
 	std::string	  _clientBrand;
 	PluginState	  _pluginState;
+	int			  _cameraId = -1;
 	bool		  _resourcePackSent = false;
 	int			  _playerId;
 	Server&		  _server;
@@ -529,6 +530,9 @@ class Player : public Actor, public std::enable_shared_from_this<Player>, public
 	// Plugin channels and cookies (PluginChannels, Cookies): the channels its client registered (minecraft:register),
 	// the cookie requests waiting for its answer
 	PluginState&	   pluginState() { return _pluginState; }
+	// ServerPlayer.camera: the entity a spectator watches from (-1: itself)
+	int	 cameraId() const { return _cameraId; }
+	void setCameraId(int id) { _cameraId = id; }
 	// The server console's command source (not in the game: its messages go to the log)
 	bool isConsole() const { return _console; }
 	void setConsole(bool console) { _console = console; }

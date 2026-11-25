@@ -16,6 +16,7 @@
 #include "world/World.hpp"
 #include "world/ChunkStreamer.hpp"
 #include "world/Combat.hpp"
+#include "world/SpectatorCamera.hpp"
 #include "world/Survival.hpp"
 #include "PacketIds.hpp"
 #include "network/packet.hpp"
@@ -266,6 +267,7 @@ void Server::tick(bool worldRuns) {
 			Survival::tick(*player->level(), *player);
 			Survival::tickDestroy(*player->level(), *player);
 			tickDelayedDestroy(*this, *player);
+			SpectatorCamera::tick(*this, *player);
 		}
 	}
 	if (_scoreboard) _scoreboard->tick();

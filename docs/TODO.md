@@ -157,7 +157,7 @@ Les 85 types de mobs vanilla ont leur classe et leur IA (`src/world/entity/mobs`
 - [x] Anti-triche du minage (temps de cassage vérifié au `FINISH_DIGGING`)
 - [x] `STOP_SOUND` (`/stopsound`), `/playsound`
 - [x] `SOUND_ENTITY` (sons qui suivent une entité)
-- [ ] Camera spectateur : `SET_CAMERA`, mode spectateur complet
+- [x] Camera spectateur : `SET_CAMERA`, mode spectateur complet
 - [x] `PLAYER_LOOK_AT` (`/rotate … facing`), `/rotate`
 - [ ] Particules étendues : `LEVEL_PARTICLES` partiel, particles de bloc/explosion
 - [x] `EXPLODE` client (sons, particules, recul envoyé aux joueurs)
