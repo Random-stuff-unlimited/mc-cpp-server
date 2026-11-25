@@ -242,7 +242,7 @@ void registerVanillaBlocks(Level& level, const GameData& gameData) {
 			{"LavaCauldronBlock", [context](int) { return std::make_unique<AnalogOutputBlock>(context, AnalogOutputBlock::Kind::LavaCauldron); }},
 			{"EndPortalFrameBlock", [context](int) { return std::make_unique<AnalogOutputBlock>(context, AnalogOutputBlock::Kind::EndPortalFrame); }},
 			{"RespawnAnchorBlock", [context](int) { return std::make_unique<AnalogOutputBlock>(context, AnalogOutputBlock::Kind::RespawnAnchor); }},
-			{"BeehiveBlock", [context](int) { return std::make_unique<AnalogOutputBlock>(context, AnalogOutputBlock::Kind::HoneyLevel); }},
+			{"BeehiveBlock", [context](int) { return std::make_unique<BeehiveBlock>(context); }},
 			{"AmethystClusterBlock", make<AmethystClusterBlock>(context)},
 
 			// Change by themselves

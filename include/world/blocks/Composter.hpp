@@ -32,4 +32,17 @@ class ComposterBlock : public AnalogOutputBlock {
 	std::shared_ptr<const BlockContext> _ctx;
 };
 
+// BeehiveBlock: honey level 5 gives honeycomb to shears and a honey bottle to a glass bottle; without a lit campfire
+// smoking it from below (5 blocks at most), the bees inside come out angry and the ones around attack
+class BeehiveBlock : public AnalogOutputBlock {
+  public:
+	explicit BeehiveBlock(std::shared_ptr<const BlockContext> context) : AnalogOutputBlock(context, Kind::HoneyLevel), _ctx(std::move(context)) {}
+	UseResult useItemOn(Level& level, const BlockPos& pos, int state, Player& player, int hand, const BlockHit& hit) const override;
+	// CampfireBlock.isSmokeyPos: a lit campfire under it, within 5 blocks (or under a fence post's worth of block)
+	static bool isSmokey(Level& level, const BlockPos& pos);
+
+  private:
+	std::shared_ptr<const BlockContext> _ctx;
+};
+
 #endif

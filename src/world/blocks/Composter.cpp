@@ -1,3 +1,8 @@
+#include "world/BlockBehavior.hpp"
+#include "world/item/ItemUse.hpp"
+#include "world/item/ItemDamage.hpp"
+#include "world/entity/mobs/FlyingAnimals.hpp"
+#include "world/blockentity/BeehiveBlockEntity.hpp"
 #include "world/blocks/Composter.hpp"
 
 #include "data/GameData.hpp"
@@ -149,4 +154,54 @@ std::shared_ptr<Container> ComposterBlock::container(Level& level, const BlockPo
 	int current = levelOf(level, pos);
 	if (current < 0 || current == 7) return nullptr;
 	return std::make_shared<ComposterContainer>(level, pos, current == READY);
+}
+
+// ===== Beehives =====
+
+bool BeehiveBlock::isSmokey(Level& level, const BlockPos& pos) {
+	const GameData& data = level.gameData();
+	auto			litCampfire = [&](int state) {
+		   std::string name = data.getStaticName("minecraft:block", level.blocks().blockOf(state));
+		   return (name == "minecraft:campfire" || name == "minecraft:soul_campfire") && data.getProperty(state, "lit") == "true";
+	};
+	for (int i = 1; i <= 5; i++) {
+		int state = level.getBlockState(pos.relative(Direction::Down, i));
+		if (litCampfire(state)) return true;
+		// A solid block in the way: the smoke goes no further than the one right under it
+		if (data.getStateProperties(state).blocksMotion) return litCampfire(level.getBlockState(pos.relative(Direction::Down, i + 1)));
+	}
+	return false;
+}
+
+UseResult BeehiveBlock::useItemOn(Level& level, const BlockPos& pos, int state, Player& player, int hand, const BlockHit&) const {
+	const GameData& data  = level.gameData();
+	ItemStack&		stack = player.inventory().getMutable(player.handSlot(hand));
+	if (stack.isEmpty() || data.getProperty(state, "honey_level") != "5") return UseResult::TryWithEmptyHand;
+	std::string item = data.getStaticName("minecraft:item", stack.item);
+	if (item == "minecraft:shears") {
+		level.playSound(nullptr, pos, "minecraft:block.beehive.shear", Level::SoundSource::Neutral);
+		// dropHoneycomb: 3 honeycombs
+		if (auto drop = ItemEntity::create(level, {pos.x + 0.5, pos.y + 1.1, pos.z + 0.5}, ItemStack(data.getStaticId("minecraft:item", "minecraft:honeycomb"), 3))) {
+			level.entities().add(std::move(drop));
+		}
+		ItemDamage::hurtAndBreak(level, stack, 1, &player, player.handSlot(hand));
+	} else if (item == "minecraft:glass_bottle") {
+		level.playSound(nullptr, pos, "minecraft:item.bottle.fill", Level::SoundSource::Neutral);
+		ItemStack result = ItemUse::filledResult(level, player, stack, ItemStack(data.getStaticId("minecraft:item", "minecraft:honey_bottle"), 1));
+		player.inventory().set(player.handSlot(hand), std::move(result));
+	} else {
+		return UseResult::TryWithEmptyHand;
+	}
+	// resetHoneyLevel, and the bees' anger unless smoked
+	int empty = data.withProperty(state, "honey_level", "0");
+	if (empty >= 0) level.setBlock(pos, empty, Level::UPDATE_ALL);
+	if (!isSmokey(level, pos)) {
+		if (auto* hive = dynamic_cast<BeehiveBlockEntity*>(level.getBlockEntity(pos))) hive->releaseAll(level, &player);
+		// angerNearbyBees: the bees around without a target go for the player
+		AABB area{pos.x - 8.0, pos.y - 6.0, pos.z - 8.0, pos.x + 9.0, pos.y + 7.0, pos.z + 9.0};
+		for (Actor* actor : level.actorsIn(area)) {
+			if (auto* bee = dynamic_cast<Bee*>(actor); bee && bee->isAlive() && !bee->getTarget()) bee->setTarget(&player);
+		}
+	}
+	return UseResult::Success;
 }

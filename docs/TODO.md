@@ -76,7 +76,7 @@ Les 85 types de mobs vanilla ont leur classe et leur IA (`src/world/entity/mobs`
 - [ ] Villageois : vrais ragots (réputation), partage de nourriture entre villageois
 - [x] Éclosion des œufs (frai de grenouille → têtards, œuf de renifleur ; tortue déjà en place)
 - [x] Ruches : abeilles qui entrent/sortent (`BeehiveBlockEntity`), nuit/pluie, miel à la sortie, essaim en colère si cassée
-- [ ] Ruches : fumée de feu de camp, récolte au flacon/cisailles
+- [x] Ruches : fumée de feu de camp, récolte au flacon/cisailles (abeilles en colère sans fumée)
 - [x] Cristaux de l'End, combat de l'End (piliers, cages, portail de sortie, œuf, `end_fight.dat`)
 - [x] Dragon : réinvocation avec 4 cristaux (piliers reconstruits), portails de passage (20, vers les îles à 1024 blocs, retour)
 - [ ] Dragon : dégâts par partie touchée ; îles extérieures (pas de générateur de l'End)

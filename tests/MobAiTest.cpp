@@ -1,4 +1,6 @@
 #include "LevelFixture.hpp"
+#include "world/blocks/Composter.hpp"
+#include "world/entity/mobs/FlyingAnimals.hpp"
 #include "world/blockentity/EndGatewayBlockEntity.hpp"
 #include "world/Portals.hpp"
 
@@ -1458,4 +1460,37 @@ TEST(farmer_harvests_and_replants) {
 	CHECK(planted >= 2); // Replanted the harvested one and more
 	bool harvested = f.data.getProperty(f.at(1, Y, 0), "age") != "7";
 	CHECK(harvested);
+}
+
+// A full beehive: shears get 3 honeycombs, a bottle a honey bottle; smoked by a lit campfire below, the bees stay calm,
+// otherwise the ones around go for the player
+TEST(beehive_harvest_and_smoke) {
+	LevelFixture f(1);
+	BlockPos hive{0, Y + 2, 0};
+	int		 full = f.data.withProperty(f.data.getDefaultBlockState("minecraft:beehive"), "honey_level", "5");
+	f.level->setBlock(hive, full, Level::UPDATE_ALL);
+	f.level->setBlock({0, Y, 0}, f.data.withProperty(f.data.getDefaultBlockState("minecraft:campfire"), "lit", "true"), Level::UPDATE_ALL);
+	CHECK(BeehiveBlock::isSmokey(*f.level, hive));
+	auto  player = addPlayer(f, 1.5, 0.5);
+	auto* bee	 = dynamic_cast<Bee*>(spawn(f, "minecraft:bee", {3, Y + 2, 0}));
+	CHECK(bee);
+	if (!bee) return;
+	player->setSelectedSlot(0);
+	player->inventory().set(player->handSlot(0), ItemStack(f.item("minecraft:glass_bottle"), 1));
+	BlockHit hit{hive, Direction::South, 0.5, Y + 2.5, 1.0};
+	int		 state = f.level->getBlockState(hive);
+	CHECK(f.level->behavior(state).useItemOn(*f.level, hive, state, *player, 0, hit) == UseResult::Success);
+	CHECK(player->inventory().get(player->handSlot(0)).item == f.item("minecraft:honey_bottle"));
+	CHECK(f.data.getProperty(f.at(0, Y + 2, 0), "honey_level") == "0");
+	CHECK(bee->getTarget() == nullptr); // Smoked: calm
+	// Without the campfire: shears, and the bee attacks
+	f.set(0, Y, 0, "minecraft:air");
+	f.level->setBlock(hive, full, Level::UPDATE_ALL);
+	player->inventory().set(player->handSlot(0), ItemStack(f.item("minecraft:shears"), 1));
+	state = f.level->getBlockState(hive);
+	f.level->behavior(state).useItemOn(*f.level, hive, state, *player, 0, hit);
+	int combs = 0;
+	for (ItemEntity* item : f.items()) combs += item->item().item == f.item("minecraft:honeycomb") ? item->item().count : 0;
+	CHECK_EQ(combs, 3);
+	CHECK(bee->getTarget() == player.get());
 }

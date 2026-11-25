@@ -1,3 +1,4 @@
+#include "world/blocks/Composter.hpp"
 #include "world/blockentity/BeehiveBlockEntity.hpp"
 
 #include "network/buffer.hpp"
@@ -90,8 +91,9 @@ void BeehiveBlockEntity::releaseAll(Level& level, Player* player) {
 }
 
 void BeehiveBlockEntity::preRemoveSideEffects(Level& level) {
-	// The hive is gone: its bees out, angry at the nearest player within 8 blocks (who likely broke it)
+	// The hive is gone: its bees out, angry at the nearest player within 8 blocks (who likely broke it), calm if smoked
 	Player* nearest = nullptr;
+	if (BeehiveBlock::isSmokey(level, pos())) return releaseAll(level, nullptr);
 	double	best	= 8.0 * 8.0;
 	Vec3	center{pos().x + 0.5, pos().y + 0.5, pos().z + 0.5};
 	for (const auto& player : level.players()) {
