@@ -321,25 +321,30 @@ void World::resetWeatherCycle() {
 	_weather.thunderTime = 0;
 }
 
-void World::setWeather(bool raining, bool thundering) {
+void World::setWeather(bool raining, bool thundering, int duration) {
 	if (_primary) {
-		_primary->setWeather(raining, thundering);
+		_primary->setWeather(raining, thundering, duration);
 		return;
 	}
+	// WeatherCommand: the duration given, or IntProvider samples (ServerLevel.RAIN_DELAY, RAIN_DURATION, THUNDER_DURATION)
+	if (duration < 0) {
+		static thread_local std::mt19937 random(std::random_device{}());
+		auto between = [](int low, int high) { return std::uniform_int_distribution<int>(low, high)(random); };
+		duration	 = !raining ? between(12000, 180000) : thundering ? between(3600, 15600) : between(12000, 24000);
+	}
+	// ServerLevel.setWeatherParameters(clearTime, weatherTime, raining, thundering)
 	Weather& w = _weather;
 	if (raining) {
-		// /weather rain and thunder: it can change again once the countdown ends (a random duration)
 		w.clearWeatherTime = 0;
-		w.raining		   = true;
-		w.rainTime		   = 0;
+		w.rainTime		   = duration;
+		w.thunderTime	   = duration;
 	} else {
-		// /weather clear: the countdown keeps the weather from starting again (vanilla /weather clear's 5 minutes)
-		w.clearWeatherTime = 6000;
-		w.raining		   = false;
+		w.clearWeatherTime = duration;
 		w.rainTime		   = 0;
+		w.thunderTime	   = 0;
 	}
-	w.thundering   = thundering;
-	w.thunderTime  = 0;
+	w.raining	 = raining;
+	w.thundering = thundering;
 }
 
 bool World::isAir(uint32_t state) const { return std::find(_airStates.begin(), _airStates.end(), state) != _airStates.end(); }

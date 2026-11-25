@@ -2,6 +2,7 @@
 
 #include "commands/CommandSupport.hpp"
 #include "network/server.hpp"
+#include "world/Level.hpp"
 #include "world/World.hpp"
 
 #include <cstdlib>
@@ -38,7 +39,7 @@ namespace Commands {
 										 usage(server, player, usageText);
 										 return;
 									 }
-									 World& world = server.getWorld();
+									 World& world = server.levelOf(player).world(); // Its clock is the overworld's
 
 									 if (args[0] == "query") {
 										 if (args[1] != "daytime" && args[1] != "gametime") {
@@ -51,13 +52,9 @@ namespace Commands {
 									 }
 
 									 int64_t value;
-									 if (!namedTime(args[1], value)) {
-										 char* end = nullptr;
-										 value	 = std::strtoll(args[1].c_str(), &end, 10);
-										 if (end == args[1].c_str() || *end != '\0') {
-											 usage(server, player, usageText);
-											 return;
-										 }
+									 if (!namedTime(args[1], value) && !parseDuration(args[1], value)) {
+										 usage(server, player, usageText);
+										 return;
 									 }
 
 									 if (args[0] == "set") {

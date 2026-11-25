@@ -386,3 +386,23 @@ TEST(commands_team) {
 	Commands::run(f.server, *bob, "team remove red");
 	CHECK(!board.team("red") && !board.teamOf("Bob"));
 }
+
+// Durations with units (TimeArgument) for /time and /weather
+TEST(commands_time_and_weather_durations) {
+	LevelFixture f;
+	Commands::registerCommands();
+	auto player = makePlayer(f);
+	f.addPlayer(player);
+	int64_t ticks = 0;
+	CHECK(Commands::parseDuration("2d", ticks) && ticks == 48000);
+	CHECK(Commands::parseDuration("1.5s", ticks) && ticks == 30);
+	CHECK(Commands::parseDuration("40", ticks) && ticks == 40);
+	CHECK(!Commands::parseDuration("-1", ticks) && !Commands::parseDuration("abc", ticks) && !Commands::parseDuration("s", ticks));
+	int64_t before = f.world->getDayTime();
+	Commands::run(f.server, *player, "time add 1d");
+	CHECK_EQ(f.world->getDayTime(), before + 24000);
+	Commands::run(f.server, *player, "weather thunder 10s");
+	CHECK(f.world->rainingFlag() && f.world->thunderingFlag());
+	Commands::run(f.server, *player, "weather clear");
+	CHECK(!f.world->rainingFlag());
+}

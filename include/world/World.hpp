@@ -128,7 +128,8 @@ class World {
 	void resetWeatherCycle();
 	// ServerLevel.setWeatherParameters, for /weather clear, rain or thunder: sets the flags (and for clear, a long
 	// clear time so the weather can't start again before it ends). The clients are told by Server's next tick
-	void setWeather(bool raining, bool thundering);
+	// duration: in ticks, or -1 for vanilla's random one (clear: 12000-180000, rain: 12000-24000, thunder: 3600-15600)
+	void setWeather(bool raining, bool thundering, int duration = -1);
 	// The weather the clients see (ServerLevel.isRaining / isThundering): the levels, ramping 0..1
 	bool  isRaining() const { return _weather.rainLevel > 0.2F; }
 	// Level.getThunderLevel is the thunder level times the rain level

@@ -148,7 +148,11 @@ namespace {
 		}
 		if (name == "clear" || name == "kill") return t.literal(name, true, {t.players("targets", false, true)});
 		if (name == "difficulty") return t.literal("difficulty", true, t.choices({"peaceful", "easy", "normal", "hard"}));
-		if (name == "weather") return t.literal("weather", false, t.choices({"clear", "rain", "thunder"}));
+		if (name == "weather") {
+			std::vector<int> kinds;
+			for (const char* kind : {"clear", "rain", "thunder"}) kinds.push_back(t.literal(kind, true, {t.time("duration", true)}));
+			return t.literal("weather", false, kinds);
+		}
 		if (name == "effect") {
 			Buffer registry;
 			registry.writeString("minecraft:mob_effect"); // ResourceArgument's registry

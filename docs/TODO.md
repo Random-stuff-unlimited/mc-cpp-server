@@ -38,7 +38,7 @@ les commandes d'admin ci-dessous. Sans être op, seules `help`, `list`, `spawn`,
 - [x] `/effect give|clear`
 - [x] `/xp` (`/experience`) `add|set|query`, en points ou niveaux
 - [x] `/enchant <joueurs> <enchantement> [niveau]` (objets supportés, niveau max, incompatibilités)
-- [ ] `/weather <durée>`, `/time set <durée>` (durée en secondes) : persistance + durées explicites
+- [x] `/weather <type> [durée]`, `/time set|add <durée>` avec unités (d, s, t), durées vanilla aléatoires par défaut
 - [ ] Autocomplétion des commandes côté client (`COMMANDS` + `COMMAND_SUGGESTIONS`, `Commands::suggest` existe déjà)
 
 ## Effets de statut / potions

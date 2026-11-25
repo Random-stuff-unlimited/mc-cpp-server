@@ -41,6 +41,8 @@ namespace Commands {
 	void registerKill();
 	void registerDifficulty();
 	void registerWeather();
+	// TimeArgument: ticks, or a number with d, s or t
+	bool parseDuration(const std::string& text, int64_t& ticks);
 	void registerEffect();
 	void registerSummon();
 	void registerExperience();
