@@ -3,6 +3,8 @@
 
 #include "world/entity/Entity.hpp"
 
+#include <optional>
+
 // EndCrystal: a crystal on obsidian or bedrock that heals the ender dragon nearby (the dragon looks for it). One hit and
 // it explodes (power 6); in the End it keeps a fire burning under itself
 class EndCrystal : public Entity {
@@ -18,6 +20,13 @@ class EndCrystal : public Entity {
 		entityDataDirty = true;
 	}
 
+	// The beam it shoots (a dragon being summoned, a spike being rebuilt)
+	const std::optional<BlockPos>& beamTarget() const { return _beamTarget; }
+	void setBeamTarget(std::optional<BlockPos> target) {
+		_beamTarget		= target;
+		entityDataDirty = true;
+	}
+
 	void tick() override;
 	bool hurtServer(const Combat::DamageSource& source, float amount) override;
 	bool shouldBeSaved() const override { return true; }
@@ -26,7 +35,8 @@ class EndCrystal : public Entity {
 	void writeEntityData(Buffer& buf) const override;
 
   private:
-	bool _showBottom = true;
+	bool					_showBottom = true;
+	std::optional<BlockPos> _beamTarget;
 };
 
 #endif

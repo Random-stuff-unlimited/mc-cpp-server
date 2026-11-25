@@ -89,6 +89,7 @@ void registerVanillaBlocks(Level& level, const GameData& gameData) {
 			{"FireBlock", make<FireBlock>(context)},
 			{"NetherPortalBlock", make<NetherPortalBlock>(context)},
 			{"EndPortalBlock", [](int) { return std::make_unique<EndPortalBlock>(); }},
+			{"EndGatewayBlock", [](int) { return std::make_unique<EndGatewayBlock>(); }},
 			{"TntBlock", make<TntBlock>(context)},
 			{"RespawnAnchorBlock", make<RespawnAnchorBlock>(context)},
 

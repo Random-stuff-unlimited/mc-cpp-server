@@ -1,3 +1,6 @@
+#include "world/ChunkStreamer.hpp"
+#include "network/packetRouter.hpp"
+#include "world/blockentity/EndGatewayBlockEntity.hpp"
 #include "world/Portals.hpp"
 
 #include "PacketIds.hpp"
@@ -538,8 +541,9 @@ namespace Portals {
 		}
 		state.cooldown = actor.dimensionChangingDelay();
 		Kind					  kind		 = static_cast<Kind>(state.kind);
-		std::optional<Transition> transition = kind == Kind::Nether ? netherPortalDestination(level, actor, state.entry)
-																	: endPortalDestination(level, actor, state.entry);
+		std::optional<Transition> transition = kind == Kind::Nether	 ? netherPortalDestination(level, actor, state.entry)
+											   : kind == Kind::Gateway ? gatewayDestination(level, actor, state.entry)
+																	   : endPortalDestination(level, actor, state.entry);
 		if (!transition || !transition->level) return;
 		Level& destination = *transition->level;
 		float  yRot		   = transition->relativeYRot ? actor.yRot() + transition->yRot : transition->yRot;
@@ -552,8 +556,14 @@ namespace Portals {
 				Packet::send(player->shared_from_this(), PacketId::Play::Clientbound::GAME_EVENT, event, level.server());
 			}
 			if (&destination == &level) {
+				// A teleport within the level: the client is told (ServerPlayer.teleport), its chunks follow
 				player->setPosition(transition->position.x, transition->position.y, transition->position.z);
 				player->setRotation(yRot, xRot);
+				player->combat().fallDistance = 0;
+				Packet sync(player->shared_from_this());
+				synchronizePlayerPositionPacket(sync, level.server());
+				if (ChunkStreamer* streamer = player->getChunkStreamer()) streamer->onPlayerMove(transition->position.x, transition->position.z);
+				level.server().getPlayerTracker().move(player);
 			} else {
 				level.server().changeDimension(*player, destination, transition->position.x, transition->position.y, transition->position.z, yRot, xRot);
 			}
@@ -673,3 +683,43 @@ void EndPortalBlock::entityInside(Level& level, const BlockPos& pos, int, Actor*
 	}
 	Portals::setAsInsidePortal(*actor, Portals::Kind::End, pos);
 }
+
+// ===== End gateways =====
+
+void EndGatewayBlock::entityInside(Level& level, const BlockPos& pos, int, Actor* actor) const {
+	if (!actor || !Portals::canUsePortal(*actor)) return;
+	auto* gateway = dynamic_cast<EndGatewayBlockEntity*>(level.getBlockEntity(pos));
+	if (!gateway || gateway->isCoolingDown()) return;
+	Portals::setAsInsidePortal(*actor, Portals::Kind::Gateway, pos);
+}
+
+namespace Portals {
+	std::optional<Transition> gatewayDestination(Level& level, Actor&, const BlockPos& entry) {
+		auto* gateway = dynamic_cast<EndGatewayBlockEntity*>(level.getBlockEntity(entry));
+		if (!gateway) return std::nullopt;
+		gateway->triggerCooldown(level);
+		if (!gateway->exitPortal()) {
+			// findOrCreateValidTeleportPos: 1024 blocks out from the center, on the island there (the highest block),
+			// with a gateway back 10 blocks above it
+			double length = std::sqrt(static_cast<double>(entry.x) * entry.x + static_cast<double>(entry.z) * entry.z);
+			if (length < 1.0) return std::nullopt;
+			int x = static_cast<int>(std::floor(entry.x / length * 1024.0)), z = static_cast<int>(std::floor(entry.z / length * 1024.0));
+			level.loadChunkNow(x >> 4, z >> 4);
+			int ground = level.getHeight(Level::Heightmap::MotionBlocking, x, z) - 1;
+			if (ground < level.minY()) ground = 74; // No island: a platform is made
+			if (level.blocks().isAir(level.getBlockState({x, ground, z}))) {
+				createEndPlatform(level, {x, ground + 1, z}, false);
+			}
+			BlockPos back{x, ground + 10, z};
+			EndGatewayBlockEntity::place(level, back, entry, true);
+			gateway->setExitPosition({x, ground + 1, z + 2}, false);
+		}
+		BlockPos exit = *gateway->exitPortal();
+		Transition transition;
+		transition.level	   = &level;
+		transition.position	   = gateway->isExact() ? Vec3{exit.x + 0.5, exit.y + 0.0, exit.z + 0.5} : Vec3{exit.x + 0.5, static_cast<double>(exit.y), exit.z + 0.5};
+		transition.relativeYRot = transition.relativeXRot = true;
+		transition.portalSound = false;
+		return transition;
+	}
+} // namespace Portals

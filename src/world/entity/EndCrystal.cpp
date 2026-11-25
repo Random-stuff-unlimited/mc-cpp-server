@@ -38,6 +38,12 @@ bool EndCrystal::hurtServer(const Combat::DamageSource& source, float) {
 }
 
 void EndCrystal::writeEntityData(Buffer& buf) const {
+	if (_beamTarget) {
+		buf.writeUByte(DATA_BEAM_TARGET);
+		buf.writeVarInt(11); // OPTIONAL_BLOCK_POS
+		buf.writeBool(true);
+		buf.writePosition(_beamTarget->x, _beamTarget->y, _beamTarget->z);
+	}
 	if (_showBottom) return; // Its default
 	buf.writeUByte(DATA_SHOW_BOTTOM);
 	buf.writeVarInt(SERIALIZER_BOOLEAN);

@@ -17,7 +17,7 @@ class Level;
 // from vanilla's PortalShape, PortalForcer, NetherPortalBlock, EndPortalBlock, EnderEyeItem, EndPlatformFeature,
 // PortalProcessor and Entity.handlePortal
 namespace Portals {
-	enum class Kind { Nether = 0, End = 1 };
+	enum class Kind { Nether = 0, End = 1, Gateway = 2 };
 	// Axis ids as Shapes::axisOf: 0 x, 1 y, 2 z
 
 	// BaseFireBlock.inPortalDimension: fire lights portals in the overworld and the nether only
@@ -59,6 +59,8 @@ namespace Portals {
 	};
 	std::optional<Transition> netherPortalDestination(Level& level, Actor& actor, const BlockPos& entry);
 	std::optional<Transition> endPortalDestination(Level& level, Actor& actor, const BlockPos& entry);
+	// EndGatewayBlock.getPortalDestination: the gateway's exit (found and given a gateway back the first time)
+	std::optional<Transition> gatewayDestination(Level& level, Actor& actor, const BlockPos& entry);
 
 	// PortalForcer
 	std::optional<BlockPos>		  findClosestPortalPosition(Level& level, const BlockPos& pos, bool toNether);
@@ -100,6 +102,12 @@ class NetherPortalBlock : public BlockBehavior {
 
 // EndPortalBlock
 class EndPortalBlock : public BlockBehavior {
+  public:
+	void entityInside(Level& level, const BlockPos& pos, int state, Actor* actor) const override;
+};
+
+// EndGatewayBlock: what enters it goes to its exit, unless it is cooling down
+class EndGatewayBlock : public BlockBehavior {
   public:
 	void entityInside(Level& level, const BlockPos& pos, int state, Actor* actor) const override;
 };

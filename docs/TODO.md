@@ -78,7 +78,8 @@ Les 85 types de mobs vanilla ont leur classe et leur IA (`src/world/entity/mobs`
 - [x] Ruches : abeilles qui entrent/sortent (`BeehiveBlockEntity`), nuit/pluie, miel à la sortie, essaim en colère si cassée
 - [ ] Ruches : fumée de feu de camp, récolte au flacon/cisailles
 - [x] Cristaux de l'End, combat de l'End (piliers, cages, portail de sortie, œuf, `end_fight.dat`)
-- [ ] Dragon : réinvocation avec 4 cristaux, portails de passage (gateways), dégâts par partie touchée
+- [x] Dragon : réinvocation avec 4 cristaux (piliers reconstruits), portails de passage (20, vers les îles à 1024 blocs, retour)
+- [ ] Dragon : dégâts par partie touchée ; îles extérieures (pas de générateur de l'End)
 - [x] Spawners : marchand ambulant, patrouilles (capitaine à bannière), raids (Mauvais présage → Présage de raid →
       vagues, barre de raid, Héros du village), golems par motif (fer/neige/cuivre)
 - [ ] Raids : fiole sinistre (le capitaine donne directement Mauvais présage ici), bannière sinistre à motifs, laisses

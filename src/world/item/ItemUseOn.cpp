@@ -1,3 +1,4 @@
+#include "world/EndDragonFight.hpp"
 #include "world/entity/LeashKnot.hpp"
 #include "world/entity/Vehicles.hpp"
 #include "world/entity/EndCrystal.hpp"
@@ -61,6 +62,7 @@ namespace ItemUse {
 			auto crystal = std::make_unique<EndCrystal>(level, Vec3{above.x + 0.5, static_cast<double>(above.y), above.z + 0.5});
 			crystal->setShowBottom(false);
 			level.entities().add(std::move(crystal));
+			if (EndDragonFight* fight = level.endFight()) fight->tryRespawn(); // Four of them around the exit portal
 			if (player.getGameMode() != GameMode::Creative) stack.shrink(1);
 			return Result::Success;
 		}

@@ -1,5 +1,8 @@
 #include "world/EndDragonFight.hpp"
 
+#include "world/Explosion.hpp"
+#include "world/blockentity/EndGatewayBlockEntity.hpp"
+#include "lib/JavaRandom.hpp"
 #include "player.hpp"
 #include "world/Combat.hpp"
 #include "world/Level.hpp"
@@ -11,7 +14,7 @@
 #include <fstream>
 
 namespace {
-	constexpr int ARENA_RADIUS = 192, FILE_VERSION = 1;
+	constexpr int ARENA_RADIUS = 192, FILE_VERSION = 2; // 2: the gateways left
 }
 
 EndDragonFight::EndDragonFight(Level& level, std::filesystem::path file) : _level(level), _file(std::move(file)) { load(); }
@@ -42,41 +45,8 @@ void EndDragonFight::buildArena() {
 	for (int cx = -4; cx <= 4; cx++) {
 		for (int cz = -4; cz <= 4; cz++) _level.loadChunkNow(cx, cz);
 	}
-	const GameData& data	 = _level.gameData();
-	int				obsidian = data.getDefaultBlockState("minecraft:obsidian"), bedrock = data.getDefaultBlockState("minecraft:bedrock");
-	int				air		 = data.getDefaultBlockState("minecraft:air"), bars = data.getDefaultBlockState("minecraft:iron_bars");
-	// The ground: the top of the island at the center
-	int ground = _level.minY();
-	for (int y = std::min(_level.maxY() - 1, 255); y > _level.minY(); y--) {
-		if (!_level.blocks().isAir(_level.getBlockState({0, y, 0}))) {
-			ground = y;
-			break;
-		}
-	}
-	for (const Spike& spike : spikes()) {
-		// SpikeFeature.place: an obsidian cylinder up to its height, cleared above; bedrock and a crystal on top
-		for (int x = spike.centerX - spike.radius; x <= spike.centerX + spike.radius; x++) {
-			for (int z = spike.centerZ - spike.radius; z <= spike.centerZ + spike.radius; z++) {
-				int dx = x - spike.centerX, dz = z - spike.centerZ;
-				if (dx * dx + dz * dz > spike.radius * spike.radius + 1) continue;
-				for (int y = ground; y < spike.height; y++) _level.setBlock({x, y, z}, obsidian, Level::UPDATE_CLIENTS);
-				for (int y = spike.height; y < spike.height + 10; y++) _level.setBlock({x, y, z}, air, Level::UPDATE_CLIENTS);
-			}
-		}
-		if (spike.guarded) {
-			// The cage of iron bars around its top
-			for (int dx = -2; dx <= 2; dx++) {
-				for (int dz = -2; dz <= 2; dz++) {
-					for (int dy = 0; dy <= 3; dy++) {
-						bool wall = std::abs(dx) == 2 || std::abs(dz) == 2 || dy == 3;
-						if (wall) _level.setBlock({spike.centerX + dx, spike.height + dy, spike.centerZ + dz}, bars, Level::UPDATE_CLIENTS);
-					}
-				}
-			}
-		}
-		_level.setBlock({spike.centerX, spike.height, spike.centerZ}, bedrock, Level::UPDATE_CLIENTS);
-		_level.entities().add(std::make_unique<EndCrystal>(_level, Vec3{spike.centerX + 0.5, spike.height + 1.0, spike.centerZ + 0.5}));
-	}
+	int ground = groundY();
+	for (const Spike& spike : spikes()) buildSpike(spike, ground, false);
 	_portal = {0, ground + 1, 0};
 	spawnExitPortal(false);
 	_arenaBuilt = true;
@@ -126,6 +96,7 @@ void EndDragonFight::spawnDragon() {
 }
 
 void EndDragonFight::tick() {
+	if (_respawnStage != RespawnStage::None) tickRespawn();
 	if (++_ticks % 20 != 0 || !playersInArena()) return;
 	if (!_arenaBuilt) buildArena();
 	if (_dragonKilled) return;
@@ -154,6 +125,7 @@ void EndDragonFight::setDragonKilled() {
 		if (!_previouslyKilled) _level.setBlock(_portal.offset(0, 4, 0), _level.gameData().getDefaultBlockState("minecraft:dragon_egg"), Level::UPDATE_ALL);
 	}
 	_previouslyKilled = true;
+	spawnNewGateway(); // EndDragonFight.setDragonKilled: a gateway each time
 	_dirty			  = true;
 	save();
 }
@@ -176,6 +148,8 @@ void EndDragonFight::save() {
 	out.put(static_cast<char>(FILE_VERSION));
 	out.put(static_cast<char>(flags));
 	out.write(reinterpret_cast<const char*>(pos), sizeof(pos));
+	out.put(static_cast<char>(_gatewaysLoaded ? _gateways.size() : 255));
+	for (int index : _gateways) out.put(static_cast<char>(index));
 }
 
 void EndDragonFight::load() {
@@ -184,9 +158,182 @@ void EndDragonFight::load() {
 	int version = in.get(), flags = in.get();
 	int32_t pos[3] = {0, 0, 0};
 	in.read(reinterpret_cast<char*>(pos), sizeof(pos));
-	if (version != FILE_VERSION || !in) return;
+	if ((version != 1 && version != FILE_VERSION) || !in) return;
+	if (version >= 2) {
+		int count = in.get();
+		if (count != 255 && count >= 0 && count <= 20) {
+			_gatewaysLoaded = true;
+			for (int i = 0; i < count; i++) _gateways.push_back(in.get());
+		}
+	}
 	_arenaBuilt		  = flags & 1;
 	_dragonKilled	  = flags & 2;
 	_previouslyKilled = flags & 4;
 	_portal			  = {pos[0], pos[1], pos[2]};
+}
+
+int EndDragonFight::groundY() {
+	// The ground: the top of the island at the center
+	for (int y = std::min(_level.maxY() - 1, 255); y > _level.minY(); y--) {
+		if (!_level.blocks().isAir(_level.getBlockState({0, y, 0}))) return y;
+	}
+	return _level.minY();
+}
+
+void EndDragonFight::buildSpike(const Spike& spike, int ground, bool explode) {
+	const GameData& data	 = _level.gameData();
+	int				obsidian = data.getDefaultBlockState("minecraft:obsidian"), bedrock = data.getDefaultBlockState("minecraft:bedrock");
+	int				air		 = data.getDefaultBlockState("minecraft:air"), bars = data.getDefaultBlockState("minecraft:iron_bars");
+	if (explode) {
+		// The old crystal goes (SpikeFeature in a respawn: the top blows up first)
+		for (Actor* actor : _level.actorsIn(AABB{spike.centerX - 3.0, static_cast<double>(_level.minY()), spike.centerZ - 3.0, spike.centerX + 4.0,
+												 static_cast<double>(_level.maxY()), spike.centerZ + 4.0})) {
+			if (auto* crystal = dynamic_cast<EndCrystal*>(actor)) crystal->discard();
+		}
+		Explosions::explode(_level, nullptr, std::nullopt, nullptr, Vec3{spike.centerX + 0.5, spike.height + 0.5, spike.centerZ + 0.5}, 5.0F, false,
+							Explosions::Interaction::None);
+	}
+	// SpikeFeature.place: an obsidian cylinder up to its height, cleared above; bedrock and a crystal on top
+	for (int x = spike.centerX - spike.radius; x <= spike.centerX + spike.radius; x++) {
+		for (int z = spike.centerZ - spike.radius; z <= spike.centerZ + spike.radius; z++) {
+			int dx = x - spike.centerX, dz = z - spike.centerZ;
+			if (dx * dx + dz * dz > spike.radius * spike.radius + 1) continue;
+			for (int y = ground; y < spike.height; y++) _level.setBlock({x, y, z}, obsidian, Level::UPDATE_CLIENTS);
+			for (int y = spike.height; y < spike.height + 10; y++) _level.setBlock({x, y, z}, air, Level::UPDATE_CLIENTS);
+		}
+	}
+	if (spike.guarded) {
+		// The cage of iron bars around its top
+		for (int dx = -2; dx <= 2; dx++) {
+			for (int dz = -2; dz <= 2; dz++) {
+				for (int dy = 0; dy <= 3; dy++) {
+					bool wall = std::abs(dx) == 2 || std::abs(dz) == 2 || dy == 3;
+					if (wall) _level.setBlock({spike.centerX + dx, spike.height + dy, spike.centerZ + dz}, bars, Level::UPDATE_CLIENTS);
+				}
+			}
+		}
+	}
+	_level.setBlock({spike.centerX, spike.height, spike.centerZ}, bedrock, Level::UPDATE_CLIENTS);
+	_level.entities().add(std::make_unique<EndCrystal>(_level, Vec3{spike.centerX + 0.5, spike.height + 1.0, spike.centerZ + 0.5}));
+}
+
+std::vector<BlockPos> EndDragonFight::gatewayPositions(int64_t seed) {
+	// EndDragonFight.gateways: 0 to 19 shuffled by the seed, on a circle of 96 at y 75
+	std::vector<int> order(20);
+	for (int i = 0; i < 20; i++) order[i] = i;
+	JavaRandom random(seed);
+	for (int i = 19; i > 0; i--) std::swap(order[i], order[random.nextInt(i + 1)]);
+	std::vector<BlockPos> positions;
+	for (int k : order) {
+		double angle = 2.0 * (-M_PI + 0.15707963267948966 * k);
+		positions.push_back({static_cast<int>(std::floor(96.0 * std::cos(angle))), 75, static_cast<int>(std::floor(96.0 * std::sin(angle)))});
+	}
+	return positions;
+}
+
+void EndDragonFight::spawnNewGateway() {
+	if (!_gatewaysLoaded) {
+		for (int i = 19; i >= 0; i--) _gateways.push_back(i);
+		_gatewaysLoaded = true;
+	}
+	if (_gateways.empty()) return;
+	int index = _gateways.back();
+	_gateways.pop_back();
+	BlockPos pos = gatewayPositions(_level.world().getSeed())[index];
+	_level.levelEvent(nullptr, 3000, pos, 0); // LevelEvent.ANIMATION_END_GATEWAY_SPAWN
+	EndGatewayBlockEntity::place(_level, pos, std::nullopt, false);
+	_dirty = true;
+}
+
+bool EndDragonFight::tryRespawn() {
+	if (!_dragonKilled || _respawnStage != RespawnStage::None || !_arenaBuilt) return false;
+	// A crystal on each side of the portal, 3 blocks from its center
+	std::vector<EndCrystal*> found;
+	BlockPos				 above = _portal.above();
+	for (Direction direction : Directions::HORIZONTAL) {
+		BlockPos side = above.relative(direction, 2);
+		EndCrystal* crystal = nullptr;
+		for (Actor* actor : _level.actorsIn(AABB{static_cast<double>(side.x), static_cast<double>(side.y), static_cast<double>(side.z), side.x + 1.0, side.y + 1.0,
+												 side.z + 1.0})) {
+			if (auto* c = dynamic_cast<EndCrystal*>(actor); c && c->isAlive()) crystal = c;
+		}
+		if (!crystal) return false;
+		found.push_back(crystal);
+	}
+	_respawnCrystals.clear();
+	for (EndCrystal* crystal : found) {
+		_respawnCrystals.push_back(EntityRef(*crystal));
+		crystal->setBeamTarget(BlockPos{0, 128, 0});
+	}
+	// The portal closes (its frame stays)
+	spawnExitPortal(false);
+	_respawnStage = RespawnStage::Start;
+	_respawnTime  = 0;
+	_respawnSpike = 0;
+	return true;
+}
+
+// DragonRespawnAnimation: START (the crystals shine up), PREPARING_TO_SUMMON_PILLARS, SUMMONING_PILLARS (one spike
+// every 2 seconds), SUMMONING_DRAGON (then the crystals blow up and the dragon is there)
+void EndDragonFight::tickRespawn() {
+	// A crystal broken during it stops everything
+	for (const EntityRef& ref : _respawnCrystals) {
+		Actor* crystal = _level.actorByRef(ref);
+		if (!crystal || !crystal->isAlive()) {
+			_respawnStage = RespawnStage::None;
+			spawnExitPortal(true);
+			for (const EntityRef& other : _respawnCrystals) {
+				if (auto* c = dynamic_cast<EndCrystal*>(_level.actorByRef(other))) c->setBeamTarget(std::nullopt);
+			}
+			_respawnCrystals.clear();
+			return;
+		}
+	}
+	_respawnTime++;
+	switch (_respawnStage) {
+	case RespawnStage::Start:
+		if (_respawnTime >= 100) {
+			_respawnStage = RespawnStage::PreparingPillars;
+			_respawnTime  = 0;
+		}
+		break;
+	case RespawnStage::PreparingPillars:
+		if (_respawnTime >= 100) {
+			_respawnStage = RespawnStage::SummoningPillars;
+			_respawnTime  = 0;
+		}
+		break;
+	case RespawnStage::SummoningPillars: {
+		std::vector<Spike> all = spikes();
+		if (_respawnTime % 40 == 1 && _respawnSpike < static_cast<int>(all.size())) {
+			buildSpike(all[_respawnSpike], groundY(), true);
+			_respawnSpike++;
+		}
+		if (_respawnSpike >= static_cast<int>(all.size()) && _respawnTime % 40 == 0) {
+			_respawnStage = RespawnStage::SummoningDragon;
+			_respawnTime  = 0;
+		}
+		break;
+	}
+	case RespawnStage::SummoningDragon:
+		if (_respawnTime >= 100) {
+			for (const EntityRef& ref : _respawnCrystals) {
+				if (auto* crystal = dynamic_cast<EndCrystal*>(_level.actorByRef(ref))) {
+					crystal->setBeamTarget(std::nullopt);
+					Vec3 at = crystal->position();
+					crystal->discard();
+					Explosions::explode(_level, nullptr, std::nullopt, nullptr, at, 6.0F, false, Explosions::Interaction::None);
+				}
+			}
+			_respawnCrystals.clear();
+			_respawnStage = RespawnStage::None;
+			_dragonKilled = false;
+			_dragon		  = EntityRef();
+			spawnDragon();
+			_dirty = true;
+			save();
+		}
+		break;
+	case RespawnStage::None: break;
+	}
 }

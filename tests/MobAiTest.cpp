@@ -1,4 +1,6 @@
 #include "LevelFixture.hpp"
+#include "world/blockentity/EndGatewayBlockEntity.hpp"
+#include "world/Portals.hpp"
 
 #include <cstdio>
 #include "Test.hpp"
@@ -1257,6 +1259,48 @@ TEST(end_dragon_fight) {
 	BlockPos portal = fight->portalLocation();
 	CHECK(f.data.getStaticName("minecraft:block", f.level->blocks().blockOf(f.level->getBlockState(portal.offset(1, 0, 0)))) == "minecraft:end_portal");
 	CHECK(f.data.getStaticName("minecraft:block", f.level->blocks().blockOf(f.level->getBlockState(portal.offset(0, 4, 0)))) == "minecraft:dragon_egg");
+
+	// Its death opened a gateway (the first of 20) on the circle of 96 blocks; it leads 1024 blocks out, to a gateway back
+	CHECK_EQ(fight->gatewaysLeft(), 19);
+	BlockPos gateway;
+	bool	 found = false;
+	for (const BlockPos& pos : EndDragonFight::gatewayPositions(f.world->getSeed())) {
+		if (f.nameAt(pos.x, pos.y, pos.z) == "minecraft:end_gateway") {
+			gateway = pos;
+			found	= true;
+		}
+	}
+	CHECK(found);
+	if (found) {
+		auto transition = Portals::gatewayDestination(*f.level, *player, gateway);
+		CHECK(transition && transition->level == f.level.get());
+		if (transition) {
+			double out = std::sqrt(transition->position.x * transition->position.x + transition->position.z * transition->position.z);
+			CHECK(out > 1000.0 && out < 1050.0);
+			auto* back = dynamic_cast<EndGatewayBlockEntity*>(
+					f.level->getBlockEntity({Mth::floor(transition->position.x), Mth::floor(transition->position.y) + 9, Mth::floor(transition->position.z) - 2}));
+			CHECK(back && back->exitPortal() && *back->exitPortal() == gateway);
+		}
+	}
+
+	// Four crystals on the sides of the exit portal: the spikes are rebuilt and a new dragon comes
+	for (Direction side : Directions::HORIZONTAL) {
+		BlockPos at = portal.relative(side, 3).above();
+		f.level->entities().add(std::make_unique<EndCrystal>(*f.level, Vec3{at.x + 0.5, static_cast<double>(at.y), at.z + 0.5}));
+	}
+	CHECK(fight->tryRespawn());
+	CHECK(fight->isRespawning());
+	f.tick(800);
+	CHECK(!fight->isRespawning());
+	CHECK(!fight->dragonKilled());
+	int dragons = 0;
+	crystals	= 0;
+	f.level->entities().forEach([&](Entity& entity) {
+		if (dynamic_cast<EnderDragon*>(&entity) && !entity.isRemoved()) dragons++;
+		if (dynamic_cast<EndCrystal*>(&entity) && !entity.isRemoved()) crystals++;
+	});
+	CHECK_EQ(dragons, 1);
+	CHECK_EQ(crystals, 10); // On the spikes again; the four used ones blew up
 }
 
 // A carved pumpkin on top of a T of iron blocks makes an iron golem; on two snow blocks a snow golem; on oxidized
