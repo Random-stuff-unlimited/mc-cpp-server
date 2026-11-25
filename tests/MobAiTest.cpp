@@ -1558,3 +1558,17 @@ TEST(parrot_on_shoulder) {
 	CHECK(!player->survival().shoulders[0].has_value());
 	CHECK_EQ(countOf(f, "minecraft:parrot"), 1);
 }
+
+// The raids and spawner timers are saved with the level and come back
+TEST(village_events_saved) {
+	LevelFixture f(2);
+	VillageEvents* events = f.level->villageEvents();
+	CHECK(events);
+	if (!events) return;
+	Raid* raid = events->startRaid({0, Y, 0}, 2);
+	CHECK(raid);
+	f.level->savePoi();
+	VillageEvents copy(*f.level);
+	copy.load(f.world->directory() / "village_events.json");
+	CHECK_EQ(static_cast<int>(copy.raids().size()), 1);
+}

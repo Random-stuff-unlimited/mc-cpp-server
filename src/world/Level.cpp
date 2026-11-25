@@ -78,7 +78,10 @@ Level::Level(Server& server, World& world, const GameData& gameData)
 	if (!_dimensionType) throw std::runtime_error("Unknown dimension type " + world.getDimensionName());
 	_ultraWarm		   = _dimensionType->ultraWarm;
 	_poi			   = std::make_unique<PoiManager>(gameData, world.directory() / "poi.dat");
-	if (_dimensionType->hasRaids) _villageEvents = std::make_unique<VillageEvents>(*this);
+	if (_dimensionType->hasRaids) {
+		_villageEvents = std::make_unique<VillageEvents>(*this);
+		_villageEvents->load(_world.directory() / "village_events.json");
+	}
 	if (_dimensionType->effects == "minecraft:the_end") _endFight = std::make_unique<EndDragonFight>(*this, world.directory() / "end_fight.dat");
 	_pathTypeCache	   = std::make_unique<PathTypeCache>();
 	_slimeBlock		   = block("minecraft:slime_block");
@@ -114,6 +117,7 @@ Chunk* Level::loadChunkNow(int chunkX, int chunkZ) {
 
 void Level::savePoi() {
 	if (_endFight) _endFight->save();
+	if (_villageEvents) _villageEvents->save();
 	if (!_poi->isDirty()) return;
 	_poi->setDirty(false);
 	auto				  bytes = std::make_shared<std::vector<uint8_t>>(_poi->encode());

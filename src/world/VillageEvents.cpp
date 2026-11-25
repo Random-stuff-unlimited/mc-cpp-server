@@ -1,3 +1,7 @@
+#include <algorithm>
+#include <fstream>
+#include "logger.hpp"
+#include "lib/json.hpp"
 #include "world/VillageEvents.hpp"
 
 #include "player.hpp"
@@ -127,6 +131,17 @@ void Raid::spawnGroup() {
 
 void Raid::tick() {
 	Vec3 center{_center.x + 0.5, static_cast<double>(_center.y), _center.z + 0.5};
+	// After a load: its raiders are the ones that say they belong to it
+	if (!_reattached) {
+		_reattached = true;
+		_level.entities().forEach([&](Entity& entity) {
+			auto* raider = dynamic_cast<Raider*>(&entity);
+			if (raider && raider->raidId() == _id && raider->isAlive() &&
+				std::none_of(_raiders.begin(), _raiders.end(), [&](const EntityRef& ref) { return _level.actorByRef(ref) == raider; })) {
+				_raiders.push_back(EntityRef(*raider));
+			}
+		});
+	}
 	if (_status != Status::Ongoing) {
 		if (_celebrationTicks > 0) _celebrationTicks--;
 		return;
@@ -413,4 +428,58 @@ void CarvedPumpkinBehavior::onPlace(Level& level, const BlockPos& pos, int, int 
 		golem->setWeather(weather);
 		golem->setWaxed(waxed);
 	}
+}
+
+// ----- Saving -----
+
+void VillageEvents::load(const std::filesystem::path& file) {
+	_file = file;
+	std::ifstream in(file);
+	if (!in) return;
+	try {
+		nlohmann::json data = nlohmann::json::parse(in);
+		_patrolTick		   = data.value("patrol-tick", _patrolTick);
+		_traderTick		   = data.value("trader-tick", _traderTick);
+		_traderSpawnDelay  = data.value("trader-spawn-delay", _traderSpawnDelay);
+		_traderSpawnChance = data.value("trader-spawn-chance", _traderSpawnChance);
+		_nextRaidId		   = data.value("next-raid-id", _nextRaidId);
+		const nlohmann::json raids = data.value("raids", nlohmann::json::array());
+		for (const nlohmann::json& r : raids) {
+			int		 id = r.value("id", 0);
+			BlockPos center{r.value("x", 0), r.value("y", 0), r.value("z", 0)};
+			auto	 raid		   = std::make_unique<Raid>(_level, id, center, r.value("omen-level", 1));
+			raid->_numGroups	   = r.value("groups", raid->_numGroups);
+			raid->_groupsSpawned   = r.value("groups-spawned", 0);
+			raid->_status		   = static_cast<Raid::Status>(r.value("status", 0));
+			raid->_ticksActive	   = r.value("ticks-active", 0);
+			raid->_cooldownTicks   = r.value("cooldown", Raid::PRE_RAID_TICKS);
+			raid->_celebrationTicks = r.value("celebration", 0);
+			raid->_waveHealth	   = r.value("wave-health", 0.0F);
+			_raids[id]			   = std::move(raid);
+		}
+	} catch (const std::exception& e) {
+		g_logger->logGameInfo(ERROR, "Couldn't read " + file.string() + ": " + e.what(), "Raids");
+	}
+}
+
+void VillageEvents::save() const {
+	if (_file.empty()) return;
+	nlohmann::json data = {{"patrol-tick", _patrolTick},	   {"trader-tick", _traderTick},	   {"trader-spawn-delay", _traderSpawnDelay},
+						   {"trader-spawn-chance", _traderSpawnChance}, {"next-raid-id", _nextRaidId}, {"raids", nlohmann::json::array()}};
+	for (const auto& [id, raid] : _raids) {
+		data["raids"].push_back({{"id", id},
+								 {"x", raid->_center.x},
+								 {"y", raid->_center.y},
+								 {"z", raid->_center.z},
+								 {"omen-level", raid->_omenLevel},
+								 {"groups", raid->_numGroups},
+								 {"groups-spawned", raid->_groupsSpawned},
+								 {"status", static_cast<int>(raid->_status)},
+								 {"ticks-active", raid->_ticksActive},
+								 {"cooldown", raid->_cooldownTicks},
+								 {"celebration", raid->_celebrationTicks},
+								 {"wave-health", raid->_waveHealth}});
+	}
+	std::ofstream out(_file);
+	if (out) out << data.dump(1) << "\n";
 }

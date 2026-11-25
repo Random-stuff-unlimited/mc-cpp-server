@@ -5,6 +5,7 @@
 #include "world/BlockPos.hpp"
 #include "world/entity/Actor.hpp"
 
+#include <filesystem>
 #include <map>
 #include <memory>
 #include <optional>
@@ -20,6 +21,7 @@ class Raider;
 // the Heroes of the Village. Lost when the village is gone, stopped after 40 minutes. Its bar shows how many are left
 class Raid {
   public:
+	friend class VillageEvents; // Saves and loads its state
 	enum class Status { Ongoing, Victory, Loss, Stopped };
 	static constexpr int PRE_RAID_TICKS = 300, MAX_TICKS = 48000, CELEBRATION_TICKS = 600;
 
@@ -50,6 +52,8 @@ class Raid {
 	std::vector<EntityRef> _raiders;
 	std::unique_ptr<BossBar> _bar;
 
+	bool				   _reattached = false; // Its raiders found again after a load
+
 	void			  spawnGroup();
 	std::optional<BlockPos> findSpawnPos();
 	float			  healthOfRaiders();
@@ -61,6 +65,9 @@ class Raid {
 class VillageEvents {
   public:
 	explicit VillageEvents(Level& level) : _level(level) {}
+	// Raids.save / the spawners' timers: <dimension>/village_events.json
+	void load(const std::filesystem::path& file);
+	void save() const;
 
 	Raid* raid(int id);
 	Raid* raidAt(const BlockPos& pos);
@@ -82,6 +89,7 @@ class VillageEvents {
 	int									 _nextRaidId = 1;
 	std::map<int, BlockPos>				 _omenPositions; // Player id -> where its Raid Omen started
 	int _patrolTick = 12000, _traderTick = 1200, _traderSpawnDelay = 24000, _traderSpawnChance = 25;
+	std::filesystem::path _file;
 
 	void tickOmens();
 	void tickPatrolSpawner();
