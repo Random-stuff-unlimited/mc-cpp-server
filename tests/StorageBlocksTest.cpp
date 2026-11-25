@@ -8,6 +8,7 @@
 #include "world/item/Components.hpp"
 #include "world/blockentity/BeaconBlockEntity.hpp"
 #include "world/inventory/BeaconMenu.hpp"
+#include "world/blocks/Composter.hpp"
 
 // Chiseled bookshelves, decorated pots, jukeboxes, lecterns, crafters and shelves
 
@@ -419,4 +420,31 @@ TEST(beacon_pyramid_menu_and_effects) {
 	f.set(beacon.x, beacon.y + 3, beacon.z, "minecraft:glass"); // Glass lets it through
 	f.tick(80);
 	CHECK_EQ(entity->levels(), 0);
+}
+
+// Composter: compostables add layers (the first always), at 7 it ripens in a second, then gives bone meal
+TEST(composter_fill_and_empty) {
+	LevelFixture f(1);
+	BlockPos pos{0, Y, 0};
+	f.level->setBlock(pos, f.data.getDefaultBlockState("minecraft:composter"), Level::UPDATE_ALL);
+	auto bob = player(f, 1.5, 0.5);
+	f.addPlayer(bob);
+	bob->setGameMode(GameMode::Survival);
+	bob->setSelectedSlot(0);
+	hand(*bob) = ItemStack(f.item("minecraft:dirt"), 1);
+	useOn(f, *bob, pos, Direction::Up, 0.5, 1.0, 0.5);
+	CHECK(f.data.getProperty(f.at(0, Y, 0), "level") == "0"); // Not compostable
+	hand(*bob) = ItemStack(f.item("minecraft:pumpkin_pie"), 64); // Always a layer
+	for (int i = 0; i < 7; i++) useOn(f, *bob, pos, Direction::Up, 0.5, 1.0, 0.5);
+	CHECK(f.data.getProperty(f.at(0, Y, 0), "level") == "7");
+	CHECK_EQ(hand(*bob).count, 57);
+	useOn(f, *bob, pos, Direction::Up, 0.5, 1.0, 0.5); // Ripening: nothing goes in
+	CHECK_EQ(hand(*bob).count, 57);
+	f.tick(21);
+	CHECK(f.data.getProperty(f.at(0, Y, 0), "level") == "8");
+	hand(*bob) = ItemStack();
+	useOn(f, *bob, pos, Direction::Up, 0.5, 1.0, 0.5);
+	CHECK(f.data.getProperty(f.at(0, Y, 0), "level") == "0");
+	CHECK_EQ(itemsNamed(f, "minecraft:bone_meal"), 1);
+	CHECK(ComposterBlock::compostChance("minecraft:wheat_seeds") == 0.3F);
 }

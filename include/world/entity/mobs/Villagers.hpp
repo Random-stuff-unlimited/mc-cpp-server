@@ -73,6 +73,13 @@ class Villager : public AbstractVillager {
 	bool spawnGolemIfNeeded(int64_t gameTime, int minVillagers);
 	void golemDetected(int64_t gameTime) { _golemDetectedUntil = gameTime + 600; }
 	void setLastSlept(int64_t gameTime) { _lastSlept = gameTime; }
+	// Its inventory (vanilla's 8 slots): food, and a farmer's seeds and wheat
+	std::vector<ItemStack>& villagerInventory() { return _food; }
+	void					addToInventory(int item, int count) { addFood(item, count); }
+	// Takes one of these items out of its inventory; whether it had one
+	bool					takeOne(int item);
+	// WorkAtComposter: bakes bread (3 wheat each) and composts the seeds beyond 10 into its composter
+	void					workAtComposter(const BlockPos& composter);
 	// Villager.thunderHit: a witch (not in peaceful)
 	void thunderHit(LightningBolt& bolt) override;
 	static constexpr int POSE_SLEEPING = 2;

@@ -2,6 +2,7 @@
 #include "world/blocks/Eggs.hpp"
 #include "world/blocks/Rails.hpp"
 #include "world/blocks/Signs.hpp"
+#include "world/blocks/Composter.hpp"
 #include "world/entity/mobs/Bosses.hpp"
 #include "world/blocks/VanillaBlocks.hpp"
 
@@ -235,7 +236,7 @@ void registerVanillaBlocks(Level& level, const GameData& gameData) {
 			// What comparators read
 			{"CandleCakeBlock", [context](int) { return std::make_unique<AnalogOutputBlock>(context, AnalogOutputBlock::Kind::CandleCake); }},
 			{"CakeBlock", [context](int) { return std::make_unique<AnalogOutputBlock>(context, AnalogOutputBlock::Kind::Cake); }},
-			{"ComposterBlock", [context](int) { return std::make_unique<AnalogOutputBlock>(context, AnalogOutputBlock::Kind::Level); }},
+			{"ComposterBlock", [context](int) { return std::make_unique<ComposterBlock>(context); }},
 			{"LayeredCauldronBlock", [context](int) { return std::make_unique<AnalogOutputBlock>(context, AnalogOutputBlock::Kind::Level); }},
 			{"LavaCauldronBlock", [context](int) { return std::make_unique<AnalogOutputBlock>(context, AnalogOutputBlock::Kind::LavaCauldron); }},
 			{"EndPortalFrameBlock", [context](int) { return std::make_unique<AnalogOutputBlock>(context, AnalogOutputBlock::Kind::EndPortalFrame); }},

@@ -1,3 +1,4 @@
+#include "world/blocks/Composter.hpp"
 #include "world/entity/mobs/IronGolem.hpp"
 #include "world/entity/mobs/Villagers.hpp"
 
@@ -74,6 +75,7 @@ namespace {
 					std::string sound = _villager.professionName();
 					sound			  = "minecraft:entity.villager.work_" + sound.substr(sound.find(':') + 1);
 					_villager.playSound(sound, 1.0F, 1.0F);
+					if (_villager.professionName() == "minecraft:farmer") _villager.workAtComposter(*target);
 				}
 				if (_villager.navigation().isDone() && _villager.random().nextInt(120) == 0) {
 					JavaRandom& random = _villager.random();
@@ -93,6 +95,92 @@ namespace {
 				case Villager::Activity::Rest: return _villager.home();
 				default: return std::nullopt;
 			}
+		}
+	};
+
+	// HarvestFarmland and WorkAtComposter, for farmers at work: harvests the ripe crops around it and plants what it
+	// carries on the empty farmland, then at its composter bakes bread from wheat and composts its spare seeds
+	class FarmerWorkGoal : public Goal {
+	  public:
+		explicit FarmerWorkGoal(Villager& villager) : _villager(villager) { setFlags({Flag::Move, Flag::Look}); }
+
+		bool canUse() override {
+			if (_villager.professionName() != "minecraft:farmer" || _villager.activity() != Villager::Activity::Work || _villager.isPanicking()) return false;
+			Level& level = _villager.level();
+			if (level.getGameTime() < _nextStart) return false;
+			// validFarmlandAround: within one block of it
+			std::vector<BlockPos> found;
+			BlockPos			  at = _villager.blockPosition();
+			for (int x = -1; x <= 1; x++) {
+				for (int y = -1; y <= 1; y++) {
+					for (int z = -1; z <= 1; z++) {
+						BlockPos pos = at.offset(x, y, z);
+						if (isRipe(level, pos) || (canPlant(level, pos) && seed() >= 0)) found.push_back(pos);
+					}
+				}
+			}
+			if (found.empty()) return false;
+			_target = found[_villager.random().nextInt(static_cast<int>(found.size()))];
+			return true;
+		}
+		bool canContinueToUse() override { return _timer > 0; }
+		void start() override {
+			_timer = 200;
+			_villager.navigation().moveTo(_target.x + 0.5, _target.y, _target.z + 0.5, 0.5);
+		}
+		void stop() override { _nextStart = _villager.level().getGameTime() + 40; }
+		void tick() override {
+			_timer--;
+			Level& level = _villager.level();
+			_villager.lookControl().setLookAt(_target.x + 0.5, _target.y + 0.5, _target.z + 0.5);
+			Vec3 center{_target.x + 0.5, static_cast<double>(_target.y), _target.z + 0.5};
+			if ((center - _villager.position()).lengthSqr() > 1.5 * 1.5 + 1.0) return;
+			if (isRipe(level, _target)) {
+				level.destroyBlock(_target, true); // The villager picks up what drops
+			}
+			if (canPlant(level, _target)) {
+				int item = seed();
+				if (item >= 0 && _villager.takeOne(item)) {
+					level.setBlock(_target, level.gameData().getDefaultBlockState(cropOf(level, item)), Level::UPDATE_ALL);
+					level.playSound(nullptr, _target, "minecraft:item.crop.plant", Level::SoundSource::Blocks);
+				}
+			}
+			_timer = 0;
+		}
+
+	  private:
+		Villager& _villager;
+		BlockPos  _target;
+		int		  _timer = 0;
+		int64_t	  _nextStart = 0;
+
+		static bool isRipe(Level& level, const BlockPos& pos) {
+			const GameData& data = level.gameData();
+			int				state = level.getBlockState(pos);
+			std::string		name  = data.getStaticName("minecraft:block", level.blocks().blockOf(state));
+			int				max	  = name == "minecraft:beetroots" ? 3 : 7;
+			if (name != "minecraft:wheat" && name != "minecraft:carrots" && name != "minecraft:potatoes" && name != "minecraft:beetroots") return false;
+			return data.getProperty(state, "age") == std::to_string(max);
+		}
+		static bool canPlant(Level& level, const BlockPos& pos) {
+			return level.blocks().isAir(level.getBlockState(pos)) &&
+				   level.gameData().getStaticName("minecraft:block", level.blocks().blockOf(level.getBlockState(pos.below()))) == "minecraft:farmland";
+		}
+		static std::string cropOf(Level& level, int item) {
+			std::string name = level.gameData().getStaticName("minecraft:item", item);
+			if (name == "minecraft:wheat_seeds") return "minecraft:wheat";
+			if (name == "minecraft:carrot") return "minecraft:carrots";
+			if (name == "minecraft:potato") return "minecraft:potatoes";
+			return "minecraft:beetroots";
+		}
+		// The first plantable item it carries (-1 if none)
+		int seed() {
+			const GameData& data = _villager.level().gameData();
+			for (const ItemStack& stack : _villager.villagerInventory()) {
+				std::string name = data.getStaticName("minecraft:item", stack.item);
+				if (name == "minecraft:wheat_seeds" || name == "minecraft:carrot" || name == "minecraft:potato" || name == "minecraft:beetroot_seeds") return stack.item;
+			}
+			return -1;
 		}
 	};
 
@@ -258,6 +346,7 @@ void Villager::registerGoals() {
 	_goalSelector.addGoal(2, std::make_unique<AvoidEntityGoal>(*this, "LivingEntity", 8.0F, 0.6, 0.6,
 															   [this](Actor& actor) { return AbstractVillager::isHostile(_level, actor); }));
 	_goalSelector.addGoal(2, std::make_unique<PanicGoal>(*this, 0.6));
+	_goalSelector.addGoal(3, std::make_unique<FarmerWorkGoal>(*this));
 	_goalSelector.addGoal(4, std::make_unique<VillagerScheduleGoal>(*this));
 	_goalSelector.addGoal(6, std::make_unique<WaterAvoidingRandomStrollGoal>(*this, 0.5));
 	_goalSelector.addGoal(7, std::make_unique<LookAtPlayerGoal>(*this, "Player", 8.0F));
@@ -769,4 +858,39 @@ bool Villager::spawnGolemIfNeeded(int64_t gameTime, int minVillagers) {
 		}
 	}
 	return false;
+}
+
+bool Villager::takeOne(int item) {
+	for (ItemStack& stack : _food) {
+		if (stack.item == item && stack.count > 0) {
+			stack.shrink(1);
+			std::erase_if(_food, [](const ItemStack& s) { return s.count <= 0; });
+			return true;
+		}
+	}
+	return false;
+}
+
+void Villager::workAtComposter(const BlockPos& composter) {
+	const GameData& data  = _level.gameData();
+	int				wheat = data.getStaticId("minecraft:item", "minecraft:wheat");
+	int				bread = data.getStaticId("minecraft:item", "minecraft:bread");
+	// makeBread: at most 2 stacks of bread from 3 wheat each
+	int wheatCount = 0;
+	for (const ItemStack& stack : _food) wheatCount += stack.item == wheat ? stack.count : 0;
+	int loaves = std::min(wheatCount / 3, 64);
+	for (int i = 0; i < loaves * 3; i++) takeOne(wheat);
+	if (loaves > 0) addFood(bread, loaves);
+	// compostItems: up to 20 seeds, keeping 10 of each kind
+	if (data.getStaticName("minecraft:block", _level.blocks().blockOf(_level.getBlockState(composter))) != "minecraft:composter") return;
+	int composted = 0;
+	for (const char* name : {"minecraft:wheat_seeds", "minecraft:beetroot_seeds"}) {
+		int item = data.getStaticId("minecraft:item", name), have = 0;
+		for (const ItemStack& stack : _food) have += stack.item == item ? stack.count : 0;
+		while (have > 10 && composted < 20 && ComposterBlock::levelOf(_level, composter) < 7 && takeOne(item)) {
+			ComposterBlock::insert(_level, composter, name);
+			have--;
+			composted++;
+		}
+	}
 }

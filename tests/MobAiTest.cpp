@@ -1384,3 +1384,34 @@ TEST(villagers_summon_iron_golem) {
 	CHECK_EQ(golems, 1);
 	CHECK(!villagers[1]->spawnGolemIfNeeded(now + 10, 5)); // One was just seen
 }
+
+// A farmer at work harvests the ripe wheat next to it, picks up what drops, and plants seeds on the empty farmland
+TEST(farmer_harvests_and_replants) {
+	LevelFixture f(1);
+	f.world->setDayTime(3000); // Work time
+	for (int x = -1; x <= 1; x++) {
+		for (int z = -1; z <= 1; z++) f.level->setBlock({x, Y - 1, z}, f.data.getDefaultBlockState("minecraft:farmland"), Level::UPDATE_ALL);
+	}
+	f.level->setBlock({0, Y - 1, 0}, f.data.getDefaultBlockState("minecraft:water"), Level::UPDATE_ALL);
+	int ripe = f.data.withProperty(f.data.getDefaultBlockState("minecraft:wheat"), "age", "7");
+	f.level->setBlock({1, Y, 0}, ripe, Level::UPDATE_ALL);
+	f.level->setBlock({0, Y, 0}, f.data.getDefaultBlockState("minecraft:stone"), Level::UPDATE_ALL); // Over the water
+	auto* farmer = dynamic_cast<Villager*>(spawn(f, "minecraft:villager", {0, Y + 1, 0}));
+	CHECK(farmer);
+	if (!farmer) return;
+	farmer->setBaby(false);
+	farmer->setVillagerData(farmer->villagerType(), f.data.getStaticId("minecraft:villager_profession", "minecraft:farmer"), 1);
+	farmer->goalSelector().removeAllGoals();
+	farmer->registerGoals();
+	farmer->setPos({0.5, static_cast<double>(Y + 1), 0.5});
+	farmer->addToInventory(f.item("minecraft:wheat_seeds"), 3);
+	f.world->setDayTime(3000); // Work time (spawn() made it night)
+	f.tick(400);
+	int planted = 0;
+	for (int x = -1; x <= 1; x++) {
+		for (int z = -1; z <= 1; z++) planted += f.nameAt(x, Y, z).find("minecraft:wheat") == 0;
+	}
+	CHECK(planted >= 2); // Replanted the harvested one and more
+	bool harvested = f.data.getProperty(f.at(1, Y, 0), "age") != "7";
+	CHECK(harvested);
+}
