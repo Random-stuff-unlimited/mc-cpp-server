@@ -39,7 +39,7 @@ les commandes d'admin ci-dessous. Sans être op, seules `help`, `list`, `spawn`,
 - [x] `/xp` (`/experience`) `add|set|query`, en points ou niveaux
 - [x] `/enchant <joueurs> <enchantement> [niveau]` (objets supportés, niveau max, incompatibilités)
 - [x] `/weather <type> [durée]`, `/time set|add <durée>` avec unités (d, s, t), durées vanilla aléatoires par défaut
-- [ ] Autocomplétion des commandes côté client (`COMMANDS` + `COMMAND_SUGGESTIONS`, `Commands::suggest` existe déjà)
+- [x] Autocomplétion des commandes côté client (`COMMANDS` filtré par permission, `COMMAND_SUGGESTIONS`)
 
 ## Effets de statut / potions
 
@@ -159,11 +159,11 @@ Les 85 types de mobs vanilla ont leur classe et leur IA (`src/world/entity/mobs`
 - [ ] Camera spectateur : `SET_CAMERA`, mode spectateur complet
 - [x] `PLAYER_LOOK_AT` (`/rotate … facing`), `/rotate`
 - [ ] Particules étendues : `LEVEL_PARTICLES` partiel, particles de bloc/explosion
-- [ ] `EXPLODE` client (le calcul serveur existe) : sons, débris, onde de choc
+- [x] `EXPLODE` client (sons, particules, recul envoyé aux joueurs)
 
 ## Réseau / divers
 
-- [ ] `BLOCK_CHANGED_ACK` / ack de minage (partiel), `BLOCK_ENTITY_TAG_QUERY`
+- [x] `BLOCK_CHANGED_ACK` (fin de tick), `BLOCK_ENTITY_TAG_QUERY`
 - [ ] `COOKIE_REQUEST`/`COOKIE_RESPONSE`, `CUSTOM_PAYLOAD` (plugin channels)
 - [x] Resource packs : `RESOURCE_PACK_PUSH` (config.json `resource-pack`, `require-resource-pack`), refus → expulsion
 - [x] Transfert de serveur : `/transfer`, `TRANSFER`, transferts entrants (`accepts-transfers`)
