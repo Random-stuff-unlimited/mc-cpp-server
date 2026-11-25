@@ -4,6 +4,7 @@
 #include <array>
 #include <filesystem>
 #include <map>
+#include <set>
 #include <optional>
 #include <string>
 #include <vector>
@@ -60,6 +61,9 @@ class Scoreboard {
 	int							   addScore(const std::string& owner, const std::string& objective, int amount); // The new value
 	bool						   resetScore(const std::string& owner, const std::string& objective);
 	bool						   resetScores(const std::string& owner);
+	// Score.isLocked: a trigger objective's score a player may change once with /trigger (enable unlocks it)
+	void						   enableTrigger(const std::string& owner, const std::string& objective) { _unlocked.insert(owner + "\n" + objective); }
+	bool						   useTrigger(const std::string& owner, const std::string& objective) { return _unlocked.erase(owner + "\n" + objective) > 0; }
 	std::vector<std::string>	   owners() const;
 	std::map<std::string, int>	   scoresOf(const std::string& owner) const;
 
@@ -76,6 +80,10 @@ class Scoreboard {
 	bool				  modifyTeam(const std::string& name, const std::string& option, const std::string& value);
 	// Whether one may hurt the other (PlayerTeam.isAllowFriendlyFire): false only in the same team without friendly fire
 	bool				  canHurt(const std::string& attacker, const std::string& victim) const;
+	// EntitySelector.pushableBy: the team collision rules let the pusher push the other (members by name: a player's
+	// name, an entity's UUID)
+	bool				  canPush(const std::string& pusher, const std::string& pushed) const;
+	bool				  hasTeams() const { return !_teams.empty(); }
 	// ChatFormatting colors by name ("red"... "reset"), -1 if unknown
 	static int			  colorByName(const std::string& name);
 
@@ -94,6 +102,7 @@ class Scoreboard {
 	std::map<std::string, std::map<std::string, int>>  _scores; // Owner -> objective -> value
 	std::array<std::string, SLOT_COUNT>				   _display;
 	std::map<std::string, Team>						   _teams;
+	std::set<std::string>							   _unlocked; // "owner\nobjective" of the enabled triggers
 
 	// ClientboundSetPlayerTeamPacket: 0 add, 1 remove, 2 change, 3 join, 4 leave
 	void sendTeam(const Team& team, int method, const std::vector<std::string>& members, Player* to = nullptr);

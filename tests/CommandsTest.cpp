@@ -442,3 +442,50 @@ TEST(scoreboard_file) {
 	CHECK(copy.teamOf("Bob") && copy.teamOf("Bob")->name == "red");
 	std::filesystem::remove(file);
 }
+
+// /scoreboard players operation, and /trigger once enabled
+TEST(commands_scoreboard_operation_and_trigger) {
+	LevelFixture f;
+	Commands::registerCommands();
+	auto player = makePlayer(f);
+	f.addPlayer(player);
+	Scoreboard& board = f.server.scoreboard();
+	Commands::run(f.server, *player, "scoreboard objectives add a dummy");
+	Commands::run(f.server, *player, "scoreboard players set X a 7");
+	Commands::run(f.server, *player, "scoreboard players set Y a 3");
+	Commands::run(f.server, *player, "scoreboard players operation X a *= Y a");
+	CHECK(board.score("X", "a") == 21);
+	Commands::run(f.server, *player, "scoreboard players operation X a %= Y a");
+	CHECK(board.score("X", "a") == 0);
+	Commands::run(f.server, *player, "scoreboard players operation X a >< Y a");
+	CHECK(board.score("X", "a") == 3 && board.score("Y", "a") == 0);
+	Commands::run(f.server, *player, "scoreboard objectives add vote trigger");
+	Commands::run(f.server, *player, "trigger vote"); // Not enabled
+	CHECK(!board.score("Bob", "vote"));
+	Commands::run(f.server, *player, "scoreboard players enable @s vote");
+	Commands::run(f.server, *player, "trigger vote set 4");
+	CHECK(board.score("Bob", "vote") == 4);
+	Commands::run(f.server, *player, "trigger vote add 1"); // Used up
+	CHECK(board.score("Bob", "vote") == 4);
+}
+
+// Team collision rules (EntitySelector.pushableBy)
+TEST(commands_team_collision_rule) {
+	LevelFixture f;
+	Commands::registerCommands();
+	auto player = makePlayer(f);
+	f.addPlayer(player);
+	Scoreboard& board = f.server.scoreboard();
+	CHECK(!board.hasTeams() && board.canPush("A", "B"));
+	Commands::run(f.server, *player, "team add red");
+	Commands::run(f.server, *player, "team add blue");
+	Commands::run(f.server, *player, "team join red A");
+	Commands::run(f.server, *player, "team join red B");
+	Commands::run(f.server, *player, "team join blue C");
+	Commands::run(f.server, *player, "team modify red collisionRule pushOtherTeams");
+	CHECK(board.canPush("A", "B") && !board.canPush("A", "C") && !board.canPush("C", "A"));
+	Commands::run(f.server, *player, "team modify red collisionRule pushOwnTeam");
+	CHECK(!board.canPush("A", "B") && board.canPush("A", "C"));
+	Commands::run(f.server, *player, "team modify blue collisionRule never");
+	CHECK(!board.canPush("A", "C") && !board.canPush("C", "D"));
+}

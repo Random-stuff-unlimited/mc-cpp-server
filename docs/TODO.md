@@ -145,7 +145,7 @@ Les 85 types de mobs vanilla ont leur classe et leur IA (`src/world/entity/mobs`
 - [x] Scoreboard : `/scoreboard` (objectifs, scores, affichage), `SET_SCORE`, `SET_OBJECTIVE`, `SET_DISPLAY_OBJECTIVE`,
       `RESET_SCORE`, critères deathCount/playerKillCount/totalKillCount/health/food/level/xp/air/armor, `scoreboard.json`
 - [x] Équipes : `/team` (couleur, préfixe/suffixe, tir allié, pseudos, collision), `SET_PLAYER_TEAM`, sauvegarde
-- [ ] `/scoreboard players operation`, `/trigger`, collisions d'équipe côté serveur
+- [x] `/scoreboard players operation`, `/trigger`, collisions d'équipe côté serveur
 - [x] World border : `INITIALIZE_BORDER`, `SET_BORDER_*`, `/worldborder`, dégâts hors limite, blocs interdits, sauvegarde
 - [ ] Cartes : `MAP_ITEM_DATA`, cartographie
 - [x] `SET_DEFAULT_SPAWN_POSITION` (compass qui pointe le spawn)

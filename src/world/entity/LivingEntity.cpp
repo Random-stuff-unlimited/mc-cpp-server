@@ -10,6 +10,7 @@
 #include "world/Combat.hpp"
 #include "world/Clip.hpp"
 #include "world/Level.hpp"
+#include "world/Scoreboard.hpp"
 #include "world/entity/ItemEntity.hpp"
 #include "world/entity/SpawnPlacements.hpp"
 #include "world/entity/ExperienceOrb.hpp"
@@ -773,15 +774,22 @@ void LivingEntity::applyFireEffectsFromBlocks() {
 
 // LivingEntity.pushEntities: pushed apart from the entities it overlaps; crushed when too many (maxEntityCramming)
 void LivingEntity::pushEntities() {
-	AABB box   = boundingBox();
-	int	 count = 0;
+	AABB			  box	= boundingBox();
+	int				  count = 0;
+	const Scoreboard& board = _level.server().scoreboard();
+	bool			  teams = board.hasTeams();
+	std::string		  self	= teams ? uuid().toString() : std::string();
+	// EntitySelector.pushableBy(this): the team collision rules, both ways
+	auto pushable = [&](Entity& other) {
+		return &other != this && other.isPushable() && (!teams || board.canPush(self, other.uuid().toString()));
+	};
 	_level.entities().forEachIn(box, [&](Entity& other) {
-		if (&other != this && other.isPushable()) count++;
+		if (pushable(other)) count++;
 	});
 	if (count > MAX_ENTITY_CRAMMING - 1 && _random.nextInt(4) == 0) hurtServer({"minecraft:cramming", nullptr}, 6.0F); // No passengers
 	if (count > 0) {
 		_level.entities().forEachIn(box, [&](Entity& other) {
-			if (&other != this && other.isPushable()) {
+			if (pushable(other)) {
 				doPush(other);
 				other.pushAgainst(*this); // Entity.push(this)
 			}
@@ -794,6 +802,7 @@ void LivingEntity::pushEntities() {
 		AABB   playerBox{player->getX() - half, player->getY(), player->getZ() - half, player->getX() + half, player->getY() + Player::BB_HEIGHT,
 						 player->getZ() + half};
 		if (!playerBox.intersects(box) || _noPhysics) continue;
+		if (teams && !board.canPush(player->getPlayerName(), self)) continue;
 		double dx = _position.x - player->getX(), dz = _position.z - player->getZ();
 		double largest = Mth::absMax(dx, dz);
 		if (!(largest >= 0.01F)) continue;

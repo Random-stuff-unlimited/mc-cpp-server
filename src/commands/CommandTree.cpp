@@ -258,6 +258,10 @@ namespace {
 											 t.literal("leave", false, {t.word("members", true)}),
 											 t.literal("modify", false, {t.word("team", false, options)})});
 		}
+		if (name == "trigger") {
+			return t.literal("trigger", false, {t.word("objective", true, {t.literal("add", false, {t.integer("value", -2147483647 - 1, true)}),
+																			t.literal("set", false, {t.integer("value", -2147483647 - 1, true)})})});
+		}
 		if (name == "scoreboard") {
 			// The arguments are words and greedy text here: the client's own parsers for objectives and criteria would
 			// need the server's lists

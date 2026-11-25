@@ -125,7 +125,7 @@ namespace Commands {
 			{"time", CONSOLE_ALWAYS},	 {"weather", CONSOLE_ALWAYS},	 {"difficulty", CONSOLE_ALWAYS}, {"stop", CONSOLE_ALWAYS},
 			{"save-all", CONSOLE_ALWAYS}, {"xp", CONSOLE_ALWAYS},		 {"experience", CONSOLE_ALWAYS}, {"enchant", CONSOLE_ALWAYS},
 			{"give", 0},				 {"clear", 0},					 {"kill", 0},				   {"effect", 1},
-			{"gamemode", 1},			 {"title", 0},			 {"worldborder", CONSOLE_ALWAYS}, {"scoreboard", CONSOLE_ALWAYS}, {"team", CONSOLE_ALWAYS}, {"transfer", 2}, {"playsound", 2}, {"stopsound", 0}, {"rotate", 0},			 {"gm", 1},
+			{"gamemode", 1},			 {"title", 0},			 {"worldborder", CONSOLE_ALWAYS}, {"scoreboard", CONSOLE_ALWAYS}, {"team", CONSOLE_ALWAYS}, {"trigger", CONSOLE_NEVER}, {"transfer", 2}, {"playsound", 2}, {"stopsound", 0}, {"rotate", 0},			 {"gm", 1},
 		};
 		for (Command& command : commandList()) {
 			for (const auto& [name, console] : CONSOLE) {

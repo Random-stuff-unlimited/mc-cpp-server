@@ -318,6 +318,20 @@ bool Scoreboard::canHurt(const std::string& attacker, const std::string& victim)
 	return !a || a != teamOf(victim) || a->friendlyFire;
 }
 
+// Vanilla's rule, quirks kept: two allies with pushOwnTeam on either side don't push each other, pushOtherTeams lets only
+// allies push
+bool Scoreboard::canPush(const std::string& pusher, const std::string& pushed) const {
+	const Team*		   a	 = teamOf(pusher);
+	const std::string& rule	 = a ? a->collisionRule : "always";
+	if (rule == "never") return false;
+	const Team*		   b		 = teamOf(pushed);
+	const std::string& otherRule = b ? b->collisionRule : "always";
+	if (otherRule == "never") return false;
+	bool allied = a && a == b;
+	if ((rule == "pushOwnTeam" || otherRule == "pushOwnTeam") && allied) return false;
+	return (rule != "pushOtherTeams" && otherRule != "pushOtherTeams") || allied;
+}
+
 void Scoreboard::sendTeam(const Team& team, int method, const std::vector<std::string>& members, Player* to) {
 	Buffer data;
 	data.writeString(team.name);
