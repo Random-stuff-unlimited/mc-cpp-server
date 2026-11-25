@@ -13,6 +13,7 @@
 #include "world/PlayerTracker.hpp"
 #include "world/item/ItemUse.hpp"
 #include "world/item/Enchantments.hpp"
+#include "world/entity/mobs/FlyingAnimals.hpp"
 
 #include <cmath>
 #include <optional>
@@ -197,6 +198,15 @@ namespace {
 		data.writeUByte(ABSORPTION_INDEX);
 		data.writeVarInt(FLOAT_SERIALIZER);
 		data.writeFloat(player.absorptionAmount());
+	}
+	// Player.DATA_SHOULDER_PARROT_LEFT (19) and RIGHT (20): OPTIONAL_UNSIGNED_INT, the parrot's variant + 1 (0: none)
+	void writeShoulders(Buffer& data, const Player& player) {
+		for (int side = 0; side < 2; side++) {
+			const auto& parrot = player.survival().shoulders[side];
+			data.writeUByte(static_cast<uint8_t>(19 + side));
+			data.writeVarInt(19); // OPTIONAL_UNSIGNED_INT
+			data.writeVarInt(parrot ? parrot->variant + 1 : 0);
+		}
 	}
 	// Entity's shared flags: 1 on fire, 2 crouching, 8 sprinting, 16 swimming, 32 invisible, 64 glowing (the effects)
 	uint8_t computeSharedFlags(const Player& player) {
@@ -395,6 +405,8 @@ namespace Survival {
 			if (!state.sleeping) {
 				// Player.tick: LivingEntity.baseTick, LivingEntity.tick's updatingUsingItem, aiStep's tickRegeneration, the pose
 				baseTick(level, player);
+				// Player.aiStep: the shoulder parrots fly off when falling, in water, flying or sleeping
+				if (player.combat().fallDistance > 0.5 || state.inWater || state.flying || state.sleeping) removeParrotsFromShoulders(level, player);
 				// LivingEntity.baseTick: beyond the world border (and its safe zone), damage per block outside
 				const WorldBorder& border  = level.world().border();
 				double			   outside = border.distanceToBorder(player.getX(), player.getZ(), level.getGameTime()) + border.safeZone;
@@ -447,6 +459,7 @@ namespace Survival {
 		if (state.dirtyData & DATA_SHARED_FLAGS) writeSharedFlags(data, player);
 		if (state.dirtyData & DATA_EFFECTS) writeEffects(data, player);
 		if (state.dirtyData & DATA_ABSORPTION) writeAbsorption(data, player);
+		if (state.dirtyData & DATA_SHOULDERS) writeShoulders(data, player);
 		data.writeUByte(0xFF); // End of the entity data
 		state.dirtyData = 0;
 		// ServerEntity.sendDirtyEntityData: to the viewers and the player itself
@@ -471,7 +484,8 @@ namespace Survival {
 		bool particles = false;
 		for (const MobEffects::Instance& i : player.effects().all()) particles |= i.visible;
 		bool effects = particles || player.survival().effectAmbience, absorption = player.absorptionAmount() != 0.0F;
-		if (!air && !flags && !pose && !shared && !effects && !absorption) return false;
+		bool shoulders = player.survival().shoulders[0] || player.survival().shoulders[1];
+		if (!air && !flags && !pose && !shared && !effects && !absorption && !shoulders) return false;
 		data.writeVarInt(player.getPlayerID());
 		if (air) writeAir(data, player);
 		if (flags) writeLivingFlags(data, player);
@@ -479,6 +493,7 @@ namespace Survival {
 		if (shared) writeSharedFlags(data, player);
 		if (effects) writeEffects(data, player);
 		if (absorption) writeAbsorption(data, player);
+		if (shoulders) writeShoulders(data, player);
 		data.writeUByte(0xFF);
 		return true;
 	}
@@ -572,4 +587,44 @@ void Survival::tickDestroy(Level& level, Player& player) {
 		level.destroyBlockProgress(player.id(), pos, stage);
 		player.setDigLastStage(stage);
 	}
+}
+
+bool Survival::setParrotOnShoulder(Level& level, Player& player, Parrot& parrot) {
+	SurvivalState& state = player.survival();
+	if (level.getGameTime() < state.shoulderCooldownUntil) return false;
+	int side = !state.shoulders[0] ? 0 : !state.shoulders[1] ? 1 : -1;
+	if (side < 0) return false;
+	SurvivalState::ShoulderParrot held;
+	held.typeId	 = parrot.typeId();
+	held.variant = parrot.variant();
+	Buffer data;
+	parrot.save(data);
+	held.data			 = data.getData();
+	state.shoulders[side] = std::move(held);
+	state.shoulderCooldownUntil = level.getGameTime() + 20;
+	state.dirtyData |= DATA_SHOULDERS;
+	parrot.discard();
+	return true;
+}
+
+void Survival::removeParrotsFromShoulders(Level& level, Player& player) {
+	SurvivalState& state = player.survival();
+	if (!state.shoulders[0] && !state.shoulders[1]) return;
+	for (int side = 0; side < 2; side++) {
+		if (!state.shoulders[side]) continue;
+		// respawnEntityOnShoulder: back in the level where the player is, a little above
+		std::unique_ptr<Mob> mob = level.mobs().create(level, state.shoulders[side]->typeId);
+		if (mob) {
+			Buffer in(state.shoulders[side]->data);
+			try {
+				mob->load(in);
+			} catch (const std::exception&) {
+			}
+			mob->snapTo({player.getX() + (side == 0 ? 0.4 : -0.4), player.getY() + 0.7, player.getZ()}, player.getYaw(), 0.0F);
+			level.addFreshEntity(std::move(mob));
+		}
+		state.shoulders[side].reset();
+	}
+	state.shoulderCooldownUntil = level.getGameTime() + 20;
+	state.dirtyData |= DATA_SHOULDERS;
 }

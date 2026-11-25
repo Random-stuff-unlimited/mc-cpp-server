@@ -323,6 +323,8 @@ namespace Combat {
 		int				typeId	 = gameData.getSyncedId("minecraft:damage_type", source.type);
 		bool bypassesInvulnerability = gameData.isInTag("minecraft:damage_type", "minecraft:bypasses_invulnerability", typeId);
 		if ((victim.getGameMode() == GameMode::Creative || victim.getGameMode() == GameMode::Spectator) && !bypassesInvulnerability) return false;
+		// Player.hurtServer: the shoulder parrots fly off
+		if (victim.level()) Survival::removeParrotsFromShoulders(*victim.level(), victim);
 		// Teams without friendly fire
 		if (Player* attacker = source.attackerPlayer(); attacker && attacker != &victim && !server.scoreboard().canHurt(attacker->getPlayerName(), victim.getPlayerName())) {
 			return false;

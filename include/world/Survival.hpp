@@ -13,6 +13,8 @@ enum class Pose : uint8_t;
 // ServerPlayer: FoodData.tick, LivingEntity.baseTick (air, drowning), the water state of Entity.baseTick, the pose,
 // the exhaustion of movements, jumps, attacks, damage and mining, and SET_HEALTH / SET_ENTITY_DATA when they change.
 // Game thread only.
+class Parrot;
+
 namespace Survival {
 	enum class Difficulty { Peaceful = 0, Easy = 1, Normal = 2, Hard = 3 };
 
@@ -23,6 +25,7 @@ namespace Survival {
 	constexpr int DATA_SHARED_FLAGS = 8; // Entity.DATA_SHARED_FLAGS_ID
 	constexpr int DATA_EFFECTS		= 16; // LivingEntity.DATA_EFFECT_PARTICLES and DATA_EFFECT_AMBIENCE_ID
 	constexpr int DATA_ABSORPTION	= 32; // Player.DATA_PLAYER_ABSORPTION_ID
+	constexpr int DATA_SHOULDERS	= 64; // Player.DATA_SHOULDER_PARROT_LEFT / RIGHT
 	constexpr int MAX_AIR_SUPPLY	= 300;
 
 	// The world's difficulty (config "difficulty": peaceful, easy, normal, hard)
@@ -66,6 +69,10 @@ namespace Survival {
 	void reset(Player& player);
 	// The player's pose, and the entity data to tell the viewers when it changed (sleeping, crouching...)
 	void setPose(Player& player, Pose pose);
+	// Player.setEntityOnShoulder: the parrot leaves the level for a free shoulder; false if both are taken
+	bool setParrotOnShoulder(Level& level, Player& player, Parrot& parrot);
+	// Player.removeEntitiesOnShoulder: the parrots fly off (falling, in water, flying, sleeping, hurt, leaving)
+	void removeParrotsFromShoulders(Level& level, Player& player);
 	// Player.getDestroySpeed: the held tool's speed on that block, efficiency, haste or conduit power, mining fatigue,
 	// underwater (without aqua affinity) and off the ground
 	float destroySpeed(Level& level, const Player& player, int state);

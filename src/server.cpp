@@ -526,6 +526,7 @@ void Server::leaveGame(Player* player) {
 	auto inGame = std::find_if(_gamePlayers.begin(), _gamePlayers.end(), [player](const auto& p) { return p.get() == player; });
 	if (inGame != _gamePlayers.end()) {
 		Stats::custom(*player, _gameData, "minecraft:leave_game");
+		if (player->level()) Survival::removeParrotsFromShoulders(*player->level(), *player); // Not kept in the player's data here
 		savePlayer(*player);
 	}
 	if (ChunkStreamer* streamer = player->getChunkStreamer()) streamer->stop();

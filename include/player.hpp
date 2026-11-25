@@ -75,6 +75,13 @@ enum class Pose : uint8_t { Standing = 0, FallFlying = 1, Sleeping = 2, Swimming
 
 // What Survival and ItemUse keep per player (vanilla's LivingEntity / Player / ServerPlayer fields). Game thread only
 struct SurvivalState {
+	// The parrots on its shoulders (left, right): their saved data (Mob::save) and variant
+	struct ShoulderParrot {
+		int					 typeId = -1, variant = 0;
+		std::vector<uint8_t> data;
+	};
+	std::optional<ShoulderParrot> shoulders[2];
+	int64_t						  shoulderCooldownUntil = 0; // Player.timeEntitySatOnShoulder + 20: one at a time
 	int	 airSupply = 300; // Entity.getAirSupply, saved by vanilla as "Air"
 	Pose pose	   = Pose::Standing;
 	bool flying	   = false; // Abilities.flying

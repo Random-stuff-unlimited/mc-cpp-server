@@ -8,7 +8,7 @@
 Vec3 viewVectorOf(const Mob& mob);
 
 // Parrot: flies around (it flutters down slowly), tamed with seeds (1 in 10), killed by cookies, imitates the hostile
-// mobs around now and then, follows and sits for its owner. Riding shoulders and dancing to jukeboxes aren't ported
+// mobs around now and then, follows and sits for its owner, lands on its shoulder. Dancing to jukeboxes isn't ported
 class Parrot : public TamableAnimal {
   public:
 	static constexpr int DATA_VARIANT = 19, VARIANT_COUNT = 5;
@@ -18,6 +18,8 @@ class Parrot : public TamableAnimal {
 	int	 variant() const { return _variant; }
 	void setVariant(int variant);
 	bool isFlying() const { return !_onGround; }
+	// rideCooldownCounter: it lands on a shoulder after 5 seconds in the level (a parrot back from a shoulder is new)
+	int	 lastShoulderTick() const { return 0; }
 
 	void							registerGoals() override;
 	bool							mobInteract(Player& player, int hand) override;

@@ -1527,3 +1527,22 @@ TEST(precipitation_snow_ice_cauldrons) {
 	CHECK(warm.nameAt(2, Y - 1, 2).find("minecraft:water") == 0);
 	CHECK(warm.nameAt(4, Y, 4).find("minecraft:water_cauldron") == 0);
 }
+
+// A tame parrot lands on its owner's shoulder (it leaves the level); hurt, the owner lets it fly off again
+TEST(parrot_on_shoulder) {
+	LevelFixture f(1);
+	auto  player = addPlayer(f, 1.5, 0.5);
+	auto* parrot = dynamic_cast<Parrot*>(spawn(f, "minecraft:parrot", {0, Y, 0}));
+	CHECK(parrot);
+	if (!parrot) return;
+	parrot->tame(*player);
+	parrot->setOrderedToSit(false);
+	parrot->setVariant(3);
+	for (int i = 0; i < 120 && !player->survival().shoulders[0]; i++) f.tick(10); // Between its flights
+	CHECK(player->survival().shoulders[0].has_value());
+	CHECK(player->survival().shoulders[0] && player->survival().shoulders[0]->variant == 3);
+	CHECK_EQ(countOf(f, "minecraft:parrot"), 0);
+	Combat::damage(f.server, *player, 1.0F, {"minecraft:generic", nullptr, nullptr, std::nullopt});
+	CHECK(!player->survival().shoulders[0].has_value());
+	CHECK_EQ(countOf(f, "minecraft:parrot"), 1);
+}

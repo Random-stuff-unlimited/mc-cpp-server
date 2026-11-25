@@ -1,3 +1,4 @@
+#include "world/Survival.hpp"
 #include "world/entity/mobs/FlyingAnimals.hpp"
 
 #include "network/buffer.hpp"
@@ -234,6 +235,41 @@ std::unique_ptr<PathNavigation> Parrot::createNavigation() {
 	return navigation;
 }
 
+namespace {
+	// LandOnOwnersShoulderGoal: a tame parrot that isn't told to sit flies to its owner and lands on a free shoulder
+	class LandOnOwnersShoulderGoal : public Goal {
+	  public:
+		explicit LandOnOwnersShoulderGoal(Parrot& parrot) : _parrot(parrot) { setFlags({Flag::Move}); }
+		bool canUse() override {
+			Player* owner = ownerPlayer();
+			if (!owner || !_parrot.isTame() || _parrot.isOrderedToSit() || _parrot.isInWaterNow()) return false;
+			const SurvivalState& state = owner->survival();
+			// canSitOnShoulder: on the ground for a while, the owner not flying, in water or asleep, a free shoulder
+			return _parrot.tickCount() - _parrot.lastShoulderTick() > 100 && !owner->isSpectator() && !state.flying && !state.inWater && !state.sleeping &&
+				   owner->isOnGround() && (!state.shoulders[0] || !state.shoulders[1]);
+		}
+		bool canContinueToUse() override { return !_landed && canUse(); }
+		void start() override { _landed = false; }
+		void tick() override {
+			Player* owner = ownerPlayer();
+			if (!owner) return;
+			_parrot.navigation().moveTo(owner->getX(), owner->getY(), owner->getZ(), 1.0);
+			if (_parrot.distanceToSqr(owner->position()) < 4.0) {
+				_parrot.navigation().stop();
+				_landed = Survival::setParrotOnShoulder(_parrot.level(), *owner, _parrot);
+			}
+		}
+
+	  private:
+		Parrot& _parrot;
+		bool	_landed = false;
+		Player* ownerPlayer() {
+			Actor* owner = _parrot.getOwner();
+			return owner ? owner->asPlayer() : nullptr;
+		}
+	};
+} // namespace
+
 void Parrot::registerGoals() {
 	_goalSelector.addGoal(0, std::make_unique<TamableAnimalPanicGoal>(*this, 1.25));
 	_goalSelector.addGoal(0, std::make_unique<FloatGoal>(*this));
@@ -241,6 +277,7 @@ void Parrot::registerGoals() {
 	_goalSelector.addGoal(2, std::make_unique<SitWhenOrderedToGoal>(*this));
 	_goalSelector.addGoal(2, std::make_unique<FollowOwnerGoal>(*this, 1.0, 5.0F, 1.0F));
 	_goalSelector.addGoal(2, std::make_unique<WaterAvoidingRandomFlyingGoal>(*this, 1.0));
+	_goalSelector.addGoal(3, std::make_unique<LandOnOwnersShoulderGoal>(*this));
 }
 
 void Parrot::setVariant(int variant) {
