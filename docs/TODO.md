@@ -89,7 +89,7 @@ Les 85 types de mobs vanilla ont leur classe et leur IA (`src/world/entity/mobs`
 - [ ] Montures étendues : caravanes de lamas, perroquets sur l'épaule, plusieurs passagers (happy ghast, chameau)
 - [x] Foudre : éclairs d'orage (1/100000 par chunk et par tick), paratonnerres (attirent, signal 8 ticks), feu, creeper
       chargé, cochon → piglin zombifié, villageois → sorcière, mooshroom, tortue ; `/summon lightning_bolt`
-- [ ] Foudre : piège du cheval squelette, cuivre désoxydé
+- [x] Foudre : piège du cheval squelette (squelettes à côté des chevaux : pas de mobs cavaliers), cuivre désoxydé
 - [ ] Comportements : danse des piglins/allays (jukebox), duplication d'allay, piglins chasseurs
       de hoglins et colère aux coffres ouverts, cornes de chèvre, sauts longs (chèvre, grenouille), dash du chameau
 - [x] Réglages de spawn : spawn par biome (tableaux de `worldgen/biome`, coûts de spawn), caps globaux et par joueur,

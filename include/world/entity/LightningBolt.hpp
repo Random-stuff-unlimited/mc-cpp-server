@@ -33,6 +33,7 @@ class LightningBolt : public Entity {
 
 	void spawnFire(int extra);
 	void powerLightningRod();
+	void clearCopper();
 };
 
 #endif

@@ -1,3 +1,5 @@
+#include "world/item/Enchantments.hpp"
+#include "world/entity/LightningBolt.hpp"
 #include "world/inventory/HorseMenu.hpp"
 #include "world/entity/mobs/Horses.hpp"
 
@@ -522,6 +524,72 @@ void UndeadHorse::addBehaviourGoals() { _goalSelector.addGoal(0, std::make_uniqu
 
 void UndeadHorse::randomizeAttributes(JavaRandom& random) {
 	if (AttributeInstance* jump = _attributes.getInstance(_ids.jumpStrength)) jump->setBaseValue(generateJumpStrength(random));
+}
+
+void UndeadHorse::customServerAiStep() {
+	AbstractHorse::customServerAiStep();
+	if (!_trap) return;
+	// SkeletonHorse.aiStep: a trap that waited 15 minutes goes away
+	if (++_trapTime >= 18000) return discard();
+	// SkeletonTrapGoal: a player (not creative, not spectator) within 10 blocks sets it off
+	for (const auto& player : _level.players()) {
+		if (player->isDisconnected() || player->isCreative() || player->isSpectator()) continue;
+		if ((player->position() - _position).lengthSqr() < 100.0) return triggerTrap(*player);
+	}
+}
+
+void UndeadHorse::triggerTrap(Player&) {
+	_trap = false;
+	setTamed(true);
+	setAge(0);
+	auto bolt = std::make_unique<LightningBolt>(_level);
+	bolt->snapTo(_position, 0.0F, 0.0F);
+	bolt->setVisualOnly(true);
+	_level.entities().add(std::move(bolt));
+	const GameData& data	 = _level.gameData();
+	int				horse	 = data.getStaticId("minecraft:entity_type", "minecraft:skeleton_horse");
+	int				skeleton = data.getStaticId("minecraft:entity_type", "minecraft:skeleton");
+	DifficultyInstance difficulty = _level.getCurrentDifficultyAt(blockPosition());
+	// The skeleton of a horse: an iron helmet and an enchanted bow (createSkeleton / enchant)
+	auto rider = [&](const Vec3& at) {
+		std::unique_ptr<Mob> mob = _level.mobs().create(_level, skeleton);
+		if (!mob) return;
+		mob->snapTo(at, _yRot, 0.0F);
+		mob->finalizeSpawn(difficulty, static_cast<int>(MobRegistry::SpawnReason::Triggered));
+		mob->setPersistenceRequired();
+		mob->setItemSlot(EquipmentSlot::Head, ItemStack(data.getStaticId("minecraft:item", "minecraft:iron_helmet"), 1));
+		ItemStack bow(data.getStaticId("minecraft:item", "minecraft:bow"), 1);
+		// SkeletonTrapGoal.disenchant/enchant: EnchantmentHelper.enchantItem from the mob spawn equipment enchantments
+		int cost = static_cast<int>(5.0F + difficulty.getSpecialMultiplier() * _random.nextInt(18));
+		Enchantments::set(data, bow, Enchantments::selectEnchantment(data, _random, bow, cost, Enchantments::tagEntries(data, "minecraft:on_mob_spawn_equipment")));
+		mob->setItemSlot(EquipmentSlot::MainHand, bow);
+		_level.addFreshEntity(std::move(mob));
+	};
+	rider(_position + Vec3{0.6, 0.0, 0.0});
+	for (int i = 0; i < 3; i++) {
+		std::unique_ptr<Mob> mob = _level.mobs().create(_level, horse);
+		if (!mob) continue;
+		Vec3 at = _position + Vec3{_random.nextGaussian() * 0.5, 0.0, _random.nextGaussian() * 0.5};
+		mob->snapTo(at, _yRot, 0.0F);
+		mob->finalizeSpawn(difficulty, static_cast<int>(MobRegistry::SpawnReason::Triggered));
+		if (auto* undead = dynamic_cast<UndeadHorse*>(mob.get())) undead->setTamed(true);
+		mob->setPersistenceRequired();
+		_level.addFreshEntity(std::move(mob));
+		rider(at + Vec3{0.6, 0.0, 0.0});
+	}
+}
+
+void UndeadHorse::save(Buffer& buf) const {
+	AbstractHorse::save(buf);
+	buf.writeBool(_trap);
+	buf.writeVarInt(_trapTime);
+}
+
+void UndeadHorse::load(Buffer& buf) {
+	AbstractHorse::load(buf);
+	if (buf.remaining() == 0) return; // Saved before traps existed
+	_trap	  = buf.readBool();
+	_trapTime = buf.readVarInt();
 }
 
 bool UndeadHorse::mobInteract(Player& player, int hand) {

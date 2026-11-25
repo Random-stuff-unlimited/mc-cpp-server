@@ -5,6 +5,7 @@
 #include "world/entity/Mob.hpp"
 #include "world/entity/mobs/Creeper.hpp"
 #include "world/entity/mobs/FarmAnimals.hpp"
+#include "world/entity/mobs/Horses.hpp"
 
 // Lightning: what it does to mobs and players, fire, lightning rods
 
@@ -88,4 +89,43 @@ TEST(lightning_rod) {
 	f.tick(1);
 	BlockPos open = LightningBolt::findTarget(*f.level, {-20, 0, -20});
 	CHECK(open.y == Y);
+}
+
+// A skeleton trap horse: a player coming near sets it off (tame, 3 more horses, 4 armed skeletons)
+TEST(skeleton_trap_horse) {
+	LevelFixture f(2);
+	std::unique_ptr<Mob> mob = f.level->mobs().create(*f.level, f.data.getStaticId("minecraft:entity_type", "minecraft:skeleton_horse"));
+	auto* horse = dynamic_cast<UndeadHorse*>(mob.get());
+	CHECK(horse);
+	if (!horse) return;
+	horse->setTrap(true);
+	horse->snapTo({0.5, static_cast<double>(Y), 0.5}, 0.0F, 0.0F);
+	f.level->addFreshEntity(std::move(mob));
+	auto player = std::make_shared<Player>("Victim", PlayerState::Play, -1, f.server);
+	player->setPosition(20.5, Y, 0.5);
+	player->setGameMode(GameMode::Survival);
+	f.addPlayer(player);
+	f.tick(5);
+	CHECK(horse->isTrap()); // Too far
+	player->setPosition(5.5, Y, 0.5);
+	f.tick(5);
+	CHECK(!horse->isTrap() && horse->isTamed());
+	CHECK_EQ(countType(f, "minecraft:skeleton_horse"), 4);
+	CHECK_EQ(countType(f, "minecraft:skeleton"), 4);
+}
+
+// Lightning on oxidized copper: back to plain copper there, and some of the copper around loses a step
+TEST(lightning_clears_copper) {
+	LevelFixture f(1);
+	for (int x = -2; x <= 2; x++) {
+		for (int z = -2; z <= 2; z++) f.level->setBlock({x, Y - 1, z}, f.data.getDefaultBlockState("minecraft:oxidized_copper"), Level::UPDATE_ALL);
+	}
+	strike(f, 0.5, 0.5);
+	f.tick(2);
+	CHECK(f.nameAt(0, Y - 1, 0) == "minecraft:copper_block");
+	int cleaned = 0;
+	for (int x = -2; x <= 2; x++) {
+		for (int z = -2; z <= 2; z++) cleaned += f.nameAt(x, Y - 1, z) != "minecraft:oxidized_copper";
+	}
+	CHECK(cleaned > 1);
 }

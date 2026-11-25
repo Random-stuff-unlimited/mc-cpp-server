@@ -8,6 +8,7 @@
 #include "world/entity/mobs/Creeper.hpp"
 #include "world/entity/mobs/FarmAnimals.hpp"
 #include "world/entity/mobs/Turtle.hpp"
+#include "world/entity/mobs/Horses.hpp"
 #include "world/entity/mobs/Villagers.hpp"
 
 #include <limits>
@@ -59,10 +60,69 @@ void LightningBolt::powerLightningRod() {
 	_level.scheduleTick(strike, _level.blocks().blockOf(state), 8);
 }
 
+// LightningBolt.clearCopperOnLightningStrike: the copper hit loses all its oxidation, and a few random walks from it
+// take a step of oxidation off the copper around
+void LightningBolt::clearCopper() {
+	const GameData& data = _level.gameData();
+	auto			nameAt = [&](const BlockPos& pos) { return data.getStaticName("minecraft:block", _level.blocks().blockOf(_level.getBlockState(pos))); };
+	// WeatheringCopper.getPrevious: one step less (copper names: exposed_, weathered_, oxidized_ prefixes, not waxed)
+	auto previous = [&](const std::string& name) -> std::string {
+		if (name.find("waxed") != std::string::npos) return "";
+		for (const auto& [from, to] : std::vector<std::pair<std::string, std::string>>{{"oxidized_", "weathered_"}, {"weathered_", "exposed_"}, {"exposed_", ""}}) {
+			size_t at = name.find(from);
+			if (at == std::string::npos) continue;
+			std::string result = name.substr(0, at) + to + name.substr(at + from.size());
+			if (result == "minecraft:copper") result = "minecraft:copper_block";
+			return result;
+		}
+		return "";
+	};
+	auto setTo = [&](const BlockPos& pos, const std::string& name) {
+		int state = _level.getBlockState(pos), next = data.getDefaultBlockState(name);
+		if (next < 0) return false;
+		// Same properties where they apply (a lightning rod's facing, a stair's shape...)
+		std::string full = data.getBlockStateName(state);
+		size_t		bracket = full.find('[');
+		if (bracket != std::string::npos) {
+			int same = data.getBlockStateFromName(name + full.substr(bracket));
+			if (same >= 0) next = same;
+		}
+		_level.setBlock(pos, next, Level::UPDATE_ALL);
+		return true;
+	};
+	BlockPos strike = strikePosition();
+	std::string name = nameAt(strike);
+	if (name.find("copper") == std::string::npos && name.find("lightning_rod") == std::string::npos) return;
+	// getFirst: all the way back
+	for (std::string back = previous(name); !back.empty(); back = previous(back)) name = back, setTo(strike, back);
+	JavaRandom& random = _level.random();
+	int			walks  = random.nextInt(3) + 3;
+	for (int walk = 0; walk < walks; walk++) {
+		BlockPos at	   = strike;
+		int		 steps = random.nextInt(8) + 1;
+		for (int step = 0; step < steps; step++) {
+			// randomStepCleaningCopper: to a random copper neighbor (within one block), a step of oxidation off
+			std::vector<BlockPos> copper;
+			for (int dx = -1; dx <= 1; dx++) {
+				for (int dy = -1; dy <= 1; dy++) {
+					for (int dz = -1; dz <= 1; dz++) {
+						BlockPos next = at.offset(dx, dy, dz);
+						if (!(dx == 0 && dy == 0 && dz == 0) && !previous(nameAt(next)).empty()) copper.push_back(next);
+					}
+				}
+			}
+			if (copper.empty()) break;
+			at = copper[random.nextInt(static_cast<int>(copper.size()))];
+			setTo(at, previous(nameAt(at)));
+		}
+	}
+}
+
 void LightningBolt::tick() {
 	if (_life == 2 && !_visualOnly) {
 		spawnFire(4);
 		powerLightningRod();
+		clearCopper();
 	}
 	_life--;
 	if (_life < 0) {
@@ -131,7 +191,21 @@ void LightningBolt::tickThunder(Level& level, int chunkX, int chunkZ) {
 	if (!level.isRaining() || !level.isThundering() || level.random().nextInt(100000) != 0) return;
 	BlockPos pos = findTarget(level, level.getBlockRandomPos(chunkX * 16, 0, chunkZ * 16, 15));
 	if (!level.isRainingAt(pos)) return;
+	// A skeleton trap horse instead of a real bolt, now and then (more in harder places), not on a lightning rod
+	DifficultyInstance difficulty = level.getCurrentDifficultyAt(pos);
+	bool trap = level.mobSpawning() && level.random().nextDouble() < difficulty.getEffectiveDifficulty() * 0.01 &&
+				level.gameData().getStaticName("minecraft:block", level.blocks().blockOf(level.getBlockState(pos.below()))).find("lightning_rod") == std::string::npos;
+	if (trap) {
+		std::unique_ptr<Mob> mob = level.mobs().create(level, level.gameData().getStaticId("minecraft:entity_type", "minecraft:skeleton_horse"));
+		if (auto* horse = dynamic_cast<UndeadHorse*>(mob.get())) {
+			horse->setTrap(true);
+			horse->setAge(0);
+			horse->snapTo({pos.x + 0.5, static_cast<double>(pos.y), pos.z + 0.5}, 0.0F, 0.0F);
+			level.addFreshEntity(std::move(mob));
+		}
+	}
 	auto bolt = std::make_unique<LightningBolt>(level);
+	bolt->setVisualOnly(trap);
 	bolt->snapTo({pos.x + 0.5, static_cast<double>(pos.y), pos.z + 0.5}, 0.0F, 0.0F);
 	level.entities().add(std::move(bolt));
 }

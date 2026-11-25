@@ -156,11 +156,28 @@ class Mule : public AbstractChestedHorse {
 	using AbstractChestedHorse::AbstractChestedHorse;
 };
 
-// SkeletonHorse, ZombieHorse: tame from the start for who finds one, no breeding (the skeleton trap isn't ported)
+// SkeletonHorse, ZombieHorse: tame from the start for who finds one, no breeding. A skeleton trap horse (left by a
+// thunderstorm's bolt) waits up to 15 minutes for a player within 10 blocks: then lightning strikes, it becomes tame
+// and three more skeleton horses come, each with a skeleton (helmeted, enchanted bow) beside it. Skeletons can't ride
+// here: they stand next to their horses
 class UndeadHorse : public AbstractHorse {
   public:
 	using AbstractHorse::AbstractHorse;
 	bool mobInteract(Player& player, int hand) override;
+	bool isTrap() const { return _trap; }
+	void setTrap(bool trap) { _trap = trap; }
+	void save(Buffer& buf) const override;
+	void load(Buffer& buf) override;
+
+  protected:
+	void customServerAiStep() override;
+
+  private:
+	bool _trap	   = false;
+	int	 _trapTime = 0;
+	void triggerTrap(Player& player);
+
+  public:
 
   protected:
 	void addBehaviourGoals() override;
