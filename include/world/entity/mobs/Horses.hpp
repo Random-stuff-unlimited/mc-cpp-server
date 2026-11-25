@@ -158,8 +158,7 @@ class Mule : public AbstractChestedHorse {
 
 // SkeletonHorse, ZombieHorse: tame from the start for who finds one, no breeding. A skeleton trap horse (left by a
 // thunderstorm's bolt) waits up to 15 minutes for a player within 10 blocks: then lightning strikes, it becomes tame
-// and three more skeleton horses come, each with a skeleton (helmeted, enchanted bow) beside it. Skeletons can't ride
-// here: they stand next to their horses
+// and three more skeleton horses come, each ridden by a skeleton (helmeted, enchanted bow)
 class UndeadHorse : public AbstractHorse {
   public:
 	using AbstractHorse::AbstractHorse;

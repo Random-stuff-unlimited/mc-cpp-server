@@ -182,10 +182,10 @@ namespace SpawnPlacements {
 
 		// SpawnPlacements' static table
 		const std::unordered_map<int, Data>& table(const GameData& data) {
-			static const GameData*				  built = nullptr;
+			static uint64_t						  built = 0;
 			static std::unordered_map<int, Data> byType;
-			if (built == &data) return byType;
-			built = &data;
+			if (built == data.instanceId()) return byType;
+			built = data.instanceId();
 			byType.clear();
 			auto reg = [&](const char* type, Placement placement, H heightmap, Predicate predicate) {
 				int id = data.getStaticId("minecraft:entity_type", std::string("minecraft:") + type);

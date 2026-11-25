@@ -62,11 +62,11 @@ void MoveControl::tick() {
 		double	 top	= 0.0;
 		for (const auto& box : shape) top = std::max(top, box.maxY);
 		static std::vector<bool> doors, fences;
-		static const GameData*	 cached = nullptr;
-		if (cached != &level.gameData()) {
-			cached = &level.gameData();
-			doors  = cached->blockTag("minecraft:doors");
-			fences = cached->blockTag("minecraft:fences");
+		static uint64_t		 cached = 0;
+		if (cached != level.gameData().instanceId()) {
+			cached = level.gameData().instanceId();
+			doors  = level.gameData().blockTag("minecraft:doors");
+			fences = level.gameData().blockTag("minecraft:fences");
 		}
 		int block = level.blocks().blockOf(state);
 		if ((dy > _mob.maxUpStep() && dx * dx + dz * dz < std::max(1.0F, _mob.width())) ||

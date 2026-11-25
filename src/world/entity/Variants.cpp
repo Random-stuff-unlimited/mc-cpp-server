@@ -23,11 +23,11 @@ namespace Variants {
 
 		// entity_variants.json, loaded once per game data
 		const Registry* registry(Level& level, const std::string& name) {
-			static const GameData*							 loadedFor = nullptr;
+			static uint64_t									 loadedFor = 0;
 			static std::unordered_map<std::string, Registry> registries;
 			const GameData&									 data = level.gameData();
-			if (loadedFor != &data) {
-				loadedFor = &data;
+			if (loadedFor != data.instanceId()) {
+				loadedFor = data.instanceId();
 				registries.clear();
 				std::ifstream file(data.getDirectory() / "entity_variants.json");
 				if (file) {

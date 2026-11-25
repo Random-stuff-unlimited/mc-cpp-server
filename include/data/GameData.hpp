@@ -262,6 +262,8 @@ class GameData {
 	};
 
 	void load(const std::filesystem::path& directory);
+	// Unique per load (never reused, unlike an address): what the caches of derived tables are keyed on
+	uint64_t instanceId() const { return _instanceId; }
 	// The folder it was loaded from (other game data files live there too)
 	const std::filesystem::path& getDirectory() const { return _directory; }
 
@@ -382,6 +384,7 @@ class GameData {
 	void			   setItemProperty(const std::string& item, const std::string& property, const nlohmann::ordered_json& value);
 	static std::string blockStateKey(const std::string& block, const std::map<std::string, std::string>& properties);
 	const Registry*	   findRegistry(const std::string& registry) const;
+	uint64_t _instanceId = 0;
 };
 
 #endif

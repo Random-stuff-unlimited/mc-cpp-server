@@ -185,10 +185,10 @@ void PathNavigation::resetStuckTimeout() {
 void PathNavigation::trimPath() {
 	if (!_path) return;
 	static std::vector<bool> cauldrons;
-	static const GameData*	 cached = nullptr;
-	if (cached != &_level.gameData()) {
-		cached	  = &_level.gameData();
-		cauldrons = cached->blockTag("minecraft:cauldrons");
+	static uint64_t		 cached = 0;
+	if (cached != _level.gameData().instanceId()) {
+		cached	  = _level.gameData().instanceId();
+		cauldrons = _level.gameData().blockTag("minecraft:cauldrons");
 	}
 	for (int i = 0; i < _path->getNodeCount(); i++) {
 		Path::PathNode node = _path->getNode(i);

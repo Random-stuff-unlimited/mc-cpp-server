@@ -67,8 +67,13 @@ void Spider::tick() {
 std::shared_ptr<SpawnGroupData> Spider::finalizeSpawn(DifficultyInstance& difficulty, int reason, std::shared_ptr<SpawnGroupData> group) {
 	group			   = Monster::finalizeSpawn(difficulty, reason, group);
 	JavaRandom& random = _level.random();
-	// Spider jockeys (1%): riding isn't ported, only the draw is made
+	// Spider jockeys (1%): a skeleton rides it
 	if (random.nextInt(100) == 0) {
+		if (std::unique_ptr<Mob> made = _level.mobs().create(_level, _level.gameData().getStaticId("minecraft:entity_type", "minecraft:skeleton"))) {
+			made->snapTo(_position, _yRot, 0.0F);
+			made->finalizeSpawn(difficulty, reason);
+			if (Mob* skeleton = static_cast<Mob*>(_level.addFreshEntity(std::move(made)))) addEntityPassenger(*skeleton);
+		}
 	}
 	if (!group) {
 		auto effects = std::make_shared<SpiderEffectsGroupData>();

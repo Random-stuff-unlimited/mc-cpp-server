@@ -35,10 +35,10 @@ namespace {
 		int axisProperty, eyeProperty, facingProperty;
 	};
 	const Blocks& ids(const Level& level) {
-		static const GameData* cached = nullptr;
+		static uint64_t cached = 0;
 		static Blocks			blocks{};
-		if (cached != &level.gameData()) {
-			cached				 = &level.gameData();
+		if (cached != level.gameData().instanceId()) {
+			cached				 = level.gameData().instanceId();
 			const GameData& data = level.gameData();
 			blocks = {data.getStaticId("minecraft:block", "minecraft:obsidian"), data.getStaticId("minecraft:block", "minecraft:nether_portal"),
 					  data.getStaticId("minecraft:block", "minecraft:end_portal_frame"), data.getStaticId("minecraft:block", "minecraft:end_portal"),

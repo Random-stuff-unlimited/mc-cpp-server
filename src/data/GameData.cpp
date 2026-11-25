@@ -2,6 +2,7 @@
 
 #include "lib/json.hpp"
 
+#include <atomic>
 #include <algorithm>
 #include <cmath>
 #include <fstream>
@@ -103,7 +104,9 @@ namespace {
 } // namespace
 
 void GameData::load(const std::filesystem::path& directory) {
-	_directory = directory;
+	static std::atomic<uint64_t> loads{0};
+	_instanceId = ++loads;
+	_directory	= directory;
 	json version	 = readJson(directory / "version.json");
 	_versionName	 = version.at("name").get<std::string>();
 	_protocolVersion = version.at("protocol").get<int>();

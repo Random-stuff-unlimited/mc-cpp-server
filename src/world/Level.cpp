@@ -161,10 +161,10 @@ void Level::globalLevelEvent(int type, const BlockPos& pos, int eventData) {
 int Level::getHeight(Heightmap type, int x, int z) {
 	Chunk* chunk = chunkAt(x >> 4, z >> 4);
 	if (!chunk) return _minY;
-	static const GameData* cachedData = nullptr;
+	static uint64_t cachedData = 0;
 	static std::vector<bool> leaves;
-	if (cachedData != &_gameData) {
-		cachedData = &_gameData;
+	if (cachedData != _gameData.instanceId()) {
+		cachedData = _gameData.instanceId();
 		leaves	   = _gameData.blockTag("minecraft:leaves");
 	}
 	const auto& sections = chunk->sections();

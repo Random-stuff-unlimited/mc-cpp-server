@@ -25,13 +25,13 @@ namespace {
 		int bucket, waterBucket, wetSponge, potion, splashPotion, lingeringPotion, glassBottle;
 	};
 	const Ids& ids(const GameData& gameData) {
-		static const GameData* cachedFor = nullptr;
+		static uint64_t cachedFor = 0;
 		static Ids			   cached{};
-		if (cachedFor != &gameData) {
+		if (cachedFor != gameData.instanceId()) {
 			auto item = [&](const char* name) { return gameData.getStaticId("minecraft:item", name); };
 			cached	  = {item("minecraft:bucket"), item("minecraft:water_bucket"), item("minecraft:wet_sponge"), item("minecraft:potion"),
 						 item("minecraft:splash_potion"), item("minecraft:lingering_potion"), item("minecraft:glass_bottle")};
-			cachedFor = &gameData;
+			cachedFor = gameData.instanceId();
 		}
 		return cached;
 	}

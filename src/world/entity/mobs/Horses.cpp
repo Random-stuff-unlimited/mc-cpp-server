@@ -551,7 +551,7 @@ void UndeadHorse::triggerTrap(Player&) {
 	int				skeleton = data.getStaticId("minecraft:entity_type", "minecraft:skeleton");
 	DifficultyInstance difficulty = _level.getCurrentDifficultyAt(blockPosition());
 	// The skeleton of a horse: an iron helmet and an enchanted bow (createSkeleton / enchant)
-	auto rider = [&](const Vec3& at) {
+	auto rider = [&](const Vec3& at, Mob* horse) {
 		std::unique_ptr<Mob> mob = _level.mobs().create(_level, skeleton);
 		if (!mob) return;
 		mob->snapTo(at, _yRot, 0.0F);
@@ -563,9 +563,10 @@ void UndeadHorse::triggerTrap(Player&) {
 		int cost = static_cast<int>(5.0F + difficulty.getSpecialMultiplier() * _random.nextInt(18));
 		Enchantments::set(data, bow, Enchantments::selectEnchantment(data, _random, bow, cost, Enchantments::tagEntries(data, "minecraft:on_mob_spawn_equipment")));
 		mob->setItemSlot(EquipmentSlot::MainHand, bow);
-		_level.addFreshEntity(std::move(mob));
+		Entity* added = _level.addFreshEntity(std::move(mob));
+		if (added && horse) horse->addEntityPassenger(*added); // createSkeleton: it rides the horse
 	};
-	rider(_position + Vec3{0.6, 0.0, 0.0});
+	rider(_position, this);
 	for (int i = 0; i < 3; i++) {
 		std::unique_ptr<Mob> mob = _level.mobs().create(_level, horse);
 		if (!mob) continue;
@@ -574,8 +575,8 @@ void UndeadHorse::triggerTrap(Player&) {
 		mob->finalizeSpawn(difficulty, static_cast<int>(MobRegistry::SpawnReason::Triggered));
 		if (auto* undead = dynamic_cast<UndeadHorse*>(mob.get())) undead->setTamed(true);
 		mob->setPersistenceRequired();
-		_level.addFreshEntity(std::move(mob));
-		rider(at + Vec3{0.6, 0.0, 0.0});
+		Mob* horseAdded = static_cast<Mob*>(_level.addFreshEntity(std::move(mob)));
+		rider(at, horseAdded);
 	}
 }
 

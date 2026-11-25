@@ -190,6 +190,16 @@ void EntityManager::tick() {
 		entity.tickCountIncrement();
 		entity.tick();
 		if (entity.hasRider() && !entity.isRemoved()) entity.positionRider();
+		// A passenger stays on its vehicle (Entity.rideTick), or gets off when the vehicle is gone
+		if (entity.isPassenger()) {
+			Actor*	actor	= _level.actorById(entity.vehicleId());
+			Entity* vehicle = actor ? actor->asEntity() : nullptr;
+			if (!vehicle || vehicle->isRemoved() || !vehicle->isAlive()) {
+				entity.stopRiding();
+			} else {
+				vehicle->positionRider();
+			}
+		}
 	}
 }
 

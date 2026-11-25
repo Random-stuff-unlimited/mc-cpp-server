@@ -19,10 +19,10 @@ using json = nlohmann::json;
 namespace {
 	// Definitions by registry id, built once per game data
 	const std::vector<const json*>& definitions(const GameData& gameData) {
-		static const GameData*			cached = nullptr;
+		static uint64_t					cached = 0;
 		static std::vector<const json*> byId;
-		if (cached != &gameData) {
-			cached			  = &gameData;
+		if (cached != gameData.instanceId()) {
+			cached			  = gameData.instanceId();
 			const json& data = gameData.getEnchantmentData();
 			byId.clear();
 			if (data.contains("enchantments")) {

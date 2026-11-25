@@ -112,6 +112,11 @@ TEST(skeleton_trap_horse) {
 	CHECK(!horse->isTrap() && horse->isTamed());
 	CHECK_EQ(countType(f, "minecraft:skeleton_horse"), 4);
 	CHECK_EQ(countType(f, "minecraft:skeleton"), 4);
+	int ridden = 0;
+	f.level->entities().forEach([&](Entity& entity) {
+		if (entity.typeId() == f.data.getStaticId("minecraft:entity_type", "minecraft:skeleton_horse") && !entity.entityPassengers().empty()) ridden++;
+	});
+	CHECK_EQ(ridden, 4); // Each horse has its skeleton on it
 }
 
 // Lightning on oxidized copper: back to plain copper there, and some of the copper around loses a step

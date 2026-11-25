@@ -508,6 +508,41 @@ Player* Entity::rider() {
 	return nullptr;
 }
 
+std::vector<Entity*> Entity::entityPassengers() {
+	std::vector<Entity*> list;
+	for (int id : _passengers) {
+		Actor*	actor  = _level.actorById(id);
+		Entity* entity = actor ? actor->asEntity() : nullptr;
+		if (entity && entity->_vehicleId == _id) list.push_back(entity);
+	}
+	return list;
+}
+
+bool Entity::addEntityPassenger(Entity& passenger) {
+	if (!canAddPassenger() || passenger._vehicleId != -1 || _removed || &passenger == this) return false;
+	_passengers.push_back(passenger.id());
+	passenger._vehicleId = _id;
+	Buffer passengers;
+	writePassengers(passengers);
+	_level.entities().broadcast(*this, PacketId::Play::Clientbound::SET_PASSENGERS, passengers);
+	positionRider();
+	return true;
+}
+
+void Entity::stopRiding() {
+	if (_vehicleId == -1) return;
+	Actor*	actor	= _level.actorById(_vehicleId);
+	Entity* vehicle = actor ? actor->asEntity() : nullptr;
+	_vehicleId		= -1;
+	if (!vehicle) return;
+	auto it = std::find(vehicle->_passengers.begin(), vehicle->_passengers.end(), _id);
+	if (it == vehicle->_passengers.end()) return;
+	vehicle->_passengers.erase(it);
+	Buffer passengers;
+	vehicle->writePassengers(passengers);
+	_level.entities().broadcast(*vehicle, PacketId::Play::Clientbound::SET_PASSENGERS, passengers);
+}
+
 std::vector<Player*> Entity::passengers() {
 	std::vector<Player*> list;
 	for (int id : _passengers) {
@@ -567,12 +602,15 @@ void Entity::positionRider() {
 	for (auto it = _passengers.begin(); it != _passengers.end();) {
 		Actor*	actor  = _level.actorById(*it);
 		Player* player = actor ? actor->asPlayer() : nullptr;
-		bool	valid  = player && player->vehicleId() == _id && !player->isDisconnected() && !player->combat().dead && !player->isSpectator();
-		if (valid) {
+		Entity* entity = actor ? actor->asEntity() : nullptr;
+		bool	valid  = player ? player->vehicleId() == _id && !player->isDisconnected() && !player->combat().dead && !player->isSpectator()
+								: entity && entity->_vehicleId == _id && entity->isAlive();
+		if (valid && !_removed) {
 			++it;
 			continue;
 		}
 		if (player && player->vehicleId() == _id) player->setVehicleId(-1);
+		if (entity && entity->_vehicleId == _id) entity->_vehicleId = -1;
 		it		= _passengers.erase(it);
 		changed = true;
 	}
@@ -580,9 +618,18 @@ void Entity::positionRider() {
 	int	   count = static_cast<int>(_passengers.size());
 	double angle = -_yRot * M_PI / 180.0; // Vec3.yRot(-yRot): the seats turn with the vehicle
 	for (int index = 0; index < count; index++) {
-		Player* player = _level.actorById(_passengers[index])->asPlayer();
+		Actor*	actor  = _level.actorById(_passengers[index]);
 		Vec3	offset = passengerOffset(index, count);
 		double	x = offset.x * std::cos(angle) + offset.z * std::sin(angle), z = offset.z * std::cos(angle) - offset.x * std::sin(angle);
+		if (Entity* entity = actor->asEntity()) {
+			// A mob riding: on top of it (the client places it at its own attachment point)
+			entity->setPos({_position.x + x, riderY() + 0.6 + offset.y, _position.z + z});
+			entity->_delta		  = {0.0, 0.0, 0.0};
+			entity->_fallDistance = 0.0;
+			entity->_onGround	  = true;
+			continue;
+		}
+		Player* player = actor->asPlayer();
 		player->setPosition(_position.x + x, riderY() + offset.y, _position.z + z);
 		player->setOnGround(true);
 		player->combat().fallDistance = 0;

@@ -1698,3 +1698,21 @@ TEST(frog_long_jump_and_camel_dash) {
 	f.tick(60);
 	CHECK(!camel->isDashing());
 }
+
+// A spider jockey: the skeleton rides the spider (moving with it) and gets off when the spider dies
+TEST(spider_jockey) {
+	LevelFixture f(1);
+	Mob* spider	  = spawn(f, "minecraft:spider", {0, Y, 0});
+	Mob* skeleton = spawn(f, "minecraft:skeleton", {3, Y, 3});
+	CHECK(spider && skeleton);
+	if (!spider || !skeleton) return;
+	skeleton->setItemSlot(EquipmentSlot::Head, ItemStack(f.item("minecraft:iron_helmet"), 1)); // No sun burn
+	CHECK(spider->addEntityPassenger(*skeleton));
+	CHECK(skeleton->isPassenger() && skeleton->vehicleId() == spider->id());
+	f.tick(40);
+	CHECK((skeleton->position() - spider->position()).horizontalDistanceSqr() < 0.01);
+	CHECK(skeleton->position().y > spider->position().y);
+	spider->hurtServer({"minecraft:generic_kill", nullptr, nullptr, std::nullopt}, 1000.0F);
+	f.tick(30);
+	CHECK(!skeleton->isPassenger());
+}

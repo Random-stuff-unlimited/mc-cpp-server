@@ -90,6 +90,14 @@ class Entity : public Actor {
 	virtual int maxPassengers() const { return 1; }
 	// Entity.startRiding, from the vehicle: false if it is full or the player rides something
 	bool		startRiding(Player& player);
+	// A mob riding it (jockeys, skeleton horsemen): false if full, or the mob rides something already
+	bool		addEntityPassenger(Entity& passenger);
+	// The vehicle this entity rides (-1: none), and getting off
+	int			vehicleId() const { return _vehicleId; }
+	bool		isPassenger() const { return _vehicleId != -1; }
+	void		stopRiding();
+	// The entities riding it (not the players)
+	std::vector<Entity*> entityPassengers();
 	// Entity.ejectPassengers: every rider is put down where the vehicle is
 	void		ejectRider();
 	// Entity.removePassenger: one rider gets off (sneaking)
@@ -195,7 +203,8 @@ class Entity : public Actor {
 	bool   _horizontalCollision = false;
 	bool   _verticalCollision	= false;
 	bool   _removed				= false;
-	std::vector<int> _passengers; // Player ids, the controlling one first
+	std::vector<int> _passengers; // Player and entity ids, the controlling one first
+	int				 _vehicleId = -1;
 	double	_pistonDeltas[3]	= {0.0, 0.0, 0.0};
 	int64_t _pistonDeltasTime	= 0;
 	bool   _noPhysics			= false;

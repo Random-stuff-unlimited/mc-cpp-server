@@ -242,9 +242,24 @@ std::shared_ptr<SpawnGroupData> Zombie::finalizeSpawn(DifficultyInstance& diffic
 		if (zombieGroup->isBaby) {
 			setBaby(true);
 			if (zombieGroup->canSpawnJockey) {
-				// Chicken jockeys: riding isn't ported, only the random draws are made
+				// Chicken jockeys: an adult chicken around without a rider, else (as often) a new one
+				int chickenType = _level.gameData().getStaticId("minecraft:entity_type", "minecraft:chicken");
 				if (random.nextFloat() < 0.05) {
+					for (Actor* actor : _level.actorsIn(boundingBox().inflate(5.0, 3.0, 5.0))) {
+						auto* chicken = dynamic_cast<Mob*>(actor);
+						if (chicken && chicken->typeId() == chickenType && !chicken->isBaby() && !chicken->hasRider() && chicken->isAlive()) {
+							chicken->setPersistenceRequired();
+							chicken->addEntityPassenger(*this);
+							break;
+						}
+					}
 				} else if (random.nextFloat() < 0.05) {
+					if (std::unique_ptr<Mob> made = _level.mobs().create(_level, chickenType)) {
+						made->snapTo(_position, _yRot, 0.0F);
+						made->finalizeSpawn(difficulty, static_cast<int>(MobRegistry::SpawnReason::Jockey));
+						Mob* chicken = static_cast<Mob*>(_level.addFreshEntity(std::move(made)));
+						if (chicken) chicken->addEntityPassenger(*this);
+					}
 				}
 			}
 		}

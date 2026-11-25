@@ -457,6 +457,15 @@ void Mob::serverAiStep() {
 		_targetSelector.tick();
 		_goalSelector.tick();
 	}
+	// Ridden by a mob (a jockey): it goes where its rider wants, toward the rider's target
+	for (Entity* passenger : entityPassengers()) {
+		auto* rider = dynamic_cast<Mob*>(passenger);
+		if (!rider) continue;
+		if (Actor* target = rider->getTarget(); target && target->isAlive() && (_tickCount % 10 == 0 || navigation().isDone())) {
+			navigation().moveTo(target->position().x, target->position().y, target->position().z, 1.2);
+		}
+		break;
+	}
 	navigation().tick();
 	customServerAiStep();
 	_moveControl->tick();
