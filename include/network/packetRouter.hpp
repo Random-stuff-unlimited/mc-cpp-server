@@ -28,6 +28,8 @@ void handleHandshakePacket(Packet& packet, Server& server);
 void handleLoginAcknowledgedPacket(Packet& packet, Server& server);
 void serverboundKnownPacksPacket(Packet& packet);
 void handlePlayerActionPacket(Packet& packet, Server& server);
+// ServerPlayerGameMode.tick: a block finished digging a little early breaks once its time is up
+void tickDelayedDestroy(Server& server, Player& player);
 void handleUseItemOnPacket(Packet& packet, Server& server);
 void handleUseItemPacket(Packet& packet, Server& server);
 void handleContainerClickPacket(Packet& packet, Server& server);

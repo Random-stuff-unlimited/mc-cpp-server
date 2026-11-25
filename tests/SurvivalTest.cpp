@@ -1,6 +1,10 @@
 #include "LevelFixture.hpp"
 #include "Test.hpp"
 #include "player.hpp"
+#include "network/packet.hpp"
+#include "network/packetRouter.hpp"
+#include "network/PacketIds.hpp"
+#include "network/buffer.hpp"
 #include "world/Survival.hpp"
 #include "world/Combat.hpp"
 #include "world/Stats.hpp"
@@ -428,4 +432,50 @@ TEST(player_statistics) {
 	loaded.load(file, f.data);
 	CHECK(loaded.values() == player->stats().values());
 	std::filesystem::remove(file);
+}
+
+namespace {
+	// Player Action (status, position, face, sequence) as its client sends it
+	void playerAction(LevelFixture& f, const std::shared_ptr<Player>& player, int status, const BlockPos& pos) {
+		Buffer data;
+		data.writeVarInt(status);
+		data.writePosition(pos.x, pos.y, pos.z);
+		data.writeByte(1);
+		data.writeVarInt(1);
+		Packet packet(player, PacketId::Play::Serverbound::PLAYER_ACTION, data.getData(), static_cast<int32_t>(data.getData().size()));
+		handlePlayerActionPacket(packet, f.server);
+	}
+}
+
+// ServerPlayerGameMode's digging time check: finishing stone by hand right away breaks nothing until the time is up
+TEST(mining_time_checked) {
+	LevelFixture f;
+	auto player = makePlayer(f);
+	f.addPlayer(player);
+	player->setGameMode(GameMode::Survival);
+	BlockPos stonePos{1, Y, 1};
+	int		 stone = f.data.getDefaultBlockState("minecraft:stone");
+	f.level->setBlock(stonePos, stone, Level::UPDATE_ALL);
+	playerAction(f, player, 0, stonePos); // Start
+	f.tick(5);
+	playerAction(f, player, 2, stonePos); // Finish, far too early (by hand: 150 ticks)
+	CHECK_EQ(f.level->getBlockState(stonePos), stone);
+	CHECK(player->hasDelayedDestroy());
+	f.tick(100);
+	tickDelayedDestroy(f.server, *player);
+	CHECK_EQ(f.level->getBlockState(stonePos), stone);
+	f.tick(50);
+	tickDelayedDestroy(f.server, *player);
+	CHECK(f.level->blocks().isAir(f.level->getBlockState(stonePos)));
+	CHECK(!player->hasDelayedDestroy());
+
+	// Something that breaks in one tick breaks at the start
+	BlockPos flowerPos{2, Y, 1};
+	f.level->setBlock(flowerPos, f.data.getDefaultBlockState("minecraft:dandelion"), Level::UPDATE_ALL);
+	playerAction(f, player, 0, flowerPos);
+	CHECK(f.level->blocks().isAir(f.level->getBlockState(flowerPos)));
+	// Finishing a block it never started: nothing
+	f.level->setBlock(stonePos, stone, Level::UPDATE_ALL);
+	playerAction(f, player, 2, stonePos);
+	CHECK_EQ(f.level->getBlockState(stonePos), stone);
 }

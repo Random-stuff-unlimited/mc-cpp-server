@@ -182,6 +182,9 @@ class Player : public Actor, public std::enable_shared_from_this<Player>, public
 	PlayerInventory			_inventory;
 	int						_selectedSlot = 3; // Hotbar index 0-8
 	bool					_digging	  = false;
+	bool					_delayedDestroy = false;
+	BlockPos				_delayedDestroyPos{};
+	int64_t					_delayedDestroyStart = 0;
 	int64_t					_digStartTick = 0;
 	int						_digLastStage = -1;
 	bool					_sprinting	  = false;
@@ -462,6 +465,16 @@ class Player : public Actor, public std::enable_shared_from_this<Player>, public
 	int		 digLastStage() const { return _digLastStage; }
 	void	 setDigLastStage(int stage) { _digLastStage = stage; }
 	void stopDigging() { _digging = false; }
+	// ServerPlayerGameMode.hasDelayedDestroy: finished a little too early (at least 70%), broken once the time is up
+	void setDelayedDestroy(const BlockPos& pos, int64_t startTick) {
+		_delayedDestroy		 = true;
+		_delayedDestroyPos	 = pos;
+		_delayedDestroyStart = startTick;
+	}
+	bool	 hasDelayedDestroy() const { return _delayedDestroy; }
+	BlockPos delayedDestroyPos() const { return _delayedDestroyPos; }
+	int64_t	 delayedDestroyStart() const { return _delayedDestroyStart; }
+	void	 clearDelayedDestroy() { _delayedDestroy = false; }
 	bool isDigging(int x, int y, int z) const { return _digging && _digX == x && _digY == y && _digZ == z; }
 
 	// Block actions handled up to this sequence: acknowledged at the end of the tick, after the block changes

@@ -265,6 +265,7 @@ void Server::tick(bool worldRuns) {
 			Combat::tick(*this, *player);
 			Survival::tick(*player->level(), *player);
 			Survival::tickDestroy(*player->level(), *player);
+			tickDelayedDestroy(*this, *player);
 		}
 	}
 	if (_scoreboard) _scoreboard->tick();

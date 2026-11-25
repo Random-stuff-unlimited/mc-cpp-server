@@ -123,7 +123,7 @@ namespace {
 	// Returns false if the block can't be broken (then nothing changed). Like vanilla's ServerPlayerGameMode.destroyBlock
 	bool breakBlock(Player& player, Server& server, int x, int y, int z) {
 		Level&			level	 = server.levelOf(player);
-		const GameData& gameData = server.getGameData();
+		const GameData& gameData = level.gameData();
 		BlockPos		pos{x, y, z};
 		if (!level.hasChunkAt(pos)) return false;
 		int state = level.getBlockState(pos);
@@ -223,20 +223,55 @@ void handlePlayerActionPacket(Packet& packet, Server& server) {
 		// Level.mayInteract: not beyond the world border
 		if (!canBuild || !inReach(player, x, y, z) || !level.hasChunkAt({x, y, z}) || !level.world().border().isWithinBounds(x, z, level.getGameTime())) {
 			refused = true;
-		} else if (player.getGameMode() == GameMode::Creative || server.getGameData().getDestroyTime(state) == 0) {
-			// Instant break: always in creative, and for blocks that take no time (flowers, torches...)
+		} else if (player.getGameMode() == GameMode::Creative ||
+				   (!level.blocks().isAir(state) && Survival::destroyProgress(level, player, state) >= 1.0F)) {
+			// Instant break ("insta mine"): always in creative, and when one tick is enough (flowers, torches, stone with
+			// a fast enough tool...)
 			refused = !breakBlock(player, server, x, y, z);
 		} else {
 			player.startDigging(x, y, z, level.getGameTime()); // Broken on FINISH_DIGGING
 		}
 	} else if (status == FINISH_DIGGING) {
-		// TODO: check the digging time against the block's hardness and the tool (anti-cheat)
-		refused = !canBuild || !player.isDigging(x, y, z) || !inReach(player, x, y, z) || !breakBlock(player, server, x, y, z);
+		// ServerPlayerGameMode.handleBlockBreakAction(STOP_DESTROY_BLOCK): the time spent digging must match the block's
+		// hardness and the tool: 70% is enough (the client's ticks don't line up with the server's), less waits for the
+		// rest (delayed destroy), and digging something else breaks nothing
+		if (!canBuild || !player.isDigging(x, y, z) || !inReach(player, x, y, z)) {
+			refused = true;
+		} else {
+			int	  state	   = level.getBlockState({x, y, z});
+			float progress = Survival::destroyProgress(level, player, state) * static_cast<float>(level.getGameTime() - player.digStartTick() + 1);
+			if (level.blocks().isAir(state)) {
+				refused = true;
+			} else if (progress >= 0.7F) {
+				refused = !breakBlock(player, server, x, y, z);
+			} else if (!player.hasDelayedDestroy()) {
+				player.setDelayedDestroy({x, y, z}, player.digStartTick());
+			} else {
+				refused = true;
+			}
+		}
 		player.stopDigging();
 	}
 
 	if (refused && level.hasChunkAt({x, y, z})) sendBlockUpdate(self, server, x, y, z, level.getBlockState({x, y, z})); // Undo the prediction
 	player.acknowledgeBlockChanges(sequence);
+}
+
+void tickDelayedDestroy(Server& server, Player& player) {
+	if (!player.hasDelayedDestroy() || !player.level()) return;
+	Level&	 level = *player.level();
+	BlockPos pos   = player.delayedDestroyPos();
+	int		 state = level.getBlockState(pos);
+	if (level.blocks().isAir(state)) {
+		player.clearDelayedDestroy();
+		return;
+	}
+	float progress = Survival::destroyProgress(level, player, state) * static_cast<float>(level.getGameTime() - player.delayedDestroyStart() + 1);
+	if (progress < 1.0F) return;
+	player.clearDelayedDestroy();
+	if (!breakBlock(player, server, pos.x, pos.y, pos.z) && level.hasChunkAt(pos)) {
+		sendBlockUpdate(player.shared_from_this(), server, pos.x, pos.y, pos.z, level.getBlockState(pos));
+	}
 }
 
 void handleUseItemOnPacket(Packet& packet, Server& server) {

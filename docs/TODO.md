@@ -154,7 +154,7 @@ Les 85 types de mobs vanilla ont leur classe et leur IA (`src/world/entity/mobs`
 ## Client : effets visuels & audio
 
 - [x] Animation de minage : `BLOCK_DESTRUCTION` (fissures pour les autres joueurs, vitesse de minage vanilla)
-- [ ] Anti-triche du minage (temps de cassage vérifié au `FINISH_DIGGING`)
+- [x] Anti-triche du minage (temps de cassage vérifié au `FINISH_DIGGING`)
 - [x] `STOP_SOUND` (`/stopsound`), `/playsound`
 - [x] `SOUND_ENTITY` (sons qui suivent une entité)
 - [ ] Camera spectateur : `SET_CAMERA`, mode spectateur complet
