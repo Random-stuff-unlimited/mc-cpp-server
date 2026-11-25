@@ -1716,3 +1716,33 @@ TEST(spider_jockey) {
 	f.tick(30);
 	CHECK(!skeleton->isPassenger());
 }
+
+// A jockey saved with its chunk is still riding once the chunk comes back
+TEST(jockey_saved_with_chunk) {
+	LevelFixture f(1);
+	Mob* spider	  = spawn(f, "minecraft:spider", {2, Y, 2});
+	Mob* skeleton = spawn(f, "minecraft:skeleton", {2, Y, 2});
+	CHECK(spider && skeleton);
+	if (!spider || !skeleton) return;
+	CHECK(spider->addEntityPassenger(*skeleton));
+	f.tick(1);
+	f.level->saveEntities();
+	std::shared_ptr<Chunk> chunk = f.world->loadedChunk(0, 0);
+	CHECK(chunk && !chunk->savedEntities().empty());
+	if (!chunk) return;
+	std::vector<uint8_t> saved = chunk->savedEntities();
+	f.level->entities().unloadChunk(Chunk::key(0, 0));
+	f.tick(1);
+	f.level->entities().queueLoad(saved);
+	f.tick(1);
+	Mob* newSpider = nullptr;
+	Mob* newSkeleton = nullptr;
+	f.level->entities().forEach([&](Entity& entity) {
+		Mob* mob = dynamic_cast<Mob*>(&entity);
+		if (!mob || mob->isRemoved()) return;
+		if (mob->typeId() == spider->typeId()) newSpider = mob;
+		if (mob->typeId() == skeleton->typeId()) newSkeleton = mob;
+	});
+	CHECK(newSpider && newSkeleton);
+	if (newSpider && newSkeleton) CHECK(newSkeleton->isPassenger() && newSkeleton->vehicleId() == newSpider->id());
+}

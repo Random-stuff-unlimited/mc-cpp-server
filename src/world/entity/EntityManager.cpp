@@ -1,3 +1,4 @@
+#include <unordered_map>
 #include "world/entity/EntityManager.hpp"
 
 #include "PacketIds.hpp"
@@ -118,6 +119,7 @@ void EntityManager::processPendingLoads() {
 		try {
 			Buffer in(blob);
 			int	   count = in.readVarInt();
+			std::vector<Entity*> loaded(static_cast<size_t>(std::max(count, 0)), nullptr); // By saved index, null if dropped
 			for (int i = 0; i < count; i++) {
 				std::string			 type	= in.readString();
 				std::vector<uint8_t> bytes	= in.readBytes(static_cast<size_t>(in.readVarInt()));
@@ -132,7 +134,18 @@ void EntityManager::processPendingLoads() {
 					g_logger->logGameInfo(WARN, "Dropping unreadable " + type + ": " + e.what(), "World");
 					continue;
 				}
-				add(std::move(mob));
+				loaded[static_cast<size_t>(i)] = add(std::move(mob));
+			}
+			// The passengers (Entity "Passengers"), in seat order; chunks saved before they were kept have none
+			if (in.remaining() > 0) {
+				int links = in.readVarInt();
+				for (int i = 0; i < links; i++) {
+					int passenger = in.readVarInt(), vehicle = in.readVarInt();
+					if (passenger < 0 || vehicle < 0 || passenger >= count || vehicle >= count) continue;
+					Entity* rider = loaded[static_cast<size_t>(passenger)];
+					Entity* mount = loaded[static_cast<size_t>(vehicle)];
+					if (rider && mount && rider != mount) mount->addEntityPassenger(*rider);
+				}
 			}
 		} catch (const std::exception& e) {
 			g_logger->logGameInfo(WARN, std::string("Unreadable entities in a chunk: ") + e.what(), "World");
@@ -149,14 +162,31 @@ std::vector<uint8_t> EntityManager::encodeChunk(int64_t key) const {
 	Buffer			out;
 	const GameData& data = _level.gameData();
 	out.writeVarInt(count);
+	std::unordered_map<const Entity*, int> index; // Saved index of each entity
 	for (const Tracked* tracked : it->second) {
 		const Entity& entity = *tracked->entity;
 		if (!entity.shouldBeSaved() || entity.isRemoved()) continue;
+		int next = static_cast<int>(index.size());
+		index[&entity] = next;
 		Buffer own;
 		entity.save(own);
 		out.writeString(data.getStaticName("minecraft:entity_type", entity.typeId()));
 		out.writeVarInt(static_cast<int32_t>(own.getData().size()));
 		out.writeBytes(own.getData());
+	}
+	// Passenger links whose two ends are saved in this chunk: (passenger index, vehicle index), seats in order
+	std::vector<std::pair<int, int>> links;
+	for (const auto& [entity, vehicle] : index) {
+		for (Entity* passenger : const_cast<Entity*>(entity)->entityPassengers()) {
+			auto found = index.find(passenger);
+			if (found != index.end()) links.emplace_back(found->second, vehicle);
+		}
+	}
+	std::stable_sort(links.begin(), links.end(), [](const auto& a, const auto& b) { return a.second < b.second; });
+	out.writeVarInt(static_cast<int32_t>(links.size()));
+	for (const auto& [passenger, vehicle] : links) {
+		out.writeVarInt(passenger);
+		out.writeVarInt(vehicle);
 	}
 	return std::move(out.getData());
 }

@@ -130,7 +130,7 @@ Les 85 types de mobs vanilla ont leur classe et leur IA (`src/world/entity/mobs`
 - [x] Passagers : montée/descente (un seul passager)
 - [x] Plusieurs passagers par véhicule (bateau 2, chameau 2, happy ghast 4), le premier dirige
 - [x] Mobs passagers : jockeys poulet (bébés zombies), araignées chevauchées par un squelette (1 %), cavaliers du piège
-- [ ] Passagers sauvegardés (un jockey rechargé est séparé)
+- [x] Passagers sauvegardés (un jockey rechargé est séparé)
 - [x] Chariots de mine avec coffre / four / TNT / entonnoir
 
 ## Client : commandes & UI
