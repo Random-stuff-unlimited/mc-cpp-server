@@ -853,6 +853,28 @@ void Level::playSoundAt(Player* except, double x, double y, double z, const std:
 	}
 }
 
+void Level::playSoundFrom(Player* except, const Actor& entity, const std::string& sound, SoundSource source, float volume, float pitch) {
+	int id = _gameData.getStaticId("minecraft:sound_event", sound);
+	if (id < 0) return;
+	Buffer data;
+	data.writeVarInt(id + 1);
+	data.writeVarInt(static_cast<int>(source));
+	data.writeVarInt(entity.id());
+	data.writeFloat(volume);
+	data.writeFloat(pitch);
+	data.writeLong(static_cast<int64_t>(_soundSeeds.nextLong()));
+	const Vec3&			 at	   = entity.position();
+	double				 range = volume > 1.0F ? 16.0 * volume : 16.0;
+	std::vector<uint8_t> frame;
+	for (const auto& player : _players) {
+		if (player.get() == except) continue;
+		double dx = at.x - player->getX(), dy = at.y - player->getY(), dz = at.z - player->getZ();
+		if (dx * dx + dy * dy + dz * dz >= range * range) continue;
+		if (frame.empty()) frame = Packet::buildFrame(PacketId::Play::Clientbound::SOUND_ENTITY, data.getData(), _server.getConfig().getCompressionThreshold());
+		Packet::sendFrame(player, frame, _server);
+	}
+}
+
 std::vector<Actor*> Level::actorsIn(const AABB& box, const Actor* except) {
 	std::vector<Actor*> found;
 	_entities.forEachIn(box, [&](Entity& entity) {

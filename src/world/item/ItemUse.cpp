@@ -394,8 +394,8 @@ namespace {
 			std::string							  shortName = instrument.substr(instrument.find(':') + 1);
 			shortName = shortName.substr(0, shortName.find("_goat_horn"));
 			int index = static_cast<int>(std::find(ORDER.begin(), ORDER.end(), shortName) - ORDER.begin()) % 8;
-			level.playSoundAt(nullptr, player.getX(), player.getY(), player.getZ(), "minecraft:item.goat_horn.sound." + std::to_string(index),
-							  Level::SoundSource::Records, 256.0F / 16.0F, 1.0F);
+			// InstrumentItem.play: it follows the player (vanilla excludes the player, whose client plays it itself)
+			level.playSoundFrom(&player, player, "minecraft:item.goat_horn.sound." + std::to_string(index), Level::SoundSource::Records, 256.0F / 16.0F, 1.0F);
 			ItemUse::addCooldown(level, player, stack, 140);
 			return {Result::Consume, {}};
 		}

@@ -314,6 +314,8 @@ class Level : public NeighborUpdateTarget {
 	}
 	void playSoundAt(Player* except, double x, double y, double z, const std::string& sound, SoundSource source, float volume = 1.0F,
 					 float pitch = 1.0F);
+	// Level.playSound(except, entity, ...): a sound that follows the entity as it moves (Sound Entity)
+	void playSoundFrom(Player* except, const Actor& entity, const std::string& sound, SoundSource source, float volume = 1.0F, float pitch = 1.0F);
 	// Level.getEntities(except, box): the entities and players of this level touching the box, but `except`
 	std::vector<Actor*> actorsIn(const AABB& box, const Actor* except = nullptr);
 	// The entity or player with this id in this level, nullptr if none
