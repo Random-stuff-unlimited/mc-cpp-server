@@ -41,7 +41,7 @@ namespace Survival {
 	bool isOnFire(const Player& player);
 
 	// ServerPlayer.jumpFromGround: the exhaustion of a jump
-	void jumpFromGround(Player& player);
+	void jumpFromGround(Level& level, Player& player);
 	// ServerPlayer.checkMovementStatistics: exhaustion of the distance moved (sprinting, swimming, in water)
 	void checkMovementStatistics(Level& level, Player& player, double dx, double dy, double dz);
 	// ServerGamePacketListenerImpl.handleMovePlayer's part: jump (on the ground, now in the air and going up), then the

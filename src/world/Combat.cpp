@@ -1,3 +1,4 @@
+#include "world/Stats.hpp"
 #include "world/Combat.hpp"
 
 #include "PacketIds.hpp"
@@ -182,6 +183,12 @@ namespace {
 			}
 		}
 		server.scoreboard().onPlayerDeath(victim, killer);
+		// Stats: deaths, time since death, the killer's player kills, what killed it
+		const GameData& gameData = server.levelOf(victim).gameData();
+		Stats::custom(victim, gameData, "minecraft:deaths");
+		victim.stats().set(PlayerStats::Custom, gameData.getStaticId("minecraft:custom_stat", "minecraft:time_since_death"), 0);
+		if (killer && killer != &victim) Stats::custom(*killer, gameData, "minecraft:player_kills");
+		if (source.causing && !source.causing->asPlayer()) victim.stats().award(PlayerStats::KilledBy, source.causing->typeId(), 1);
 		auto			   text		  = [&](const Player& reader) {
 			  return server.getDeathMessages().format(reader.getPlayerConfig()->getLocale(), source.type, victimName, sourceName, killerName);
 		};

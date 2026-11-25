@@ -1,3 +1,4 @@
+#include "world/Stats.hpp"
 #include "world/entity/LivingEntity.hpp"
 
 #include "PacketIds.hpp"
@@ -908,7 +909,11 @@ void LivingEntity::die(const Combat::DamageSource& source) {
 	if (isRemoved() || _dead) return;
 	_dead = true;
 	// The scoreboard's totalKillCount of the player responsible
-	if (Player* killer = source.attackerPlayer()) _level.server().scoreboard().onKill(*killer);
+	if (Player* killer = source.attackerPlayer()) {
+		_level.server().scoreboard().onKill(*killer);
+		Stats::custom(*killer, _level.gameData(), "minecraft:mob_kills");
+		killer->stats().award(PlayerStats::Killed, typeId(), 1);
+	}
 	dropAllDeathLoot(source);
 	broadcastEntityEvent(EVENT_DEATH);
 	if (_pose != POSE_DYING) {

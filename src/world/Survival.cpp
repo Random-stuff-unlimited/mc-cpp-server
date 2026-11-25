@@ -1,3 +1,4 @@
+#include "world/Stats.hpp"
 #include "world/Survival.hpp"
 
 #include "PacketIds.hpp"
@@ -287,7 +288,8 @@ namespace Survival {
 
 	double eyeHeight(const Player& player) { return poseEyeHeight(player.survival().pose); }
 
-	void jumpFromGround(Player& player) {
+	void jumpFromGround(Level& level, Player& player) {
+		Stats::custom(player, level.gameData(), "minecraft:jump");
 		causeFoodExhaustion(player, player.isSprinting() ? FoodData::EXHAUSTION_SPRINT_JUMP : FoodData::EXHAUSTION_JUMP);
 	}
 
@@ -296,23 +298,39 @@ namespace Survival {
 		const SurvivalState& state = player.survival();
 		// Distances in cm, Math.round of a float
 		auto centimeters = [](double squared) { return static_cast<int>(std::lround(static_cast<float>(std::sqrt(squared)) * 100.0F)); };
+		const GameData& data = level.gameData();
 		if (state.swimming || state.eyeInWater) {
 			int distance = centimeters(dx * dx + dy * dy + dz * dz);
-			if (distance > 0) causeFoodExhaustion(player, FoodData::EXHAUSTION_SWIM * distance * 0.01F);
+			if (distance > 0) {
+				Stats::custom(player, data, state.swimming ? "minecraft:swim_one_cm" : "minecraft:walk_under_water_one_cm", distance);
+				causeFoodExhaustion(player, FoodData::EXHAUSTION_SWIM * distance * 0.01F);
+			}
 		} else if (state.inWater) {
 			int distance = centimeters(dx * dx + dz * dz);
-			if (distance > 0) causeFoodExhaustion(player, FoodData::EXHAUSTION_SWIM * distance * 0.01F);
+			if (distance > 0) {
+				Stats::custom(player, data, "minecraft:walk_on_water_one_cm", distance);
+				causeFoodExhaustion(player, FoodData::EXHAUSTION_SWIM * distance * 0.01F);
+			}
 		} else if (onClimbable(level, player)) {
-			// Climbing only counts for the statistics
+			if (dy > 0.0) Stats::custom(player, data, "minecraft:climb_one_cm", static_cast<int>(std::lround(dy * 100.0)));
 		} else if (player.isOnGround()) {
 			int distance = centimeters(dx * dx + dz * dz);
+			if (distance > 0) {
+				Stats::custom(player, data, player.isSprinting() ? "minecraft:sprint_one_cm" : player.isShiftKeyDown() ? "minecraft:crouch_one_cm" : "minecraft:walk_one_cm",
+							  distance);
+			}
 			// Walking and crouching cost nothing (EXHAUSTION_WALK, EXHAUSTION_CROUCH are 0)
 			if (distance > 0 && player.isSprinting()) causeFoodExhaustion(player, FoodData::EXHAUSTION_SPRINT * distance * 0.01F);
+		} else if (state.flying) {
+			int distance = centimeters(dx * dx + dy * dy + dz * dz);
+			if (distance > 25) Stats::custom(player, data, "minecraft:fly_one_cm", distance);
+		} else if (dy < 0.0) {
+			Stats::custom(player, data, "minecraft:fall_one_cm", static_cast<int>(std::lround(-dy * 100.0)));
 		}
 	}
 
 	void onMove(Level& level, Player& player, double dx, double dy, double dz, bool packetOnGround) {
-		if (player.isOnGround() && !packetOnGround && dy > 0.0) jumpFromGround(player);
+		if (player.isOnGround() && !packetOnGround && dy > 0.0) jumpFromGround(level, player);
 		player.setOnGround(packetOnGround);
 		checkMovementStatistics(level, player, dx, dy, dz);
 	}
@@ -361,6 +379,15 @@ namespace Survival {
 	void tick(Level& level, Player& player) {
 		SurvivalState& state = player.survival();
 		state.tickCount++;
+		{
+			// ServerPlayer.tick's stats
+			const GameData& data = level.gameData();
+			Stats::custom(player, data, "minecraft:play_time");
+			Stats::custom(player, data, "minecraft:total_world_time");
+			if (!player.combat().dead) Stats::custom(player, data, "minecraft:time_since_death");
+			if (!state.sleeping) Stats::custom(player, data, "minecraft:time_since_rest");
+			if (player.isShiftKeyDown()) Stats::custom(player, data, "minecraft:sneak_time");
+		}
 		if (!player.combat().dead) state.timeSinceRest++;
 		if (!player.combat().dead) {
 			// A sleeping player just waits: no baseTick (but its effects), no used item, no regeneration, no pose update

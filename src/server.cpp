@@ -7,6 +7,7 @@
 #include "network/server.hpp"
 #include "world/entity/MobEffects.hpp"
 #include "player.hpp"
+#include "world/Stats.hpp"
 #include "world/Level.hpp"
 #include "world/Portals.hpp"
 #include "world/inventory/Menu.hpp"
@@ -27,6 +28,7 @@
 #include <cstdio>
 #include <exception>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <string>
 #include <thread>
@@ -522,7 +524,10 @@ void Server::leaveGame(Player* player) {
 	// PlayerList.remove: saved first, then the menus close. Only a player that entered the game: one whose
 	// enterPlay failed may not have its data
 	auto inGame = std::find_if(_gamePlayers.begin(), _gamePlayers.end(), [player](const auto& p) { return p.get() == player; });
-	if (inGame != _gamePlayers.end()) savePlayer(*player);
+	if (inGame != _gamePlayers.end()) {
+		Stats::custom(*player, _gameData, "minecraft:leave_game");
+		savePlayer(*player);
+	}
 	if (ChunkStreamer* streamer = player->getChunkStreamer()) streamer->stop();
 	_playerTracker.leave(player);
 	// Player.remove: the menus close, what the cursor and the crafting grid held falls on the ground
@@ -541,6 +546,15 @@ void Server::leaveGame(Player* player) {
 void Server::savePlayer(const Player& player) {
 	const std::string& dimension = player.level() ? player.level()->dimensionName() : _world->getDimensionName();
 	_playerData->save(player.getUUID(), PlayerData::save(player, _gameData, dimension));
+	// <world>/stats/<uuid>.json, on the I/O threads
+	std::filesystem::path file = _world->directory() / "stats" / (player.getUUID().toString() + ".json");
+	std::string			  text = player.stats().toJson(_gameData);
+	_world->submitSave([file, text] {
+		std::error_code error;
+		std::filesystem::create_directories(file.parent_path(), error);
+		std::ofstream out(file);
+		if (out) out << text << "\n";
+	});
 }
 
 void Server::savePlayers() {

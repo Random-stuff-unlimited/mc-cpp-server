@@ -2,6 +2,11 @@
 #include "Test.hpp"
 #include "player.hpp"
 #include "world/Survival.hpp"
+#include "world/Combat.hpp"
+#include "world/Stats.hpp"
+#include "world/entity/Mob.hpp"
+#include <filesystem>
+#include <fstream>
 #include "world/item/ItemUse.hpp"
 
 #include <cmath>
@@ -387,4 +392,40 @@ TEST(destroy_progress_and_cracks) {
 	player->stopDigging();
 	Survival::tickDestroy(*f.level, *player);
 	CHECK_EQ(player->digLastStage(), -1);
+}
+
+// Statistics: ticks played, jumps, distances, mob kills and what was killed, deaths; saved and read back in vanilla's
+// stats file layout
+TEST(player_statistics) {
+	LevelFixture f(1);
+	auto player = std::make_shared<Player>("Stats", PlayerState::Play, -1, f.server);
+	player->setPosition(0.5, LevelFixture::SURFACE + 1, 0.5);
+	player->setOnGround(true);
+	player->setGameMode(GameMode::Survival);
+	f.addPlayer(player);
+	auto custom = [&](const char* name) { return player->stats().get(PlayerStats::Custom, f.data.getStaticId("minecraft:custom_stat", name)); };
+	for (int i = 0; i < 5; i++) Survival::tick(*f.level, *player);
+	CHECK_EQ(custom("minecraft:play_time"), 5);
+	Survival::onMove(*f.level, *player, 3.0, 0.0, 4.0, true); // 5 blocks walked
+	CHECK_EQ(custom("minecraft:walk_one_cm"), 500);
+	Survival::onMove(*f.level, *player, 0.0, 0.42, 0.0, false); // A jump
+	CHECK_EQ(custom("minecraft:jump"), 1);
+	Mob* cow = f.level->mobs().spawn(*f.level, f.data.getStaticId("minecraft:entity_type", "minecraft:cow"), {3, LevelFixture::SURFACE + 1, 0},
+									 MobRegistry::SpawnReason::Command);
+	CHECK(cow);
+	if (cow) cow->hurtServer({"minecraft:player_attack", player.get(), nullptr, std::nullopt}, 1000.0F);
+	CHECK_EQ(custom("minecraft:mob_kills"), 1);
+	CHECK_EQ(player->stats().get(PlayerStats::Killed, f.data.getStaticId("minecraft:entity_type", "minecraft:cow")), 1);
+	Combat::damage(f.server, *player, 1000.0F, {"minecraft:generic_kill", nullptr, nullptr, std::nullopt});
+	CHECK_EQ(custom("minecraft:deaths"), 1);
+	// Saved and read back
+	auto file = std::filesystem::temp_directory_path() / "mc-cpp-server-stats-test.json";
+	{
+		std::ofstream out(file);
+		out << player->stats().toJson(f.data);
+	}
+	PlayerStats loaded;
+	loaded.load(file, f.data);
+	CHECK(loaded.values() == player->stats().values());
+	std::filesystem::remove(file);
 }

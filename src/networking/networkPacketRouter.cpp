@@ -82,6 +82,7 @@ void enterPlay(Packet* packet, Server& server) {
 	player->setGameMode(defaultGameMode);
 	player->setPosition(spawn.x, spawn.y, spawn.z);
 	player->setLevel(&server.getLevel());
+	player->stats().load(server.getWorld().directory() / "stats" / (player->getUUID().toString() + ".json"), server.getGameData());
 	if (std::optional<nbt::TagCompound> saved = server.getPlayerData().load(player->getUUID())) {
 		PlayerData::load(*player, *saved, server.getGameData(), defaultGameMode);
 		std::string dimension = PlayerData::dimension(*saved);

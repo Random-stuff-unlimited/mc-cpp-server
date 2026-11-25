@@ -143,6 +143,7 @@ namespace {
 		ItemStack tool	  = player.getStackInHand(0);
 		bool	  removed = level.removeBlock(pos, false);
 		// Block.playerDestroy: what it drops, with the tool used (the other half of a door follows through updateShape)
+		if (removed && !creative) player.stats().award(PlayerStats::Mined, level.blocks().blockOf(state), 1); // Block.playerDestroy's BLOCK_MINED
 		if (removed && !creative && canHarvest) {
 			Survival::causeFoodExhaustion(player, FoodData::EXHAUSTION_MINE); // Block.playerDestroy
 			level.dropResources(state, pos, &player, &tool);
@@ -190,6 +191,8 @@ void handlePlayerActionPacket(Packet& packet, Server& server) {
 				menu.setRemoteSlot(menuSlot.index, player.inventory().get(slot));
 			}
 		}
+		player.stats().award(PlayerStats::Dropped, thrown.item, thrown.count); // Stats.ITEM_DROPPED
+		Stats::custom(player, server.getGameData(), "minecraft:drop");
 		level.dropFromPlayer(player, std::move(thrown), true);
 		return;
 	}
@@ -352,7 +355,8 @@ void handleUseItemOnPacket(Packet& packet, Server& server) {
 		level.behavior(state).setPlacedBy(level, target, state);
 		Signs::afterPlaced(level, player, target); // A new sign opens its editor
 	}
-	// One item used, except with infinite materials
+	// One item used, except with infinite materials (Stats.ITEM_USED)
+	player.stats().award(PlayerStats::Used, item, 1);
 	if (player.getGameMode() != GameMode::Creative) player.inventory().getMutable(player.handSlot(hand)).shrink(1);
 	player.acknowledgeBlockChanges(sequence);
 }

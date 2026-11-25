@@ -1,3 +1,4 @@
+#include "world/Stats.hpp"
 #include "world/inventory/BeaconMenu.hpp"
 #include "world/item/Books.hpp"
 #include "world/blocks/Signs.hpp"
@@ -277,8 +278,10 @@ void handlePlayState(Packet* packet, Server& server) {
 		}
 		break;
 	}
-	case PacketId::Play::Serverbound::CLIENT_COMMAND:
-		if (packet->getData().readVarInt() == CLIENT_COMMAND_RESPAWN) {
+	case PacketId::Play::Serverbound::CLIENT_COMMAND: {
+		int action = packet->getData().readVarInt();
+		if (action == 1) Stats::send(server, *player); // REQUEST_STATS: the statistics screen opened
+		if (action == CLIENT_COMMAND_RESPAWN) {
 			// Back from the end credits: respawned in the overworld with everything kept, else after a death
 			if (player->wonGame()) {
 				player->setWonGame(false);
@@ -288,6 +291,7 @@ void handlePlayState(Packet* packet, Server& server) {
 			}
 		}
 		break;
+	}
 	case PacketId::Play::Serverbound::CLIENT_INFORMATION:
 		// Sent again when the player changes its settings (language...)
 		handleClientInformationPacket(*packet, server);

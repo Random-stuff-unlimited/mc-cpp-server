@@ -130,7 +130,9 @@ Les 85 types de mobs vanilla ont leur classe et leur IA (`src/world/entity/mobs`
 - [x] Livres : `EDIT_BOOK` (édition, signature → livre écrit), `OPEN_BOOK`
 - [ ] Recettes : `UPDATE_RECIPES` (le client connaît les recettes déverrouillées)
 - [ ] Advancements : `UPDATE_ADVANCEMENTS`, `SELECT_ADVANCEMENTS_TAB`, déclencheurs de critères
-- [ ] Statistiques : `AWARD_STATS`
+- [x] Statistiques : `AWARD_STATS` (écran Statistiques), `stats/<uuid>.json`, temps de jeu, distances, sauts, morts,
+      kills, blocs minés, objets ramassés/jetés/posés, mobs tués / tué par
+- [ ] Statistiques : objets fabriqués, outils cassés, dégâts infligés/subis, interactions (coffres, fours…)
 - [x] Scoreboard : `/scoreboard` (objectifs, scores, affichage), `SET_SCORE`, `SET_OBJECTIVE`, `SET_DISPLAY_OBJECTIVE`,
       `RESET_SCORE`, critères deathCount/playerKillCount/totalKillCount/health/food/level/xp/air/armor, `scoreboard.json`
 - [x] Équipes : `/team` (couleur, préfixe/suffixe, tir allié, pseudos, collision), `SET_PLAYER_TEAM`, sauvegarde

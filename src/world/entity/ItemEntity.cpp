@@ -145,8 +145,10 @@ int ItemEntity::playerTouch(Player& player) {
 	int count = _stack.count;
 	if (_pickupDelay != 0) return 0;
 	bool creative = player.getGameMode() == GameMode::Creative;
+	int item = _stack.item;
 	if (!player.inventory().add(_stack, player.getSelectedSlot(), creative, _level.gameData())) return 0;
 	if (_stack.isEmpty()) discard();
+	player.stats().award(PlayerStats::PickedUp, item, count - _stack.count); // Stats.ITEM_PICKED_UP
 	return count;
 }
 

@@ -1,6 +1,7 @@
 #ifndef PLAYER_HPP
 #define PLAYER_HPP
 
+#include "world/Stats.hpp"
 #include "lib/JavaRandom.hpp"
 #include "lib/UUID.hpp"
 #include "world/BlockPos.hpp"
@@ -210,6 +211,7 @@ class Player : public Actor, public std::enable_shared_from_this<Player>, public
 	// effects' modifiers), active effects and absorption
 	std::unique_ptr<AttributeMap> _attributes;
 	MobEffects::Active			  _effects;
+	PlayerStats					  _stats;
 	float						  _absorption = 0.0F;
 	EntityRef					  _lastHurtByMob, _lastHurtMob;
 	int							  _lastHurtByMobTimestamp = 0, _lastHurtMobTimestamp = 0;
@@ -371,6 +373,9 @@ class Player : public Actor, public std::enable_shared_from_this<Player>, public
 	// LivingEntity.getMaxHealth
 	float					  maxHealth();
 	MobEffects::Active&		  effects() { return _effects; }
+	// Its statistics (Stats screen)
+	PlayerStats&			  stats() { return _stats; }
+	const PlayerStats&		  stats() const { return _stats; }
 	const MobEffects::Active& effects() const { return _effects; }
 	bool					  hasEffect(MobEffects::Effect effect) const { return _effects.has(effect); }
 	bool					  addEffect(const MobEffects::Instance& instance, Actor* source = nullptr) { return _effects.add(*this, instance, source != nullptr); }
