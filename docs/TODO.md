@@ -146,9 +146,10 @@ Les 85 types de mobs vanilla ont leur classe et leur IA (`src/world/entity/mobs`
 
 - [x] Animation de minage : `BLOCK_DESTRUCTION` (fissures pour les autres joueurs, vitesse de minage vanilla)
 - [ ] Anti-triche du minage (temps de cassage vérifié au `FINISH_DIGGING`)
-- [ ] Sons d'entités : `SOUND_ENTITY`, `STOP_SOUND`
+- [x] `STOP_SOUND` (`/stopsound`), `/playsound`
+- [ ] `SOUND_ENTITY` (sons qui suivent une entité)
 - [ ] Camera spectateur : `SET_CAMERA`, mode spectateur complet
-- [ ] `PLAYER_ROTATION`, `PLAYER_LOOK_AT`
+- [x] `PLAYER_LOOK_AT` (`/rotate … facing`), `/rotate`
 - [ ] Particules étendues : `LEVEL_PARTICLES` partiel, particles de bloc/explosion
 - [ ] `EXPLODE` client (le calcul serveur existe) : sons, débris, onde de choc
 
@@ -156,9 +157,10 @@ Les 85 types de mobs vanilla ont leur classe et leur IA (`src/world/entity/mobs`
 
 - [ ] `BLOCK_CHANGED_ACK` / ack de minage (partiel), `BLOCK_ENTITY_TAG_QUERY`
 - [ ] `COOKIE_REQUEST`/`COOKIE_RESPONSE`, `CUSTOM_PAYLOAD` (plugin channels)
-- [ ] Resource packs : `RESOURCE_PACK_PUSH`/`POP`, réponse du client
-- [ ] Transfert de serveur : `TRANSFER`
-- [ ] `PING_REQUEST`/`PONG_RESPONSE` play, `CLIENT_TICK_END`, `CHANGE_DIFFICULTY` client→serveur
+- [x] Resource packs : `RESOURCE_PACK_PUSH` (config.json `resource-pack`, `require-resource-pack`), refus → expulsion
+- [x] Transfert de serveur : `/transfer`, `TRANSFER`, transferts entrants (`accepts-transfers`)
+- [x] `PING_REQUEST`/`PONG_RESPONSE` play, `CLIENT_TICK_END`, `CHANGE_DIFFICULTY`, `LOCK_DIFFICULTY`, `CHANGE_GAME_MODE` (F3+F4),
+      `BLOCK_ENTITY_TAG_QUERY`/`ENTITY_TAG_QUERY` (F3+I), `PICK_ITEM_FROM_ENTITY`, `TELEPORT_TO_ENTITY`, `CUSTOM_PAYLOAD` (brand)
 - [ ] Chat sécurisé / signature : completion `DELETE_CHAT`, `DISGUISED_CHAT`
 - [ ] `SET_SIMULATION_DISTANCE`, `SET_CHUNK_CACHE_RADIUS`
 

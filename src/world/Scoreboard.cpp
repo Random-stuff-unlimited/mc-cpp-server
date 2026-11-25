@@ -429,12 +429,15 @@ void Scoreboard::load(const std::filesystem::path& file) {
 			Objective objective{o.value("name", ""), o.value("criterion", "dummy"), o.value("display-name", ""), o.value("hearts", false)};
 			if (!objective.name.empty()) _objectives[objective.name] = objective;
 		}
-		for (const auto& [owner, scores] : data.value("scores", nlohmann::json::object()).items()) {
+		// Kept in locals: items() of a temporary would outlive it
+		const nlohmann::json scoresData	 = data.value("scores", nlohmann::json::object());
+		const nlohmann::json displayData = data.value("display", nlohmann::json::object());
+		for (const auto& [owner, scores] : scoresData.items()) {
 			for (const auto& [objective, value] : scores.items()) {
 				if (_objectives.count(objective) && value.is_number_integer()) _scores[owner][objective] = value.get<int>();
 			}
 		}
-		for (const auto& [slot, objective] : data.value("display", nlohmann::json::object()).items()) {
+		for (const auto& [slot, objective] : displayData.items()) {
 			int index = slotByName(slot);
 			if (index >= 0 && objective.is_string() && _objectives.count(objective.get<std::string>())) _display[index] = objective.get<std::string>();
 		}

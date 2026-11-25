@@ -41,6 +41,7 @@ class Server {
 	Config							 _config;
 	ServerAccess					 _access;
 	std::shared_ptr<Player>			 _console;
+	bool							 _difficultyLocked = false;
 	std::unique_ptr<Scoreboard>		 _scoreboard;
 	GameData						 _gameData;
 	DeathMessages					 _deathMessages;
@@ -80,6 +81,9 @@ class Server {
 	void kickWithText(Player* player, const std::string& text);
 	// Ops, bans and the whitelist (ops.json, banned-players.json, banned-ips.json, whitelist.json)
 	ServerAccess& access() { return _access; }
+	// LevelData.isDifficultyLocked: the difficulty can't be changed from the clients anymore
+	bool		  isDifficultyLocked() const { return _difficultyLocked; }
+	void		  setDifficultyLocked(bool locked) { _difficultyLocked = locked; }
 	// The scoreboard (objectives, scores, display slots)
 	Scoreboard&	  scoreboard();
 	// The console's command source: a player named "Server", level 4, never in the game (Commands log its messages)

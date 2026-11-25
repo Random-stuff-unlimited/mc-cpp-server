@@ -23,8 +23,17 @@ void handleHandshakePacket(Packet& packet, Server& server) {
 	if (nextState == 1) {
 		packet.getPlayer()->setPlayerState(PlayerState::Status);
 		// g_logger->logNetwork(INFO, "Status request - keeping in temp list", "Handshake");
-	} else if (nextState == 2) {
+	} else if (nextState == 2 || nextState == 3) {
+		// 3: transferred from another server (TRANSFER), only when config.json's accepts-transfers allows it
 		packet.getPlayer()->setPlayerState(PlayerState::Login);
+		if (nextState == 3 && !server.getConfig().getAcceptsTransfers()) {
+			Buffer payload;
+			payload.writeString("{\"translate\":\"multiplayer.disconnect.transfers_disabled\"}");
+			packet.sendPacket(PacketId::Login::Clientbound::LOGIN_DISCONNECT, payload, server);
+			packet.getPlayer()->setPlayerState(PlayerState::None);
+			packet.setReturnPacket(PACKET_DISCONNECT);
+			return;
+		}
 		const GameData& gameData = server.getGameData();
 		if (protocolVersion != gameData.getProtocolVersion()) {
 			// Login Disconnect: the client shows this message instead of failing later during configuration

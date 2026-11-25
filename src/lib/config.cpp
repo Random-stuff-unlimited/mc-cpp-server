@@ -41,6 +41,11 @@ bool Config::loadConfig() {
 		_opPermissionLevel	  = std::clamp(config["server"].value("op-permission-level", _opPermissionLevel), 0, 4);
 		_whiteList			  = config["server"].value("white-list", _whiteList);
 		_enforceWhitelist	  = config["server"].value("enforce-whitelist", _enforceWhitelist);
+		_acceptsTransfers	  = config["server"].value("accepts-transfers", _acceptsTransfers);
+		_resourcePack		  = config["server"].value("resource-pack", std::string());
+		_resourcePackSha1	  = config["server"].value("resource-pack-sha1", std::string());
+		_resourcePackPrompt	  = config["server"].value("resource-pack-prompt", std::string());
+		_requireResourcePack  = config["server"].value("require-resource-pack", false);
 		_spawnLimits.clear();
 		if (config["world"].contains("spawn-limits")) {
 			for (const auto& [dimension, limits] : config["world"]["spawn-limits"].items()) {
@@ -84,6 +89,11 @@ bool Config::reloadConfig() {
 		_opPermissionLevel	  = std::clamp(config["server"].value("op-permission-level", _opPermissionLevel), 0, 4);
 		_whiteList			  = config["server"].value("white-list", _whiteList);
 		_enforceWhitelist	  = config["server"].value("enforce-whitelist", _enforceWhitelist);
+		_acceptsTransfers	  = config["server"].value("accepts-transfers", _acceptsTransfers);
+		_resourcePack		  = config["server"].value("resource-pack", std::string());
+		_resourcePackSha1	  = config["server"].value("resource-pack-sha1", std::string());
+		_resourcePackPrompt	  = config["server"].value("resource-pack-prompt", std::string());
+		_requireResourcePack  = config["server"].value("require-resource-pack", false);
 		_spawnLimits.clear();
 		if (config["world"].contains("spawn-limits")) {
 			for (const auto& [dimension, limits] : config["world"]["spawn-limits"].items()) {

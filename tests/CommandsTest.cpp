@@ -406,3 +406,39 @@ TEST(commands_time_and_weather_durations) {
 	Commands::run(f.server, *player, "weather clear");
 	CHECK(!f.world->rainingFlag());
 }
+
+// /playsound, /stopsound, /rotate, /transfer run for a player (packets to it); /rotate turns it
+TEST(commands_sound_rotate_transfer) {
+	LevelFixture f;
+	Commands::registerCommands();
+	auto player = makePlayer(f);
+	f.addPlayer(player);
+	for (const char* line : {"playsound minecraft:entity.pig.ambient master @s", "playsound ui.button.click", "stopsound @s", "stopsound @s * entity.pig.ambient",
+							 "transfer example.org 25566 @s", "transfer example.org 99999"}) {
+		Commands::run(f.server, *player, line);
+	}
+	Commands::run(f.server, *player, "rotate @s 90 10");
+	CHECK(std::abs(player->getYaw() - 90.0F) < 0.01F && std::abs(player->getPitch() - 10.0F) < 0.01F);
+	Commands::run(f.server, *player, "rotate @s facing 0.5 ~1.62 10.5"); // Straight south
+	CHECK(std::abs(player->getYaw()) < 0.5F || std::abs(player->getYaw() - 360.0F) < 0.5F);
+	Commands::sendCommandTree(f.server, *player); // Every parser is known
+}
+
+// The scoreboard file: objectives, scores, display slots and teams come back after a restart
+TEST(scoreboard_file) {
+	LevelFixture f;
+	auto file = std::filesystem::temp_directory_path() / "mc-cpp-server-scoreboard-test.json";
+	std::filesystem::remove(file);
+	Scoreboard& board = f.server.scoreboard();
+	board.load(file);
+	board.addObjective("kills", "dummy", "Kills");
+	board.setScore("Bob", "kills", 7);
+	board.setDisplay(1, "kills");
+	board.addTeam("red", "");
+	board.join("red", "Bob");
+	Scoreboard copy(f.server);
+	copy.load(file);
+	CHECK(copy.objective("kills") && copy.score("Bob", "kills") == 7 && copy.display(1) == "kills");
+	CHECK(copy.teamOf("Bob") && copy.teamOf("Bob")->name == "red");
+	std::filesystem::remove(file);
+}

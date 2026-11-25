@@ -465,6 +465,13 @@ void handlePickItemFromBlock(Packet& packet, Server& server) {
 		if (BlockEntity* entity = level.getBlockEntity(pos)) ContainerItems::collect(*entity, picked, gd);
 	}
 
+	tryPickItem(packet, server, player, level, std::move(picked), infinite);
+}
+
+// ServerGamePacketListenerImpl.tryPickItem: the item selected in the hotbar, taken from the inventory or (with infinite
+// materials) added
+void tryPickItem(Packet& packet, Server& server, Player& player, Level& level, ItemStack picked, bool infinite) {
+	const GameData& gd = level.gameData();
 	PlayerInventory& inv = player.inventory();
 	// Inventory.findSlotMatchingItem: hotbar first, then the main inventory (vanilla indices 0-35)
 	int found = -1;

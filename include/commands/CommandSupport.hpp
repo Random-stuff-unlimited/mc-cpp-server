@@ -57,6 +57,8 @@ namespace Commands {
 	void registerWorldBorder();
 	void registerScoreboard();
 	void registerTeam();
+	// transfer, playsound, stopsound, rotate
+	void registerSoundCommands();
 } // namespace Commands
 
 #endif

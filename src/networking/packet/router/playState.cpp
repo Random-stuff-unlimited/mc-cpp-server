@@ -139,6 +139,18 @@ void handlePlayState(Packet* packet, Server& server) {
 	case PacketId::Play::Serverbound::SET_CREATIVE_MODE_SLOT:
 		handleSetCreativeModeSlotPacket(*packet, server);
 		break;
+	case PacketId::Play::Serverbound::PING_REQUEST: handlePlayPingRequest(*packet, server); break;
+	case PacketId::Play::Serverbound::RESOURCE_PACK: handleResourcePackResponse(*packet, server); break;
+	case PacketId::Play::Serverbound::CLIENT_TICK_END: break; // The client's tick ended: nothing waits for it here
+	case PacketId::Play::Serverbound::PONG: break;			  // Answer to a Ping the server never sends
+	case PacketId::Play::Serverbound::CHANGE_DIFFICULTY: handleChangeDifficulty(*packet, server); break;
+	case PacketId::Play::Serverbound::LOCK_DIFFICULTY: handleLockDifficulty(*packet, server); break;
+	case PacketId::Play::Serverbound::CHANGE_GAME_MODE: handleChangeGameMode(*packet, server); break;
+	case PacketId::Play::Serverbound::BLOCK_ENTITY_TAG_QUERY: handleBlockEntityTagQuery(*packet, server); break;
+	case PacketId::Play::Serverbound::ENTITY_TAG_QUERY: handleEntityTagQuery(*packet, server); break;
+	case PacketId::Play::Serverbound::PICK_ITEM_FROM_ENTITY: handlePickItemFromEntity(*packet, server); break;
+	case PacketId::Play::Serverbound::TELEPORT_TO_ENTITY: handleTeleportToEntity(*packet, server); break;
+	case PacketId::Play::Serverbound::CUSTOM_PAYLOAD: handlePlayCustomPayload(*packet, server); break;
 	case PacketId::Play::Serverbound::PICK_ITEM_FROM_BLOCK:
 		handlePickItemFromBlock(*packet, server);
 		break;

@@ -28,6 +28,11 @@ class Config {
 	// "spawn-limits": per dimension (or "default"), the natural spawning cap of each mob category ("monster": 70...)
 	std::map<std::string, std::map<std::string, int>> _spawnLimits;
 	int												  _opPermissionLevel = 4;
+	bool											  _acceptsTransfers	 = false;
+	// The server's resource pack (server.properties' resource-pack, resource-pack-sha1, require-resource-pack,
+	// resource-pack-prompt)
+	std::string _resourcePack, _resourcePackSha1, _resourcePackPrompt;
+	bool		_requireResourcePack = false;
 	bool											  _whiteList = false, _enforceWhitelist = false;
 
   public:
@@ -51,6 +56,11 @@ class Config {
 	const std::map<std::string, std::map<std::string, int>>& getSpawnLimits() const { return _spawnLimits; }
 	int	 getOpPermissionLevel() const { return _opPermissionLevel; }
 	bool getWhiteList() const { return _whiteList; }
+	bool getAcceptsTransfers() const { return _acceptsTransfers; }
+	const std::string& getResourcePack() const { return _resourcePack; }
+	const std::string& getResourcePackSha1() const { return _resourcePackSha1; }
+	const std::string& getResourcePackPrompt() const { return _resourcePackPrompt; }
+	bool			   getRequireResourcePack() const { return _requireResourcePack; }
 	bool getEnforceWhitelist() const { return _enforceWhitelist; }
 	// /whitelist on|off: kept in config.json ("server": "white-list"), like vanilla's server.properties
 	void setWhiteList(bool enabled);

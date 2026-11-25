@@ -17,7 +17,7 @@ void changeDifficultyPacket(Packet& packet, Server& server) {
 	Buffer buff;
 
 	buff.writeUByte(static_cast<uint8_t>(Survival::difficulty(server))); // 0 Peaceful; 1 Easy; 2 Normal; 3 Hard (config "difficulty")
-	buff.writeBool(true);												// Is Difficulty locked ?
+	buff.writeBool(server.isDifficultyLocked()); // Locked: the client greys out its difficulty buttons
 
 	packet.sendPacket(PacketId::Play::Clientbound::CHANGE_DIFFICULTY, buff, server);
 }

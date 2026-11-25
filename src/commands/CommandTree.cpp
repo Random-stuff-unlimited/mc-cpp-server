@@ -43,6 +43,12 @@ namespace {
 		// An argument with its parser ("minecraft:vec3") and the parser's properties
 		int argument(const std::string& name, const std::string& parser, bool executable, std::vector<int> children = {}, Buffer properties = {}) {
 			int id = _data.getStaticId("minecraft:command_argument_type", parser);
+			if (id < 0) {
+				// A parser this version doesn't have: free text (an unknown id would make the client drop the tree)
+				id = _data.getStaticId("minecraft:command_argument_type", "brigadier:string");
+				properties = Buffer();
+				properties.writeVarInt(2); // GREEDY_PHRASE
+			}
 			return add(Node{TYPE_ARGUMENT, name, executable, std::move(children), id, std::move(properties), {}});
 		}
 		int players(const std::string& name, bool single, bool executable, std::vector<int> children = {}) {
@@ -268,6 +274,19 @@ namespace {
 			int	 plReset = t.literal("reset", false, {t.word("targets", true, {t.word("objective", true)})});
 			return t.literal("scoreboard", false, {t.literal("objectives", false, {objList, objAdd, objRem, objDisp, objMod}),
 												   t.literal("players", false, {plList, plGet, withScore("set"), withScore("add"), withScore("remove"), plReset})});
+		}
+		if (name == "transfer") return t.literal("transfer", false, {t.word("hostname", true, {t.integer("port", 1, true, {t.players("players", false, true)})})});
+		if (name == "playsound") {
+			std::vector<int> sources;
+			for (const char* source : {"master", "music", "record", "weather", "block", "hostile", "neutral", "player", "ambient", "voice", "ui"}) {
+				sources.push_back(t.literal(source, true, {t.players("targets", false, true, {t.argument("pos", "minecraft:vec3", true)})}));
+			}
+			return t.literal("playsound", false, {t.argument("sound", "minecraft:resource_location", true, sources)});
+		}
+		if (name == "stopsound") return t.literal("stopsound", false, {t.players("targets", false, true, {t.word("source", true, {t.argument("sound", "minecraft:resource_location", true)})})});
+		if (name == "rotate") {
+			return t.literal("rotate", false, {t.players("target", true, false, {t.argument("rotation", "minecraft:rotation", true),
+																				 t.literal("facing", false, {t.argument("facingLocation", "minecraft:vec3", true)})})});
 		}
 		if (name == "save-all") return t.literal("save-all", true, t.choices({"flush"}));
 		if (name == "say" || name == "me") return t.literal(name, false, {message(name == "say" ? "message" : "action")});

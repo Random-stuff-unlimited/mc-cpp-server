@@ -10,7 +10,12 @@
 		"fill-limit": 32768,
 		"op-permission-level": 4,
 		"white-list": false,
-		"enforce-whitelist": false
+		"enforce-whitelist": false,
+		"accepts-transfers": false,
+		"resource-pack": "",
+		"resource-pack-sha1": "",
+		"require-resource-pack": false,
+		"resource-pack-prompt": ""
 	},
 	"world": {
 		"name": "world",

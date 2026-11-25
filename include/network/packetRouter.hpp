@@ -41,6 +41,18 @@ void handleRecipeBookChangeSettingsPacket(Packet& packet, Server& server);
 void handleSetCarriedItemPacket(Packet& packet, Server& server);
 void handleSetCreativeModeSlotPacket(Packet& packet, Server& server);
 void handlePickItemFromBlock(Packet& packet, Server& server);
+void handlePlayPingRequest(Packet& packet, Server& server);
+void sendServerResourcePack(Packet& packet, Server& server);
+void handleResourcePackResponse(Packet& packet, Server& server);
+void handleChangeDifficulty(Packet& packet, Server& server);
+void handleLockDifficulty(Packet& packet, Server& server);
+void handleChangeGameMode(Packet& packet, Server& server);
+void handleBlockEntityTagQuery(Packet& packet, Server& server);
+void handleEntityTagQuery(Packet& packet, Server& server);
+void handlePickItemFromEntity(Packet& packet, Server& server);
+void handleTeleportToEntity(Packet& packet, Server& server);
+void handlePlayCustomPayload(Packet& packet, Server& server);
+void tryPickItem(Packet& packet, Server& server, Player& player, Level& level, ItemStack picked, bool infinite);
 
 // Network threads: Handshake, Status, Login and Configuration states
 void packetRouter(Packet* packet, Server& server);
