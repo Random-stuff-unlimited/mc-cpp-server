@@ -600,7 +600,7 @@ bool HappyGhast::mobInteract(Player& player, int hand) {
 		playSound("minecraft:entity.happy_ghast.harness_goggles_down", 1.0F, 1.0F);
 		return true;
 	}
-	if (isHarnessed() && !hasRider() && !player.isShiftKeyDown()) {
+	if (isHarnessed() && canAddPassenger() && !player.isShiftKeyDown()) {
 		navigation().stop();
 		startRiding(player);
 		return true;

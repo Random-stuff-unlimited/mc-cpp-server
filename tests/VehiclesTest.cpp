@@ -316,3 +316,27 @@ TEST(leads_and_fence_knots) {
 	for (ItemEntity* item : f.items()) lead |= item->item().item == f.item("minecraft:lead");
 	CHECK(lead);
 }
+
+// Two in a boat (one in a chest boat): the first steers, seats front and back; one getting off leaves the other
+TEST(boat_two_passengers) {
+	LevelFixture f(1);
+	auto  alice = addPlayer(f, 2.5, Y, 0.5);
+	auto  bob	= addPlayer(f, 2.5, Y, 1.5);
+	auto  carol = addPlayer(f, 2.5, Y, 2.5);
+	Boat* boat	= addBoat(f, "minecraft:oak_boat", {0.5, static_cast<double>(Y), 0.5});
+	f.tick();
+	CHECK(boat->interact(*alice, 0));
+	CHECK(boat->interact(*bob, 0));
+	CHECK(!boat->interact(*carol, 0)); // Full
+	CHECK(boat->rider() == alice.get());
+	CHECK_EQ(static_cast<int>(boat->passengers().size()), 2);
+	boat->positionRider();
+	CHECK(std::abs((alice->position() - bob->position()).horizontalDistanceSqr() - 0.8 * 0.8) < 1e-6); // 0.2 forward, 0.6 back
+	boat->ejectPassenger(*alice);
+	CHECK_EQ(alice->vehicleId(), -1);
+	CHECK(boat->rider() == bob.get()); // Bob steers now
+	Boat* chest = addBoat(f, "minecraft:oak_chest_boat", {3.5, static_cast<double>(Y), 3.5});
+	f.tick();
+	CHECK(chest->interact(*alice, 0));
+	CHECK(!chest->interact(*carol, 0));
+}

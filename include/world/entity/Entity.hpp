@@ -80,16 +80,28 @@ class Entity : public Actor {
 	void		moveByPiston(Vec3 movement);
 	// Entity.move(SHULKER_BOX): pushed by a shulker box's lid
 	void		moveByShulker(Vec3 movement) { move(movement); }
-	// ----- Riding: a player sits on it (Entity.passengers, for players only) -----
-	bool		hasRider() const { return _riderId != -1; }
-	// The player riding it, null if none (or gone)
+	// ----- Riding: players sit on it (Entity.passengers, for players only); the first one steers -----
+	bool		hasRider() const { return !_passengers.empty(); }
+	// The player riding it in front (the controlling passenger), null if none (or gone)
 	Player*		rider();
-	// Entity.startRiding, from the vehicle: false if it already has a rider or the player rides something
+	std::vector<Player*> passengers();
+	// Entity.canAddPassenger: a free seat
+	bool		canAddPassenger() const { return static_cast<int>(_passengers.size()) < maxPassengers(); }
+	virtual int maxPassengers() const { return 1; }
+	// Entity.startRiding, from the vehicle: false if it is full or the player rides something
 	bool		startRiding(Player& player);
-	// Entity.ejectPassengers: the rider is put down where the vehicle is
+	// Entity.ejectPassengers: every rider is put down where the vehicle is
 	void		ejectRider();
-	// Every tick: the rider follows (Entity.positionRider), or is let go if it left, died...
+	// Entity.removePassenger: one rider gets off (sneaking)
+	void		ejectPassenger(Player& player);
+	// Every tick: the riders follow (Entity.positionRider), or are let go if they left, died...
 	void		positionRider();
+	// getPassengerAttachmentPoint: where seat `index` of `count` is, in the vehicle's frame (x left, z forward)
+	virtual Vec3 passengerOffset(int index, int count) const {
+		(void)index;
+		(void)count;
+		return {0.0, 0.0, 0.0};
+	}
 	// getControllingPassenger is the rider: its client moves the vehicle (ServerboundMoveVehiclePacket), the AI rests
 	virtual bool isControlledByRider() { return false; }
 	// Where the rider's feet are (the passenger attachment, less the player's own 0.6)
@@ -183,7 +195,7 @@ class Entity : public Actor {
 	bool   _horizontalCollision = false;
 	bool   _verticalCollision	= false;
 	bool   _removed				= false;
-	int	   _riderId				= -1;
+	std::vector<int> _passengers; // Player ids, the controlling one first
 	double	_pistonDeltas[3]	= {0.0, 0.0, 0.0};
 	int64_t _pistonDeltasTime	= 0;
 	bool   _noPhysics			= false;

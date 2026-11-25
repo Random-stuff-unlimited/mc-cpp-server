@@ -92,6 +92,12 @@ class CopperGolem : public Mob {
 // ported
 class HappyGhast : public Animal {
   public:
+	// HappyGhast: four riders on its harness, at its sides, the first one steers
+	int	 maxPassengers() const override { return 4; }
+	Vec3 passengerOffset(int index, int) const override {
+		static const Vec3 SEATS[4] = {{0.0, 0.0, 0.62}, {-0.62, 0.0, 0.0}, {0.0, 0.0, -0.62}, {0.62, 0.0, 0.0}};
+		return SEATS[index & 3];
+	}
 	static constexpr int DATA_IS_LEASH_HOLDER = 17, DATA_STAYS_STILL = 18;
 
 	HappyGhast(Level& level, int typeId);

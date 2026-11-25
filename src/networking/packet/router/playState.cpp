@@ -248,7 +248,7 @@ void handlePlayState(Packet* packet, Server& server) {
 		// Sneaking gets off what it rides (ServerPlayer.rideTick)
 		if ((keys & 0x20) && player->vehicleId() != -1) {
 			if (Entity* vehicle = server.levelOf(*player).entities().byId(player->vehicleId())) {
-				vehicle->ejectRider();
+				vehicle->ejectPassenger(*player);
 			} else {
 				player->setVehicleId(-1);
 			}

@@ -89,6 +89,9 @@ class Camel : public AbstractHorse {
 	int64_t poseTime() const;
 	void	sitDown();
 	void	standUp();
+	// Camel: two riders (0.5 forward and 0.7 back), the front one steers
+	int		maxPassengers() const override { return 2; }
+	Vec3	passengerOffset(int index, int count) const override { return {0.0, 0.0, count > 1 ? (index == 0 ? 0.5 : -0.7) : 0.0}; }
 
 	void							registerGoals() override;
 	bool							mobInteract(Player& player, int hand) override;

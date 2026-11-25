@@ -348,7 +348,7 @@ bool Camel::mobInteract(Player& player, int hand) {
 	if (isBaby()) return Animal::mobInteract(player, hand);
 	// A saddle goes on without taming it
 	if (!stack.isEmpty() && equipFromPlayer(player, hand, EquipmentSlot::Saddle)) return true;
-	if (!hasRider()) {
+	if (canAddPassenger()) {
 		standUp();
 		setTamed(true); // Riding a camel never throws its rider: it counts as tamed
 		doPlayerRide(player);

@@ -86,7 +86,7 @@ Les 85 types de mobs vanilla ont leur classe et leur IA (`src/world/entity/mobs`
       des lamas du marchand, état des spawners non sauvegardé
 - [x] Inventaire des chevaux/ânes/mules/lamas (`HORSE_SCREEN_OPEN`) : selle, armure/tapis, coffre ; laisses (tirer,
       casser à 10 blocs, nœud sur barrière, `SET_ENTITY_LINK`)
-- [ ] Montures étendues : caravanes de lamas, perroquets sur l'épaule, plusieurs passagers (happy ghast, chameau)
+- [ ] Montures étendues : caravanes de lamas, perroquets sur l'épaule
 - [x] Foudre : éclairs d'orage (1/100000 par chunk et par tick), paratonnerres (attirent, signal 8 ticks), feu, creeper
       chargé, cochon → piglin zombifié, villageois → sorcière, mooshroom, tortue ; `/summon lightning_bolt`
 - [x] Foudre : piège du cheval squelette (squelettes à côté des chevaux : pas de mobs cavaliers), cuivre désoxydé
@@ -122,7 +122,8 @@ Les 85 types de mobs vanilla ont leur classe et leur IA (`src/world/entity/mobs`
 - [x] Bateaux et bateaux à coffre : flottaison, `PADDLE_BOAT`, `MOVE_VEHICLE`, casse et drop
 - [x] Chevaux et autres montures : apprivoisement, inventaire (`HORSE_SCREEN_OPEN`), selle
 - [x] Passagers : montée/descente (un seul passager)
-- [ ] Plusieurs passagers par véhicule (bateau à 2 places, chameau)
+- [x] Plusieurs passagers par véhicule (bateau 2, chameau 2, happy ghast 4), le premier dirige
+- [ ] Mobs passagers (jockeys, cavaliers squelettes)
 - [x] Chariots de mine avec coffre / four / TNT / entonnoir
 
 ## Client : commandes & UI

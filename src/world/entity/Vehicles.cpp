@@ -194,7 +194,7 @@ bool Boat::interact(Player& player, int hand) {
 		Menus::openContainer(player, _level, _chest, "minecraft:generic_9x3", {}, "entity.minecraft." + type.substr(type.find(':') + 1));
 		return true;
 	}
-	if (hasRider() || player.vehicleId() != -1) return false;
+	if (!canAddPassenger() || player.vehicleId() != -1) return false;
 	return startRiding(player);
 }
 

@@ -58,6 +58,10 @@ class Boat : public VehicleEntity {
 	bool   interact(Player& player, int hand) override;
 	bool   isControlledByRider() override { return hasRider(); }
 	double riderY() const override { return _position.y + _height / 3.0 - 0.6; }
+	// AbstractBoat.getMaxPassengers: two, one with a chest
+	int	   maxPassengers() const override { return _chest ? 1 : 2; }
+	// getPassengerAttachmentPoint: two riders sit 0.2 forward and 0.6 back
+	Vec3   passengerOffset(int index, int count) const override { return {0.0, 0.0, count > 1 ? (index == 0 ? 0.2 : -0.6) : 0.0}; }
 	void   writeEntityData(Buffer& buf) const override;
 	void   save(Buffer& buf) const override;
 	void   load(Buffer& buf) override;
